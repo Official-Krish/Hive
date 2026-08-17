@@ -1,5 +1,5 @@
 {
-  "name": "prisma",
+  "name": "@hive/db",
   "module": "index.ts",
   "type": "module",
   "private": true,

@@ -1,17 +1,22 @@
 {
-  "name": "AI-gather",
+  "name": "hive",
   "private": true,
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
     "lint": "turbo run lint",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
-    "check-types": "turbo run check-types"
+    "check-types": "turbo run check-types",
+    "prepare": "husky"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.8.1",
+    "globals": "^17.11.0",
     "prettier": "^3.7.4",
     "turbo": "^2.10.10",
-    "typescript": "5.9.2"
+    "typescript": "5.9.2",
+    "typescript-eslint": "^8.67.0"
   },
   "engines": {
     "node": ">=18"
@@ -25,5 +30,18 @@
   "workspaces": [
     "apps/*",
     "packages/*"
-  ]
+  ],
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "bunx --bun eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md}": [
+      "prettier --write"
+    ]
+  },
+  "dependencies": {
+    "husky": "^9.1.7",
+    "lint-staged": "^17.3.0"
+  }
 }
