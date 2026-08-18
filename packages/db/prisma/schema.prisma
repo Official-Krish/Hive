@@ -1,14 +1,814 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
-  provider = "prisma-client-js"
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma"
+  runtime             = "bun"
+  moduleFormat        = "esm"
+  importFileExtension = "ts"
 }
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+}
+
+
+model User {
+  id              String    @id @default(cuid())
+  email           String    @unique
+  passwordHash    String
+  name            String
+  avatarUrl       String?
+  emailVerifiedAt DateTime?
+  lastLoginAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  memberships             OrganizationMember[]
+  workspaceMembers        WorkspaceMember[]
+  teamMemberships         TeamMember[]
+  teamsCreated            Team[]                  @relation("TeamCreator")
+  devices                 Device[]
+  refreshTokens           RefreshToken[]
+  apiKeys                 ApiKey[]
+  invitesCreated          Invite[]                @relation("InviteInviter")
+  auditLogs               AuditLog[]
+  activities              Activity[]
+  agentSessions           AgentSession[]
+  tasks                   Task[]
+  commits                 Commit[]
+  pullRequests            PullRequest[]
+  testRuns                TestRun[]
+  presences               Presence[]
+  avatars                 Avatar[]
+  alerts                  Alert[]                 @relation("AlertDeveloper")
+  resolvedAlerts          Alert[]                 @relation("AlertResolver")
+  idempotencyKeys         IdempotencyKey[]
+  updatedPrivacySettings  PrivacySetting[]
+}
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  plan      PlanType @default(FREE)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members    OrganizationMember[]
+  workspaces Workspace[]
+  teams      Team[]
+  invites    Invite[]
+  auditLogs  AuditLog[]
+}
+
+model Workspace {
+  id          String  @id @default(cuid())
+  orgId       String
+  name        String
+  slug        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  org               Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  members           WorkspaceMember[]
+  teams             Team[]
+  repositories      Repository[]
+  activities        Activity[]
+  agents            Agent[]
+  agentSessions     AgentSession[]
+  tasks             Task[]
+  efficiencyMetrics EfficiencyMetric[]
+  alerts            Alert[]
+  maps              WorkspaceMap[]
+  presences         Presence[]
+  privacySetting    PrivacySetting?
+  auditLogs         AuditLog[]
+  invites           Invite[]
+
+  @@unique([orgId, slug])
+  @@index([orgId])
+}
+
+model OrganizationMember {
+  id        String           @id @default(cuid())
+  orgId     String
+  userId    String
+  role      UserRole         @default(MEMBER)
+  status    MembershipStatus @default(ACTIVE)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  user User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  org  Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, userId])
+  @@index([userId])
+}
+
+model WorkspaceMember {
+  id          String   @id @default(cuid())
+  workspaceId String
+  userId      String
+  role        UserRole @default(MEMBER)
+  createdAt   DateTime @default(now())
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@index([userId])
+}
+
+model Team {
+  id          String   @id @default(cuid())
+  orgId       String
+  workspaceId String?
+  name        String
+  slug        String
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  workspace   Workspace?   @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  createdBy   User         @relation("TeamCreator", fields: [createdById], references: [id])
+  members     TeamMember[]
+
+  @@unique([orgId, slug])
+}
+
+model TeamMember {
+  id        String   @id @default(cuid())
+  teamId    String
+  userId    String
+  role      UserRole @default(MEMBER)
+  createdAt DateTime @default(now())
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, userId])
+}
+
+model Device {
+  id         String     @id @default(cuid())
+  userId     String
+  name       String
+  type       DeviceType @default(LAPTOP)
+  os         String?
+  arch       String?
+  lastSeenAt DateTime?
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refreshTokens RefreshToken[]
+  apiKeys       ApiKey[]
+}
+
+model RefreshToken {
+  id           String             @id @default(cuid())
+  userId       String
+  deviceId     String?
+  tokenHash    String             @unique
+  familyId     String
+  status       RefreshTokenStatus @default(ACTIVE)
+  expiresAt    DateTime
+  lastUsedAt   DateTime?
+  replacedById String?    @unique
+  revokedAt    DateTime?
+  userAgent    String?
+  ip           String?
+  createdAt    DateTime           @default(now())
+
+  user         User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  device       Device?        @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  replacedBy   RefreshToken?  @relation("TokenReplacement", fields: [replacedById], references: [id])
+  replacedFrom RefreshToken?  @relation("TokenReplacement")
+
+  @@index([userId, status])
+  @@index([familyId])
+}
+
+model ApiKey {
+  id         String       @id @default(cuid())
+  userId     String
+  deviceId   String?
+  name       String
+  prefix     String
+  keyHash    String       @unique
+  scopes     Json?
+  status     ApiKeyStatus @default(ACTIVE)
+  lastUsedAt DateTime?
+  expiresAt  DateTime?
+  revokedAt  DateTime?
+  createdAt  DateTime     @default(now())
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  device Device? @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+}
+
+model Invite {
+  id          String   @id @default(cuid())
+  orgId       String
+  workspaceId String?
+  email       String
+  role        UserRole @default(MEMBER)
+  tokenHash   String   @unique
+  invitedById String
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime @default(now())
+
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  workspace Workspace?   @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  inviter   User         @relation("InviteInviter", fields: [invitedById], references: [id])
+
+  @@index([orgId])
+  @@index([email])
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  orgId       String?
+  workspaceId String?
+  userId      String?
+  action      String
+  targetType  String?
+  targetId    String?
+  metadata    Json?
+  ip          String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+
+  org       Organization? @relation(fields: [orgId], references: [id], onDelete: SetNull)
+  workspace Workspace?    @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  user      User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([orgId, createdAt])
+  @@index([userId, createdAt])
+}
+
+model IdempotencyKey {
+  id            String   @id @default(cuid())
+  key           String   @unique
+  userId        String?
+  route         String
+  requestHash   String?
+  responseStatus Int
+  responseBody  Json?
+  expiresAt     DateTime
+  createdAt     DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([key, expiresAt])
+}
+
+// ──────────────────────────────────────────────
+// Telemetry Domain
+// ──────────────────────────────────────────────
+
+model Repository {
+  id            String             @id @default(cuid())
+  workspaceId   String?
+  name          String
+  url           String?
+  provider      RepositoryProvider @default(OTHER)
+  defaultBranch String?
+  lastSyncedAt  DateTime?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  workspace     Workspace?    @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  branches      Branch[]
+  activities    Activity[]
+  commits       Commit[]
+  pullRequests  PullRequest[]
+  agentSessions AgentSession[]
+  testRuns      TestRun[]
+
+  @@unique([workspaceId, name])
+}
+
+model Branch {
+  id            String   @id @default(cuid())
+  repositoryId  String
+  name          String
+  lastCommitSha String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  repository Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  commits    Commit[]
+
+  @@unique([repositoryId, name])
+}
+
+model Agent {
+  id              String     @id @default(cuid())
+  workspaceId     String?
+  name            String
+  type            AgentType
+  model           String?
+  version         String?
+  status          AgentStatus @default(IDLE)
+  lastHeartbeatAt DateTime?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  workspace Workspace?    @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  sessions  AgentSession[]
+
+  @@index([workspaceId, status])
+}
+
+model AgentSession {
+  id           String      @id @default(cuid())
+  developerId  String
+  agentId      String
+  workspaceId  String?
+  activityId   String?
+  repositoryId String?
+  branch       String?
+  title        String?
+  status       AgentStatus @default(RUNNING)
+  startedAt    DateTime    @default(now())
+  endedAt      DateTime?
+  summary      String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  developer   User         @relation(fields: [developerId], references: [id], onDelete: Cascade)
+  agent       Agent        @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  workspace   Workspace?   @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  activity    Activity?    @relation(fields: [activityId], references: [id], onDelete: SetNull)
+  repository  Repository?  @relation(fields: [repositoryId], references: [id], onDelete: SetNull)
+  events      AgentEvent[]
+  tokenUsages TokenUsage[]
+  alerts      Alert[]
+
+  @@index([developerId, startedAt])
+  @@index([status])
+}
+
+model AgentEvent {
+  id             String   @id @default(cuid())
+  agentSessionId String
+  type           EventType
+  payload        Json?
+  sequence       Int
+  occurredAt     DateTime @default(now())
+
+  session AgentSession @relation(fields: [agentSessionId], references: [id], onDelete: Cascade)
+
+  @@unique([agentSessionId, sequence])
+}
+
+model Activity {
+  id            String         @id @default(cuid())
+  developerId   String
+  workspaceId   String
+  repositoryId  String?
+  type          ActivityType
+  title         String
+  summary       String?
+  status        ActivityStatus @default(IN_PROGRESS)
+  outcomeStatus OutcomeStatus?
+  filesChanged  Int?
+  linesChanged  Int?
+  startedAt     DateTime       @default(now())
+  endedAt       DateTime?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  developer     User            @relation(fields: [developerId], references: [id], onDelete: Cascade)
+  workspace     Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  repository    Repository?     @relation(fields: [repositoryId], references: [id], onDelete: SetNull)
+  events        ActivityEvent[]
+  agentSessions AgentSession[]
+  tasks         Task[]
+  testRuns      TestRun[]
+  commits       Commit[]
+  pullRequests  PullRequest[]
+  tokenUsage    TokenUsage?
+  presence      Presence?
+
+  @@index([developerId, startedAt])
+  @@index([workspaceId, startedAt])
+  @@index([type, status])
+}
+
+model ActivityEvent {
+  id         String    @id @default(cuid())
+  activityId String
+  type       EventType
+  payload    Json?
+  sequence   Int
+  occurredAt DateTime  @default(now())
+
+  activity Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+
+  @@unique([activityId, sequence])
+  @@index([activityId, occurredAt])
+}
+
+model Model {
+  id                    String   @id @default(cuid())
+  provider              String
+  name                  String
+  inputPricePerMillion  Decimal? @db.Decimal(10, 6)
+  outputPricePerMillion Decimal? @db.Decimal(10, 6)
+  contextWindow         Int?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  tokenUsages TokenUsage[]
+
+  @@unique([provider, name])
+}
+
+model TokenUsage {
+  id                String   @id @default(cuid())
+  sessionId         String?
+  activityId        String?    @unique
+  modelId           String?
+  inputTokens       Int
+  outputTokens      Int
+  cachedInputTokens Int?
+  costCents         Int?
+  currency          String   @default("USD")
+  measuredAt        DateTime @default(now())
+  createdAt         DateTime @default(now())
+
+  session  AgentSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  activity Activity?     @relation(fields: [activityId], references: [id], onDelete: SetNull)
+  model    Model?        @relation(fields: [modelId], references: [id], onDelete: SetNull)
+
+  @@index([sessionId, measuredAt])
+  @@index([activityId])
+}
+
+model Task {
+  id          String       @id @default(cuid())
+  activityId  String?
+  developerId String
+  workspaceId String?
+  title       String
+  description String?
+  status      TaskStatus   @default(OPEN)
+  priority    TaskPriority @default(MEDIUM)
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  activity  Activity?  @relation(fields: [activityId], references: [id], onDelete: SetNull)
+  developer User       @relation(fields: [developerId], references: [id], onDelete: Cascade)
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+
+  @@index([developerId, status])
+}
+
+model Commit {
+  id           String   @id @default(cuid())
+  repositoryId String
+  branchId     String?
+  sha          String
+  message      String
+  authorId     String?
+  authoredAt   DateTime @default(now())
+  insertions   Int?
+  deletions    Int?
+  filesChanged Int?
+  createdAt    DateTime @default(now())
+
+  repository Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  branch     Branch?    @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  author     User?      @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  activities Activity[]
+
+  @@unique([repositoryId, sha])
+}
+
+model PullRequest {
+  id           String   @id @default(cuid())
+  repositoryId String
+  number       Int
+  title        String
+  status       PRStatus @default(OPEN)
+  url          String?
+  authorId     String?
+  headBranch   String?
+  baseBranch   String?
+  additions    Int?
+  deletions    Int?
+  commits      Int?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  mergedAt     DateTime?
+  closedAt     DateTime?
+
+  repository Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  author     User?      @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  activities Activity[]
+
+  @@unique([repositoryId, number])
+}
+
+model TestRun {
+  id           String     @id @default(cuid())
+  developerId  String?
+  activityId   String?
+  repositoryId String?
+  branch       String?
+  command      String?
+  status       TestStatus @default(RUNNING)
+  durationMs   Int?
+  totalTests   Int?
+  passedTests  Int?
+  failedTests  Int?
+  skippedTests Int?
+  startedAt    DateTime   @default(now())
+  endedAt      DateTime?
+  createdAt    DateTime   @default(now())
+
+  developer  User?       @relation(fields: [developerId], references: [id], onDelete: SetNull)
+  activity   Activity?   @relation(fields: [activityId], references: [id], onDelete: SetNull)
+  repository Repository? @relation(fields: [repositoryId], references: [id], onDelete: SetNull)
+
+  @@index([activityId])
+}
+
+model EfficiencyMetric {
+  id               String       @id @default(cuid())
+  workspaceId      String
+  period           MetricPeriod
+  periodStart      DateTime
+  tokensPerTask    Decimal?     @db.Decimal(12, 2)
+  costPerPrCents   Int?
+  agentSuccessRate Decimal?     @db.Decimal(5, 2)
+  retryRate        Decimal?     @db.Decimal(5, 2)
+  tasksCompleted   Int?
+  prsMerged        Int?
+  agentsTotal      Int?
+  tokensTotal      Int?
+  costTotalCents   Int?
+  computedAt       DateTime     @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, period, periodStart])
+}
+
+model Alert {
+  id             String        @id @default(cuid())
+  workspaceId    String?
+  developerId    String?
+  agentSessionId String?
+  severity       AlertSeverity @default(INFO)
+  type           String
+  message        String
+  metadata       Json?
+  status         AlertStatus   @default(OPEN)
+  createdAt      DateTime      @default(now())
+  resolvedAt     DateTime?
+  resolvedById   String?
+
+  workspace Workspace?    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  developer User?         @relation("AlertDeveloper", fields: [developerId], references: [id], onDelete: SetNull)
+  resolvedBy User?        @relation("AlertResolver", fields: [resolvedById], references: [id], onDelete: SetNull)
+  session    AgentSession? @relation(fields: [agentSessionId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, status])
+}
+
+model WorkspaceMap {
+  id          String   @id @default(cuid())
+  workspaceId String
+  name        String
+  version     Int      @default(1)
+  config      Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  avatars   Avatar[]
+
+  @@index([workspaceId])
+}
+
+model Avatar {
+  id           String   @id @default(cuid())
+  userId       String
+  workspaceMapId String
+  spriteId     String?
+  x            Float    @default(0)
+  y            Float    @default(0)
+  roomId       String?
+  appearance   Json?
+  lastMovedAt  DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspaceMap WorkspaceMap @relation(fields: [workspaceMapId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, workspaceMapId])
+}
+
+model Presence {
+  id          String         @id @default(cuid())
+  userId      String
+  workspaceId String
+  status      PresenceStatus @default(OFFLINE)
+  activityId  String?        @unique
+  position    Json?
+  lastSeenAt  DateTime       @default(now())
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  activity  Activity? @relation(fields: [activityId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, workspaceId])
+}
+
+model PrivacySetting {
+  id                     String   @id @default(cuid())
+  workspaceId            String   @unique
+  allowActivitySummaries Boolean  @default(true)
+  allowAgentStatus       Boolean  @default(true)
+  allowTokenUsage        Boolean  @default(true)
+  allowGitMetadata       Boolean  @default(true)
+  allowExactCommands     Boolean  @default(false)
+  allowFilePaths         Boolean  @default(false)
+  allowPromptMetadata    Boolean  @default(false)
+  updatedById            String?
+  updatedAt              DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  updatedBy User?     @relation(fields: [updatedById], references: [id], onDelete: SetNull)
+}
+
+enum UserRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+enum MembershipStatus {
+  INVITED
+  ACTIVE
+  SUSPENDED
+}
+
+enum PlanType {
+  FREE
+  TEAM
+  ENTERPRISE
+}
+
+enum DeviceType {
+  LAPTOP
+  DESKTOP
+  CI
+  SERVER
+}
+
+enum RefreshTokenStatus {
+  ACTIVE
+  REPLACED
+  REVOKED
+  EXPIRED
+}
+
+enum ApiKeyStatus {
+  ACTIVE
+  REVOKED
+  EXPIRED
+}
+
+enum ActivityType {
+  CODING
+  AGENT
+  REVIEW
+  TESTING
+  DEBUGGING
+  RESEARCH
+  IDLE
+}
+
+enum ActivityStatus {
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  BLOCKED
+}
+
+enum OutcomeStatus {
+  SUCCESS
+  FAILED
+  BLOCKED
+  CANCELLED
+}
+
+enum AgentType {
+  CLAUDE
+  CODEX
+  CURSOR
+  OPENCODE
+  GENERIC
+}
+
+enum AgentStatus {
+  IDLE
+  RUNNING
+  BLOCKED
+  WAITING_APPROVAL
+  COMPLETED
+  ERROR
+  STOPPED
+}
+
+enum EventType {
+  AGENT_STARTED
+  AGENT_STOPPED
+  AGENT_TOKEN_USAGE
+  FILE_MODIFIED
+  GIT_COMMIT
+  GIT_STATUS
+  PROCESS_STARTED
+  PROCESS_STOPPED
+  TERMINAL_COMMAND
+  TEST_STARTED
+  TEST_FINISHED
+  TOKEN_USAGE
+  ACTIVITY_UPDATED
+  PR_CREATED
+  PR_REVIEWED
+  PR_MERGED
+}
+
+enum TestStatus {
+  RUNNING
+  PASSED
+  FAILED
+  SKIPPED
+}
+
+enum PRStatus {
+  DRAFT
+  OPEN
+  MERGED
+  CLOSED
+}
+
+enum TaskStatus {
+  OPEN
+  IN_PROGRESS
+  BLOCKED
+  COMPLETED
+  CANCELLED
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum AlertSeverity {
+  INFO
+  WARNING
+  CRITICAL
+}
+
+enum AlertStatus {
+  OPEN
+  ACKNOWLEDGED
+  RESOLVED
+}
+
+enum PresenceStatus {
+  ONLINE
+  AWAY
+  OFFLINE
+}
+
+enum RepositoryProvider {
+  GITHUB
+  GITLAB
+  BITBUCKET
+  AZURE_DEVOPS
+  SELF_HOSTED
+  OTHER
+}
+
+enum MetricPeriod {
+  DAY
+  WEEK
+  MONTH
 }
