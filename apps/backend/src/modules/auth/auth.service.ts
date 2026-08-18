@@ -51,21 +51,47 @@ export class AuthService {
       throw new ConflictError("An account with this email already exists");
 
     const passwordHash = await hashPassword(input.password);
+    const userId = await this.provisionUser({
+      email,
+      name: input.name,
+      passwordHash,
+    });
 
-    const userId = await prisma.$transaction(async (tx) => {
+    return this.issueSession(userId, ctx);
+  }
+
+  /**
+   * Create a user with a default organization and "Main" workspace, mirroring
+   * the structure created by {@link register}. Used by OAuth flows where there
+   * is no password (passwordHash omitted) — those accounts sign in via GitHub
+   * until a password is set.
+   */
+  async provisionUser(data: {
+    email: string;
+    name: string;
+    avatarUrl?: string | null;
+    passwordHash?: string;
+  }): Promise<string> {
+    const email = data.email.toLowerCase();
+
+    const existing = await prisma.user.findUnique({ where: { email } });
+    if (existing) return existing.id;
+
+    return prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
         data: {
           email,
-          passwordHash,
-          name: input.name,
+          passwordHash: data.passwordHash ?? null,
+          name: data.name,
+          avatarUrl: data.avatarUrl ?? null,
           emailVerifiedAt: new Date(),
         },
       });
 
       const org = await tx.organization.create({
         data: {
-          name: `${input.name}'s Organization`,
-          slug: uniqueSlug(input.name),
+          name: `${data.name}'s Organization`,
+          slug: uniqueSlug(data.name),
         },
       });
 
@@ -88,14 +114,17 @@ export class AuthService {
 
       return user.id;
     });
-
-    return this.issueSession(userId, ctx);
   }
 
   async login(input: LoginInput, ctx: SessionContext): Promise<SessionResult> {
     const email = input.email.toLowerCase();
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user) throw new UnauthorizedError("Invalid email or password");
+    if (!user.passwordHash) {
+      throw new UnauthorizedError(
+        "This account was created with GitHub. Sign in with GitHub instead.",
+      );
+    }
 
     const valid = await verifyPassword(input.password, user.passwordHash);
     if (!valid) throw new UnauthorizedError("Invalid email or password");
@@ -206,6 +235,11 @@ export class AuthService {
     currentRefreshToken?: string,
   ): Promise<void> {
     const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    if (!user.passwordHash) {
+      throw new UnauthorizedError(
+        "This account was created with GitHub. Set a password via password reset first.",
+      );
+    }
 
     const valid = await verifyPassword(
       input.currentPassword,
@@ -277,7 +311,7 @@ export class AuthService {
     return toPublicUser(user);
   }
 
-  private async issueSession(
+  async issueSession(
     userId: string,
     ctx: SessionContext,
   ): Promise<SessionResult> {

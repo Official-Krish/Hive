@@ -11,6 +11,10 @@ import { errorHandler } from "./middleware/errorHandler";
 import { notFound } from "./middleware/notFound";
 import { requestContext } from "./middleware/requestContext";
 import { authRouter } from "./modules/auth/auth.routes";
+import {
+  githubRouter,
+  githubWebhookRouter,
+} from "./modules/github/github.routes";
 import { healthRouter } from "./modules/health/health.routes";
 import { usersRouter } from "./modules/users/users.routes";
 
@@ -40,6 +44,13 @@ export function createApp() {
     }),
   );
   app.use(requestContext());
+  // GitHub webhooks need the raw body for HMAC verification and arrive without
+  // an allowed Origin, so they must bypass CSRF and the JSON body parser.
+  app.use(
+    "/api/github/webhooks",
+    express.raw({ type: "*/*" }),
+    githubWebhookRouter,
+  );
   app.use(csrfProtect());
   app.use(express.json({ limit: "1mb" }));
   app.use(cookieParser());
@@ -47,6 +58,7 @@ export function createApp() {
   app.use("/api/health", healthRouter);
   app.use("/api/auth", authRouter);
   app.use("/api/auth", usersRouter);
+  app.use("/api/github", githubRouter);
 
   app.use(notFound());
   app.use(errorHandler());

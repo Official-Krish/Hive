@@ -22,6 +22,10 @@ export type {
   RefreshToken,
   Activity,
   AgentSession,
+  Repository,
+  PullRequest,
+  GitHubAccount,
+  WebhookDelivery,
 } from "./src/generated/prisma/client";
 
 export * from "./src/generated/prisma/enums";

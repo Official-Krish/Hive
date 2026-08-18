@@ -9,6 +9,7 @@ import { logger } from "../../lib/logger";
 import { ACCESS_COOKIE } from "../../lib/cookies";
 import { verifyAccessToken } from "../../lib/jwt";
 import { RealtimeService } from "./realtime.service";
+import { realtimeBus } from "./realtime.bus";
 
 export interface RealtimeClientData {
   userId: string;
@@ -52,11 +53,16 @@ export class RealtimeHub {
       },
     });
 
+    realtimeBus.setPublisher((workspaceId, event) =>
+      this.publishToWorkspace(workspaceId, event),
+    );
+
     logger.info({ port: this.server.port }, "Realtime server listening");
     return this;
   }
 
   async stop(): Promise<void> {
+    realtimeBus.setPublisher(null);
     this.clients.clear();
     if (this.server) {
       await this.server.stop(true);

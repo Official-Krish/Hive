@@ -22,6 +22,13 @@ Default to using Bun instead of Node.js.
   - Rooms = Bun pub/sub topics (`realtimeChannel(workspaceId)` = `realtime:workspace:{id}`). Join = `ws.subscribe(topic)`, fan-out = `server.publish(topic, payload)` (includes the sender).
   - Upgrade auth: `access_token` cookie (same JWT as HTTP) + `?workspaceId=` + `WorkspaceMember` check. Attach `{ userId, deviceId, workspaceId }` to `ws.data`.
   - Client→server messages validated with `realtimeClientMessageSchema` (`avatar.move`, `presence.update`).
+  - `realtimeBus` (src/modules/realtime/realtime.bus.ts) is the process-wide publisher registry: the hub registers on start, so non-WS code (e.g. GitHub webhooks) can broadcast `RealtimeEvent`s without a hub reference.
+- **GitHub integration** is a GitHub OAuth App (src/modules/github/) — user "Connect with GitHub" flow + per-repo webhooks.
+  - OAuth: `GET /api/github/auth/login` (302 to GitHub with a signed `state` JWT) → `GET /api/github/auth/callback` (verify state, exchange code, fetch `/user` + `/user/emails`, link by session/email or provision a new user with `AuthService.provisionUser`). Callback sets the same dual auth cookies and 302s back to the frontend. `POST /api/github/disconnect` (requireAuth).
+  - Tokens are stored **encrypted at rest** via `lib/encryption.ts` (AES-256-GCM, key from `GITHUB_TOKEN_ENCRYPTION_KEY`). OAuth App tokens don't expire, so there is no refresh logic.
+  - Webhooks: `POST /api/github/webhooks` is mounted with `express.raw` BEFORE `csrfProtect` and `express.json` (raw body needed for HMAC `X-Hub-Signature-256` verification; GitHub sends no allowed Origin). Handles `push` (→ `Repository`/`Branch`/`Commit` upserts), `pull_request` (→ `PullRequest` upsert), `ping`; unknown events are acked. Every hit is recorded in `WebhookDelivery`.
+  - New repos auto-link to the owning account user's primary workspace (`workspaceId` = first `WorkspaceMember`), then broadcast `repo.push`/`pr.updated` realtime events.
+  - GitHub account/repo ids are stored as Int (`githubId`, `githubRepoId`) — must fit Postgres int4.
 
 ## Testing
 

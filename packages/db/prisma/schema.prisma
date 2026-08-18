@@ -14,7 +14,7 @@ datasource db {
 model User {
   id              String    @id @default(cuid())
   email           String    @unique
-  passwordHash    String
+  passwordHash    String?
   name            String
   avatarUrl       String?
   emailVerifiedAt DateTime?
@@ -43,6 +43,7 @@ model User {
   resolvedAlerts          Alert[]                 @relation("AlertResolver")
   idempotencyKeys         IdempotencyKey[]
   updatedPrivacySettings  PrivacySetting[]
+  githubAccounts          GitHubAccount[]
 }
 
 model Organization {
@@ -269,27 +270,70 @@ model IdempotencyKey {
 }
 
 // ──────────────────────────────────────────────
+// GitHub Integration Domain
+// ──────────────────────────────────────────────
+
+model GitHubAccount {
+  id           String   @id @default(cuid())
+  userId       String
+  githubId     Int      @unique
+  login        String
+  name         String?
+  email        String?
+  avatarUrl    String?
+  accessToken  String
+  scopes       Json?
+  lastSyncedAt DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  repositories Repository[]
+
+  @@index([userId])
+}
+
+model WebhookDelivery {
+  id           String    @id @default(cuid())
+  provider     String    @default("github")
+  event        String
+  deliveryId   String?
+  signature    String?
+  status       String
+  payload      Json?
+  error        String?
+  receivedAt   DateTime  @default(now())
+
+  @@index([deliveryId])
+  @@index([receivedAt])
+}
+
+// ──────────────────────────────────────────────
 // Telemetry Domain
 // ──────────────────────────────────────────────
 
 model Repository {
-  id            String             @id @default(cuid())
-  workspaceId   String?
-  name          String
-  url           String?
-  provider      RepositoryProvider @default(OTHER)
-  defaultBranch String?
-  lastSyncedAt  DateTime?
-  createdAt     DateTime           @default(now())
-  updatedAt     DateTime           @updatedAt
+  id              String             @id @default(cuid())
+  workspaceId     String?
+  name            String
+  url             String?
+  provider        RepositoryProvider @default(OTHER)
+  defaultBranch   String?
+  githubRepoId    Int?               @unique
+  githubFullName  String?            @unique
+  githubAccountId String?
+  lastSyncedAt    DateTime?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
 
-  workspace     Workspace?    @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
-  branches      Branch[]
-  activities    Activity[]
-  commits       Commit[]
-  pullRequests  PullRequest[]
-  agentSessions AgentSession[]
-  testRuns      TestRun[]
+  workspace      Workspace?      @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  githubAccount  GitHubAccount?  @relation(fields: [githubAccountId], references: [id], onDelete: SetNull)
+  branches       Branch[]
+  activities     Activity[]
+  commits        Commit[]
+  pullRequests   PullRequest[]
+  agentSessions  AgentSession[]
+  testRuns       TestRun[]
 
   @@unique([workspaceId, name])
 }

@@ -75,6 +75,26 @@ export const realtimeEventSchema = z.discriminatedUnion("type", [
     y: z.number(),
     timestamp: z.number(),
   }),
+  z.object({
+    type: z.literal("repo.push"),
+    workspaceId: z.string(),
+    repositoryId: z.string(),
+    repoName: z.string(),
+    branch: z.string(),
+    commitCount: z.number(),
+    headSha: z.string(),
+    timestamp: z.number(),
+  }),
+  z.object({
+    type: z.literal("pr.updated"),
+    workspaceId: z.string(),
+    repositoryId: z.string(),
+    repoName: z.string(),
+    prNumber: z.number(),
+    title: z.string(),
+    status: z.string(),
+    timestamp: z.number(),
+  }),
 ]);
 
 export type RealtimeEvent = z.infer<typeof realtimeEventSchema>;

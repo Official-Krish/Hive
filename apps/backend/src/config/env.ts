@@ -21,6 +21,13 @@ const envSchema = z.object({
   ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().int().positive().default(900),
   REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().positive().default(30),
   COOKIE_SECURE: boolFromString,
+  GITHUB_CLIENT_ID: z.string().min(1),
+  GITHUB_CLIENT_SECRET: z.string().min(1),
+  GITHUB_WEBHOOK_SECRET: z.string().min(1),
+  GITHUB_OAUTH_REDIRECT_URI: z
+    .url()
+    .default("http://localhost:4000/api/github/auth/callback"),
+  GITHUB_TOKEN_ENCRYPTION_KEY: z.string().min(16),
   LOG_LEVEL: z
     .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
     .default("info"),

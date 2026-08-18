@@ -54,3 +54,50 @@ export function verifyAccessToken(token: string): AccessTokenPayload {
     throw new UnauthorizedError("Invalid or expired access token");
   }
 }
+
+export interface OAuthStatePayload {
+  type: "oauth_state";
+  nonce: string;
+  next: string;
+  jti: string;
+}
+
+const OAUTH_STATE_TTL_SECONDS = 600;
+
+/** Sign a short-lived OAuth state token to protect the GitHub callback. */
+export function signOAuthState(next: string): string {
+  return jwt.sign(
+    { type: "oauth_state", nonce: randomUUID(), next, jti: randomUUID() },
+    env.ACCESS_TOKEN_SECRET,
+    {
+      algorithm: "HS256",
+      expiresIn: OAUTH_STATE_TTL_SECONDS,
+      issuer: ISSUER,
+      audience: AUDIENCE,
+    },
+  );
+}
+
+/** Verify an OAuth state token. Throws UnauthorizedError when invalid. */
+export function verifyOAuthState(token: string): OAuthStatePayload {
+  try {
+    const decoded = jwt.verify(token, env.ACCESS_TOKEN_SECRET, {
+      issuer: ISSUER,
+      audience: AUDIENCE,
+    });
+    if (typeof decoded === "string")
+      throw new Error("Unexpected token payload");
+    const { type, nonce, next, jti } = decoded as Partial<OAuthStatePayload>;
+    if (
+      type !== "oauth_state" ||
+      typeof nonce !== "string" ||
+      typeof next !== "string" ||
+      typeof jti !== "string"
+    ) {
+      throw new Error("Unexpected token payload");
+    }
+    return { type: "oauth_state", nonce, next, jti };
+  } catch {
+    throw new UnauthorizedError("Invalid or expired OAuth state");
+  }
+}
