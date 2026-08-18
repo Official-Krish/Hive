@@ -22,6 +22,7 @@
       "name": "@hive/backend",
       "dependencies": {
         "@hive/db": "workspace:*",
+        "@hive/queue": "workspace:*",
         "@hive/types": "workspace:*",
         "cookie-parser": "^1.4.7",
         "cors": "^2.8.5",
@@ -68,6 +69,12 @@
     },
     "apps/worker": {
       "name": "@hive/worker",
+      "dependencies": {
+        "@hive/db": "workspace:*",
+        "@hive/queue": "workspace:*",
+        "pino": "^9.6.0",
+        "zod": "^4.4.3",
+      },
       "devDependencies": {
         "@types/bun": "latest",
       },
@@ -106,6 +113,15 @@
         "globals": "^16.5.0",
         "typescript": "^5.9.2",
         "typescript-eslint": "^8.50.0",
+      },
+    },
+    "packages/queue": {
+      "name": "@hive/queue",
+      "devDependencies": {
+        "@types/bun": "latest",
+      },
+      "peerDependencies": {
+        "typescript": "^5",
       },
     },
     "packages/types": {
@@ -180,6 +196,8 @@
     "@hive/db": ["@hive/db@workspace:packages/db"],
 
     "@hive/frontend": ["@hive/frontend@workspace:apps/frontend"],
+
+    "@hive/queue": ["@hive/queue@workspace:packages/queue"],
 
     "@hive/types": ["@hive/types@workspace:packages/types"],
 

@@ -8,12 +8,19 @@
     "start": "NODE_ENV=production bun index.ts",
     "build": "bun build ./index.ts --outdir ./dist --target bun",
     "lint": "eslint .",
-    "check-types": "tsc --noEmit"
+    "check-types": "tsc --noEmit",
+    "test": "bun test"
   },
   "devDependencies": {
     "@types/bun": "latest"
   },
   "peerDependencies": {
     "typescript": "^5"
+  },
+  "dependencies": {
+    "@hive/db": "workspace:*",
+    "@hive/queue": "workspace:*",
+    "pino": "^9.6.0",
+    "zod": "^4.4.3"
   }
 }

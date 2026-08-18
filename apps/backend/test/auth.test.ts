@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import type { Server } from "node:http";
 import { prisma } from "@hive/db";
+import { closeRedis, ensureConnected } from "@hive/queue";
 import { createApp } from "../src/app";
 
 let server: Server;
@@ -60,6 +61,7 @@ const asJson = async (res: Response): Promise<unknown> =>
   (await res.json()) as unknown;
 
 beforeAll(async () => {
+  await ensureConnected();
   server = createApp().listen(0);
   await new Promise<void>((resolve) => server.once("listening", resolve));
   const address = server.address();
@@ -71,17 +73,19 @@ beforeAll(async () => {
 afterAll(async () => {
   await new Promise<void>((resolve) => server.close(() => resolve()));
   await prisma.$disconnect();
+  closeRedis();
 });
 
 describe("health", () => {
-  test("returns ok with db status", async () => {
+  test("returns ok with db and redis status", async () => {
     const res = await api("/api/health");
     expect(res.status).toBe(200);
     const body = (await asJson(res)) as {
-      data: { status: string; db: string };
+      data: { status: string; db: string; redis: string };
     };
     expect(body.data.status).toBe("ok");
     expect(body.data.db).toBe("ok");
+    expect(body.data.redis).toBe("ok");
   });
 });
 

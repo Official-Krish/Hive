@@ -13,7 +13,9 @@
     "db:generate": "cd packages/db && bun --bun run generate",
     "db:migrate": "cd packages/db && bun --bun run migrate dev",
     "db:studio": "cd packages/db && bun --bun run studio",
-    "db:seed": "cd packages/db && bun --bun run db:seed"
+    "db:seed": "cd packages/db && bun --bun run db:seed",
+    "redis:up": "docker compose up -d redis",
+    "worker:dev": "bun --cwd apps/worker run dev"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
