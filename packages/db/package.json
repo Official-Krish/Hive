@@ -3,6 +3,9 @@
   "module": "index.ts",
   "type": "module",
   "private": true,
+  "exports": {
+    ".": "./index.ts"
+  },
   "scripts": {
     "migrate": "prisma migrate",
     "generate": "prisma generate",

@@ -1,6 +1,6 @@
 ---
-description: Use Bun instead of Node.js, npm, pnpm, or vite.
-globs: "*.ts, *.tsx, *.html, *.css, *.js, *.jsx, package.json"
+description: Hive backend conventions - Express, Bun, Prisma, dual-token auth.
+globs: "*.ts, *.tsx, *.js, *.jsx, package.json"
 alwaysApply: false
 ---
 
@@ -8,27 +8,22 @@ Default to using Bun instead of Node.js.
 
 - Use `bun <file>` instead of `node <file>` or `ts-node <file>`
 - Use `bun test` instead of `jest` or `vitest`
-- Use `bun build <file.html|file.ts|file.css>` instead of `webpack` or `esbuild`
 - Use `bun install` instead of `npm install` or `yarn install` or `pnpm install`
 - Use `bun run <script>` instead of `npm run <script>` or `yarn run <script>` or `pnpm run <script>`
-- Use `bunx <package> <command>` instead of `npx <package> <command>`
 - Bun automatically loads .env, so don't use dotenv.
 
-## APIs
+## Stack
 
-- `Bun.serve()` supports WebSockets, HTTPS, and routes. Don't use `express`.
-- `bun:sqlite` for SQLite. Don't use `better-sqlite3`.
-- `Bun.redis` for Redis. Don't use `ioredis`.
-- `Bun.sql` for Postgres. Don't use `pg` or `postgres.js`.
-- `WebSocket` is built-in. Don't use `ws`.
-- Prefer `Bun.file` over `node:fs`'s readFile/writeFile
-- Bun.$`ls` instead of execa.
+- **Express 5** (`express`), run with Bun. Do NOT use `Bun.serve()` for the API server.
+- **Prisma 7** via `@hive/db` (packages/db). Use the shared singleton: `import { prisma } from "@hive/db"`.
+- **Shared zod schemas / types** live in `@hive/types` (packages/types). Import them, never redefine.
+- **Real-time is SSE, not WebSocket.** Postgres is the source of truth, Redis is the realtime distribution layer, SSE is the delivery mechanism. No `ws`/WebSocket server code.
 
 ## Testing
 
-Use `bun test` to run tests.
+Use `bun test`. Tests run against the dev PostgreSQL database with a cookie jar to exercise the auth flows.
 
-```ts#index.test.ts
+```ts#auth.test.ts
 import { test, expect } from "bun:test";
 
 test("hello world", () => {
@@ -36,76 +31,31 @@ test("hello world", () => {
 });
 ```
 
-## Frontend
+## Auth conventions
 
-Use HTML imports with `Bun.serve()`. Don't use `vite`. HTML imports fully support React, CSS, Tailwind.
+- Dual-token: short-lived JWT access token (`access_token` cookie) + opaque hashed refresh token (`refresh_token` cookie).
+- Both cookies are `httpOnly`, `Secure` in production, `SameSite=Lax`. Refresh cookie path is `/api/auth`.
+- Refresh tokens rotate on every use; reuse of a rotated token revokes the whole family.
+- Passwords hashed with argon2id (`Bun.password`).
+- CSRF: `csrfProtect` middleware rejects cross-origin state-changing requests.
+- Idempotency: `Idempotency-Key` header middleware (`idempotency()`), persisted in the `IdempotencyKey` table.
 
-Server:
+## Conventions
 
-```ts#index.ts
-import index from "./index.html"
+- Keep env config in `src/config/env.ts` (zod-validated). Never read `process.env` directly elsewhere.
+- Errors: throw `AppError` subclasses from `src/core/errors.ts`. A central `errorHandler` maps them to JSON.
+- Controllers are thin classes; logic lives in service classes.
+- No comments unless they explain non-obvious security/correctness decisions.
 
-Bun.serve({
-  routes: {
-    "/": index,
-    "/api/users/:id": {
-      GET: (req) => {
-        return new Response(JSON.stringify({ id: req.params.id }));
-      },
-    },
-  },
-  // optional websocket support
-  websocket: {
-    open: (ws) => {
-      ws.send("Hello, world!");
-    },
-    message: (ws, message) => {
-      ws.send(message);
-    },
-    close: (ws) => {
-      // handle close
-    }
-  },
-  development: {
-    hmr: true,
-    console: true,
-  }
-})
+## Structure
+
 ```
-
-HTML files can import .tsx, .jsx or .js files directly and Bun's bundler will transpile & bundle automatically. `<link>` tags can point to stylesheets and Bun's CSS bundler will bundle.
-
-```html#index.html
-<html>
-  <body>
-    <h1>Hello, world!</h1>
-    <script type="module" src="./frontend.tsx"></script>
-  </body>
-</html>
+src/
+├── app.ts                # createApp() factory (middleware + routers)
+├── index.ts              # bootstrap (env -> prisma -> listen)
+├── config/env.ts         # zod-validated env
+├── core/                 # errors, context types
+├── lib/                  # jwt, crypto, cookies, csrf, slug, logger
+├── middleware/           # validate, authenticate, csrfProtect, idempotency, errorHandler, ...
+└── modules/              # feature modules (auth, users, health)
 ```
-
-With the following `frontend.tsx`:
-
-```tsx#frontend.tsx
-import React from "react";
-import { createRoot } from "react-dom/client";
-
-// import .css files directly and it works
-import './index.css';
-
-const root = createRoot(document.body);
-
-export default function Frontend() {
-  return <h1>Hello, world!</h1>;
-}
-
-root.render(<Frontend />);
-```
-
-Then, run index.ts
-
-```sh
-bun --hot ./index.ts
-```
-
-For more information, read the Bun API docs in `node_modules/bun-types/docs/**.mdx`.

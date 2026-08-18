@@ -1,0 +1,57 @@
+import cookieParser from "cookie-parser";
+import cors from "cors";
+import express from "express";
+import helmet from "helmet";
+import { randomUUID } from "node:crypto";
+import { pinoHttp } from "pino-http";
+import { env } from "./config/env";
+import { logger } from "./lib/logger";
+import { csrfProtect } from "./middleware/csrfProtect";
+import { errorHandler } from "./middleware/errorHandler";
+import { notFound } from "./middleware/notFound";
+import { requestContext } from "./middleware/requestContext";
+import { authRouter } from "./modules/auth/auth.routes";
+import { healthRouter } from "./modules/health/health.routes";
+import { usersRouter } from "./modules/users/users.routes";
+
+export function createApp() {
+  const app = express();
+
+  app.disable("x-powered-by");
+  app.set("trust proxy", 1);
+
+  app.use(helmet());
+  app.use(
+    cors({
+      origin: [env.API_URL, ...env.clientOrigins],
+      credentials: true,
+    }),
+  );
+  app.use(
+    pinoHttp({
+      logger,
+      genReqId: (req) => req.headers["x-request-id"] ?? randomUUID(),
+      customLogLevel: (_req, res, err) => {
+        if (err) return "error";
+        if (res.statusCode >= 500) return "error";
+        if (res.statusCode >= 400) return "warn";
+        return "info";
+      },
+    }),
+  );
+  app.use(requestContext());
+  app.use(csrfProtect());
+  app.use(express.json({ limit: "1mb" }));
+  app.use(cookieParser());
+
+  app.use("/api/health", healthRouter);
+  app.use("/api/auth", authRouter);
+  app.use("/api/auth", usersRouter);
+
+  app.use(notFound());
+  app.use(errorHandler());
+
+  return app;
+}
+
+export type App = ReturnType<typeof createApp>;
