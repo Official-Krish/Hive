@@ -588,7 +588,7 @@ model Alert {
 
 model WorkspaceMap {
   id          String   @id @default(cuid())
-  workspaceId String
+  workspaceId String   @unique
   name        String
   version     Int      @default(1)
   config      Json?

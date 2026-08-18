@@ -2,6 +2,7 @@ import { prisma } from "@hive/db";
 import { createApp } from "./app";
 import { env } from "./config/env";
 import { logger } from "./lib/logger";
+import { RealtimeHub } from "./modules/realtime/realtime.hub";
 
 async function main(): Promise<void> {
   await prisma.$connect();
@@ -14,8 +15,11 @@ async function main(): Promise<void> {
     );
   });
 
+  const realtime = new RealtimeHub({ port: env.WS_PORT }).start();
+
   const shutdown = async (signal: string): Promise<void> => {
     logger.info({ signal }, "Shutting down");
+    await realtime.stop();
     server.close(async () => {
       await prisma.$disconnect();
       process.exit(0);

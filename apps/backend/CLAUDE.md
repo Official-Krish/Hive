@@ -14,10 +14,14 @@ Default to using Bun instead of Node.js.
 
 ## Stack
 
-- **Express 5** (`express`), run with Bun. Do NOT use `Bun.serve()` for the API server.
+- **Express 5** (`express`), run with Bun, for the HTTP API. Do NOT use `Bun.serve()` for the API server.
 - **Prisma 7** via `@hive/db` (packages/db). Use the shared singleton: `import { prisma } from "@hive/db"`.
 - **Shared zod schemas / types** live in `@hive/types` (packages/types). Import them, never redefine.
-- **Real-time is SSE, not WebSocket.** Postgres is the source of truth, Redis is the realtime distribution layer, SSE is the delivery mechanism. No `ws`/WebSocket server code.
+- **Real-time is Bun native WebSockets** on a separate port (`WS_PORT`), served by `Bun.serve` via the `RealtimeHub` class (src/modules/realtime/realtime.hub.ts). No SSE, no `ws` package.
+  - Postgres is the source of truth: write to the DB first, then broadcast a `RealtimeEvent` to the workspace topic.
+  - Rooms = Bun pub/sub topics (`realtimeChannel(workspaceId)` = `realtime:workspace:{id}`). Join = `ws.subscribe(topic)`, fan-out = `server.publish(topic, payload)` (includes the sender).
+  - Upgrade auth: `access_token` cookie (same JWT as HTTP) + `?workspaceId=` + `WorkspaceMember` check. Attach `{ userId, deviceId, workspaceId }` to `ws.data`.
+  - Client→server messages validated with `realtimeClientMessageSchema` (`avatar.move`, `presence.update`).
 
 ## Testing
 
@@ -45,6 +49,7 @@ test("hello world", () => {
 - Keep env config in `src/config/env.ts` (zod-validated). Never read `process.env` directly elsewhere.
 - Errors: throw `AppError` subclasses from `src/core/errors.ts`. A central `errorHandler` maps them to JSON.
 - Controllers are thin classes; logic lives in service classes.
+- Realtime: logic lives in `realtime.service.ts` (DB), `RealtimeHub` (socket lifecycle + fan-out). Keep HTTP and WS concerns separate.
 - No comments unless they explain non-obvious security/correctness decisions.
 
 ## Structure

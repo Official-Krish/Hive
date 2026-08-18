@@ -10,7 +10,9 @@ const envSchema = z.object({
     .enum(["development", "test", "production"])
     .default("development"),
   PORT: z.coerce.number().int().positive().default(4000),
+  WS_PORT: z.coerce.number().int().positive().default(4001),
   API_URL: z.url().default("http://localhost:4000"),
+  WS_URL: z.string().default("ws://localhost:4001"),
   CLIENT_URLS: z.string().default("http://localhost:5173"),
   DATABASE_URL: z.string().min(1),
   ACCESS_TOKEN_SECRET: z
