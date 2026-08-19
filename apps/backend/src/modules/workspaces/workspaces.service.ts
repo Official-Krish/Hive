@@ -86,6 +86,7 @@ export class WorkspaceService {
         slug,
         description: input.description,
         members: { create: { userId, role: UserRole.OWNER } },
+        privacySetting: { create: {} },
       },
       select: {
         id: true,

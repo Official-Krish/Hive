@@ -13,6 +13,7 @@ import { requestContext } from "./middleware/requestContext";
 import { authRouter } from "./modules/auth/auth.routes";
 import { devicesRouter } from "./modules/devices/devices.routes";
 import { ingestRouter } from "./modules/ingest/ingest.routes";
+import { readsRouter, modelsRouter } from "./modules/reads/reads.routes";
 import {
   githubRouter,
   githubWebhookRouter,
@@ -23,6 +24,8 @@ import {
   invitesRouter,
   workspacesRouter,
 } from "./modules/workspaces/workspaces.routes";
+import { privacyRouter } from "./modules/privacy/privacy.routes";
+import { orgsRouter } from "./modules/orgs/orgs.routes";
 
 export function createApp() {
   const app = express();
@@ -68,7 +71,11 @@ export function createApp() {
   app.use("/api/ingest", ingestRouter);
   app.use("/api/github", githubRouter);
   app.use("/api/workspaces", workspacesRouter);
+  app.use("/api/workspaces", readsRouter);
+  app.use("/api/workspaces", privacyRouter);
+  app.use("/api/models", modelsRouter);
   app.use("/api/invites", invitesRouter);
+  app.use("/api/orgs", orgsRouter);
 
   app.use(notFound());
   app.use(errorHandler());

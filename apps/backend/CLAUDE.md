@@ -43,6 +43,29 @@ Default to using Bun instead of Node.js.
 - Invites: raw token is hashed (`hashToken`) into `Invite.tokenHash` and shown once in the create response. `POST /api/invites/:token/accept` requires the accepting user's email to match `Invite.email` (403 otherwise), upserts `OrganizationMember` + `WorkspaceMember`, and sets `acceptedAt` in a transaction. Status is derived: revoked → accepted → expired → pending.
 - Slug uniqueness is per-org (`@@unique([orgId, slug])`); a conflicting slug gets a random hex suffix.
 
+## Reads (query API layer)
+
+- **Routes** (src/modules/reads/) mounted at `/api/workspaces` (after the workspaces router) + `/api/models`. Every read route is `requireAuth()` + `requireWorkspaceMember()`; the one write — `POST /:workspaceId/alerts/:alertId/resolve` — is admin+.
+- Query filters are zod schemas in `@hive/types` (`activityFilterSchema`, `sessionFilterSchema`, `prFilterSchema`, `alertFilterSchema`, `taskFilterSchema`, `testRunFilterSchema`, `metricFilterSchema`) extended from `paginationSchema`; validated via `validateQuery` → `req.parsedQuery`.
+- `GET /map` uses `RealtimeService.getSnapshot` (map is upserted if missing). List responses are `Paginated<T>` (`{ items, page, pageSize, total, hasMore }`).
+- Scope rules: activities/sessions/repos/PRs/tasks/alerts filter directly on `workspaceId`; **test runs** scope via `OR: [{ repository: { workspaceId } }, { activity: { workspaceId } }]` because `TestRun` has no `workspaceId` column (must be linked to an activity/repo to be readable).
+- Git events (`git.commit`, `git.pull_request`) are NOT linked to activities (no `activityId` in the schema), so `activity.commits/pullRequests` only populate via the GitHub webhook path. Cost rollups derive from `Model` pricing (`costCents` = USD cents).
+- Models live at `/api/models` (not `/api/workspaces/models`) because the workspaces router's `/:workspaceId` would swallow it.
+
+## Privacy
+
+- **Routes** (src/modules/privacy/) mounted at `/api/workspaces`: `GET /:workspaceId/privacy` (any member), `PATCH /:workspaceId/privacy` (admin+). Body is `updatePrivacySettingSchema` (partial). Patch records `updatedById`; GET returns schema defaults + `updatedAt: null` only when no row exists.
+- **Rows are created at workspace creation** (auth registration and `WorkspaceService.create`), so a fresh workspace already has a PrivacySetting with defaults. Defaults: summaries/agent-status/token-usage/git-metadata allowed; **file paths, exact commands, prompt metadata hidden by default**.
+- **Gating** (src/modules/privacy/privacy-gate.ts) is pure and nulls/empties fields so response shape stays stable: `allowTokenUsage=false` → tokens 0 / `costCents` null / `tokenUsage` `[]` / metric token+cost null; `allowActivitySummaries=false` → summaries null; `allowAgentStatus=false` → statuses null (incl. map presence); `allowGitMetadata=false` → empty commits/pullRequests + empty PR list; paths/commands/titles masked inside event payloads.
+- ReadsService fetches the setting per call via `privacyOf(workspaceId)` (falls back to defaults). Filters still run on the DB; gating only affects output shaping.
+
+## Orgs
+
+- **Middleware** (src/middleware/org.ts): `requireOrgMember()` resolves `:orgId` membership into `res.locals.orgMembership`; `requireOrgRole(...)`/`getOrgMembership(res)` mirror the workspace equivalents. **Apply per-route, NOT via `router.use()`** — `use()`-registered middleware has no `req.params`, so the orgId lookup silently fails.
+- **Routes** (src/modules/orgs/) at `/api/orgs`: GET `/:orgId` (member), PATCH `/:orgId` (admin+; plan change owner-only), GET members/workspaces (member), PATCH `/:orgId/members/:userId/role` (owner), DELETE `/:orgId/members/:userId` (owner).
+- Owner protections: cannot change your own role, cannot remove yourself, cannot change/remove the org owner. A user invited via a workspace invite is upserted as an `OrganizationMember` with the same role, so every user typically has 2 org memberships (their personal org + invited orgs) — pick memberships by `orgId_userId`, never `findFirst` on userId.
+- Workspace listing returns each workspace with the caller's workspace role (defaults to `member`).
+
 ## Testing
 
 Use `bun test`. Tests run against the dev PostgreSQL database with a cookie jar to exercise the auth flows.

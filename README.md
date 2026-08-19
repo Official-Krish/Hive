@@ -1,159 +1,217 @@
-# Turborepo starter
+# Hive
 
-This Turborepo starter is maintained by the Turborepo core team.
+Engineering intelligence platform that turns raw AI-coding activity into a team
+dashboard. A lightweight local collector observes agents (Claude Code, Codex,
+Cursor, OpenCode), the terminal, git, and tests, and ships normalized telemetry
+events to a cloud backend that provides dashboards, efficiency metrics, alerts,
+and a spatial "AI lab" office.
 
-## Using this example
+> This repository contains the **cloud platform** (API, worker, dashboard) and
+> the **event contracts**. The local collector daemon is developed separately.
 
-Run the following command:
+---
 
-```sh
-npx create-turbo@latest
+## Features
+
+- **Telemetry ingest** — batched, idempotent event pipeline (`agent.*`,
+  `activity.*`, `git.*`, `test.*`, `process.*`, `terminal.*`, `file.*`) with
+  device-authenticated uploads.
+- **Workspaces & organizations** — org/workspace hierarchy, role-based access
+  (`owner` / `admin` / `member`), email-bound invites, and workspace maps.
+- **Read API layer** — activities, agent sessions, repositories, pull requests,
+  metrics, alerts, tasks, test runs, and per-developer stats with pagination and
+  filters.
+- **Privacy controls** — per-workspace settings that gate read responses
+  server-side (token usage, summaries, git metadata, file paths, exact
+  commands, prompt metadata) without changing response shape.
+- **Real-time spatial office** — Bun-native WebSockets delivering map snapshots,
+  avatars, and presence across a separate WS port.
+- **GitHub integration** — OAuth App connect flow and per-repo webhooks
+  (`push`, `pull_request`) with tokens encrypted at rest.
+- **Background jobs** — a Redis-backed queue worker for metrics aggregation,
+  session/activity finalization, presence sweeps, and reapers.
+
+---
+
+## Architecture
+
+```
+Developer machine
+│
+├── Claude Code / Codex / Cursor / OpenCode / IDE / terminal / git / tests
+│
+▼
+Local collector (separate repo)          ──normalized events──▶
+                                                              │
+                                    ┌─────────────────────────▼────────────┐
+                                    │  apps/backend  (Express 5 + Bun)     │
+                                    │  · REST API          :4000           │
+                                    │  · Realtime WS       :4001           │
+                                    │  · GitHub webhooks                   │
+                                    └───────┬─────────────────┬────────────┘
+                                            │                 │
+                              writes        │                 │ broadcasts
+                                            ▼                 ▼
+                                    ┌──────────────┐   ┌──────────────┐
+                                    │ PostgreSQL 17│   │ Redis 7      │
+                                    │ (source of  │   │ (queue +     │
+                                    │  truth)     │   │  pub/sub)    │
+                                    └──────┬───────┘   └──────────────┘
+                                           │
+                                           ▼
+                                    ┌──────────────┐
+                                    │ apps/worker  │  scheduled jobs + consumer
+                                    └──────────────┘
+                                    ┌──────────────┐
+                                    │ apps/frontend│  dashboard (Bun-served)
+                                    └──────────────┘
 ```
 
-## What's inside?
+All apps/packages are 100% TypeScript, run on **Bun 1.3+**, and are managed as a
+**Turborepo + Bun workspaces** monorepo.
 
-This Turborepo includes the following packages/apps:
+---
 
-### Apps and Packages
+## Repository layout
 
-- `docs`: a [Next.js](https://nextjs.org/) app
-- `web`: another [Next.js](https://nextjs.org/) app
-- `@repo/ui`: a stub React component library shared by both `web` and `docs` applications
-- `@repo/eslint-config`: `eslint` configurations (includes `eslint-config-next` and `eslint-config-prettier`)
-- `@repo/typescript-config`: `tsconfig.json`s used throughout the monorepo
+| Path                         | Description                                                |
+| ---------------------------- | ---------------------------------------------------------- |
+| `apps/backend`               | REST API, realtime hub, GitHub integration, auth, ingest   |
+| `apps/worker`                | Background job scheduler + queue consumer                  |
+| `apps/frontend`              | Dashboard / API tester served by Bun                       |
+| `packages/db`                | Prisma 7 schema, migrations, seed, shared client singleton |
+| `packages/types`             | Shared zod validation schemas + TypeScript API types       |
+| `packages/events`            | Telemetry event contracts (`@hive/events`)                 |
+| `packages/queue`             | Redis-backed queue + scheduler (`@hive/queue`)             |
+| `packages/eslint-config`     | Shared ESLint configurations                               |
+| `packages/typescript-config` | Shared `tsconfig` presets                                  |
+| `packages/ui`                | Shared React components (WIP)                              |
 
-Each package/app is 100% [TypeScript](https://www.typescriptlang.org/).
+---
 
-### Utilities
+## Prerequisites
 
-This Turborepo has some additional tools already setup for you:
+- **Bun** `1.3.14` or newer (the pinned package manager — see
+  `devEngines.packageManager`).
+- **Docker** with the compose plugin (Postgres 17 + Redis 7).
+- Node.js `>=18` for tooling that requires it (Turborepo).
 
-- [TypeScript](https://www.typescriptlang.org/) for static type checking
-- [ESLint](https://eslint.org/) for code linting
-- [Prettier](https://prettier.io) for code formatting
+---
 
-### Build
-
-To build all apps and packages, run the following command:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
-
-```sh
-cd my-turborepo
-turbo build
-```
-
-Without global `turbo`, use your package manager:
+## Quickstart
 
 ```sh
-cd my-turborepo
-npx turbo build
-bun dlx turbo build
-bun exec turbo build
+# 1. Install dependencies (workspace-aware)
+bun install
+
+# 2. Start Postgres and Redis
+docker compose up -d
+
+# 3. Prepare the database (generate client + apply migrations + seed)
+bun run db:generate
+bun run db:migrate
+bun run db:seed
+
+# 4. Configure the backend
+cp apps/backend/.env.example apps/backend/.env
+#    ...then fill in secrets (see Environment variables)
+
+# 5. Run the platform
+bun run dev            # API (:4000), WebSocket (:4001), frontend (:5173-ish)
+bun run worker:dev     # in a second terminal — queue consumer + scheduler
 ```
 
-You can build a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
+> `bun run dev` runs every workspace's `dev` script via Turborepo. The backend
+> binds the REST API on `PORT` (default `4000`) and the realtime hub on
+> `WS_PORT` (default `4001`); the frontend serves its own HTTP server.
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
+---
+
+## Development commands
+
+| Command                  | Description                                     |
+| ------------------------ | ----------------------------------------------- |
+| `bun install`            | Install all workspace dependencies              |
+| `bun run dev`            | Run every app/package in watch mode (Turborepo) |
+| `bun run build`          | Build all apps and packages                     |
+| `bun run check-types`    | `tsc --noEmit` across all workspaces            |
+| `bun run lint`           | ESLint across all workspaces                    |
+| `bun test` (per package) | Run `bun test` inside a workspace               |
+| `bun run format`         | Prettier across `ts`, `tsx`, and `md` files     |
+| `docker compose up -d`   | Start Postgres + Redis                          |
+| `bun run db:up`          | Start Postgres only                             |
+| `bun run redis:up`       | Start Redis only                                |
+| `bun run db:down`        | Stop both                                       |
+| `bun run db:generate`    | Regenerate the Prisma client                    |
+| `bun run db:migrate`     | Apply dev migrations                            |
+| `bun run db:studio`      | Open Prisma Studio                              |
+| `bun run db:seed`        | Seed reference data                             |
+| `bun run worker:dev`     | Run the background worker in watch mode         |
+
+Husky + lint-staged run ESLint and Prettier on staged files before commits.
+
+---
+
+## Environment variables
+
+Backend and worker validate their environment with zod and fail fast on
+misconfiguration. Every variable is documented in
+[`apps/backend/.env.example`](apps/backend/.env.example).
+
+Key variables:
+
+| Variable                                                                                              | Used by             | Notes                                                      |
+| ----------------------------------------------------------------------------------------------------- | ------------------- | ---------------------------------------------------------- |
+| `DATABASE_URL`                                                                                        | backend, worker, db | Postgres connection string                                 |
+| `PORT` / `WS_PORT`                                                                                    | backend             | REST API and realtime hub ports                            |
+| `API_URL` / `WS_URL` / `CLIENT_URLS`                                                                  | backend             | CORS + cookie origins (comma-separated)                    |
+| `ACCESS_TOKEN_SECRET`                                                                                 | backend             | ≥32 chars; `openssl rand -base64 48`                       |
+| `REFRESH_TOKEN_TTL_DAYS`                                                                              | backend             | Refresh token lifetime (default 30)                        |
+| `COOKIE_SECURE`                                                                                       | backend             | `true` in production (HTTPS)                               |
+| `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` / `GITHUB_WEBHOOK_SECRET` / `GITHUB_TOKEN_ENCRYPTION_KEY` | backend             | GitHub OAuth App + webhook HMAC + at-rest token encryption |
+| `LOG_LEVEL`                                                                                           | backend, worker     | pino level; `silent` in tests                              |
+
+Redis is configured by convention, not env vars: the client resolves host
+`redis` in `production` and `localhost` otherwise (see `packages/queue`).
+
+---
+
+## Testing
+
+- Backend: `bun test` in `apps/backend` (needs Postgres + Redis reachable; the
+  suite boots the app against real containers and exercises auth, devices,
+  ingest, workspaces/invites, reads, privacy, orgs, GitHub, realtime, and a
+  boot smoke).
+- Events / queue / db: `bun test` in each package.
+- Shared test helpers live in `apps/backend/test/helpers.ts`
+  (`startServer`, `makeClient`, cookie jar, seeders).
+
+Run everything:
 
 ```sh
-turbo build --filter=docs
+cd apps/backend && LOG_LEVEL=silent bun test
+cd apps/worker  && bun test
+cd packages/events && bun test
 ```
 
-Without global `turbo`:
+---
 
-```sh
-npx turbo build --filter=docs
-bun exec turbo build --filter=docs
-bun exec turbo build --filter=docs
-```
+## Production deployment notes
 
-### Develop
+- **Builds**: `bun run build` emits Bun targets for backend and worker; the
+  frontend bundles itself with `bun run build`.
+- **Redis host**: in production the queue client connects to `redis:6379`, so
+  the backend/worker must share a Docker network where the Redis service is
+  named `redis`.
+- **Secrets**: never commit `.env`; rotate `ACCESS_TOKEN_SECRET`,
+  `GITHUB_TOKEN_ENCRYPTION_KEY`, and GitHub App secrets before shipping.
+- **Migrations**: apply schema changes with `prisma migrate deploy`
+  (`bun run db:deploy` inside `packages/db`) rather than `migrate dev`.
+- **Graceful shutdown**: backend and worker handle `SIGINT`/`SIGTERM` and drain
+  the WebSocket hub, queue, Redis, and Postgres connections.
 
-To develop all apps and packages, run the following command:
+---
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
+## License
 
-```sh
-cd my-turborepo
-turbo dev
-```
-
-Without global `turbo`, use your package manager:
-
-```sh
-cd my-turborepo
-npx turbo dev
-bun exec turbo dev
-bun exec turbo dev
-```
-
-You can develop a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
-
-```sh
-turbo dev --filter=web
-```
-
-Without global `turbo`:
-
-```sh
-npx turbo dev --filter=web
-bun exec turbo dev --filter=web
-bun exec turbo dev --filter=web
-```
-
-### Remote Caching
-
-> [!TIP]
-> Vercel Remote Cache is free for all plans. Get started today at [vercel.com](https://vercel.com/signup?utm_source=remote-cache-sdk&utm_campaign=free_remote_cache).
-
-Turborepo can use a technique known as [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching) to share cache artifacts across machines, enabling you to share build caches with your team and CI/CD pipelines.
-
-By default, Turborepo will cache locally. To enable Remote Caching you will need an account with Vercel. If you don't have an account you can [create one](https://vercel.com/signup?utm_source=turborepo-examples), then enter the following commands:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
-
-```sh
-cd my-turborepo
-turbo login
-```
-
-Without global `turbo`, use your package manager:
-
-```sh
-cd my-turborepo
-npx turbo login
-bun exec turbo login
-bun exec turbo login
-```
-
-This will authenticate the Turborepo CLI with your [Vercel account](https://vercel.com/docs/concepts/personal-accounts/overview).
-
-Next, you can link your Turborepo to your Remote Cache by running the following command from the root of your Turborepo:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
-
-```sh
-turbo link
-```
-
-Without global `turbo`:
-
-```sh
-npx turbo link
-bun exec turbo link
-bun exec turbo link
-```
-
-## Useful Links
-
-Learn more about the power of Turborepo:
-
-- [Tasks](https://turborepo.dev/docs/crafting-your-repository/running-tasks)
-- [Caching](https://turborepo.dev/docs/crafting-your-repository/caching)
-- [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching)
-- [Filtering](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters)
-- [Configuration Options](https://turborepo.dev/docs/reference/configuration)
-- [CLI Usage](https://turborepo.dev/docs/reference/command-line-reference)
+See [LICENSE](LICENSE).

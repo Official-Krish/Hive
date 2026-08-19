@@ -1,112 +1,31 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import type { Server } from "node:http";
 import { ApiKeyStatus, prisma } from "@hive/db";
-import { closeRedis, ensureConnected } from "@hive/queue";
-import { createApp } from "../src/app";
 import { hashToken } from "../src/lib/crypto";
 import { DeviceService } from "../src/modules/devices/devices.service";
+import { makeClient, startServer, stopServer } from "./helpers";
+import type { TestClient } from "./helpers";
 
 let server: Server;
-let baseUrl: string;
+let c: TestClient;
+let keyCounter = 0;
 
-const jar = new Map<string, string>();
-let emailCounter = 0;
-
-const uniqueEmail = (): string =>
-  `device-${++emailCounter}-${Date.now()}@hive.test`;
-const uniqueKey = (): string => `devkey-${Date.now()}-${emailCounter}`;
-
-function captureCookies(res: Response): void {
-  for (const cookie of res.headers.getSetCookie()) {
-    const pair = cookie.split(";")[0] ?? "";
-    const idx = pair.indexOf("=");
-    if (idx === -1) continue;
-    const name = pair.slice(0, idx);
-    const value = pair.slice(idx + 1);
-    if (value === "") {
-      jar.delete(name);
-    } else {
-      jar.set(name, value);
-    }
-  }
-}
-
-function cookieHeader(): string {
-  return [...jar.entries()]
-    .map(([name, value]) => `${name}=${value}`)
-    .join("; ");
-}
-
-async function api(
-  path: string,
-  options: {
-    method?: string;
-    body?: unknown;
-    headers?: Record<string, string>;
-  } = {},
-): Promise<Response> {
-  const { method = "GET", body, headers = {} } = options;
-  const res = await fetch(`${baseUrl}${path}`, {
-    method,
-    headers: {
-      ...(body !== undefined ? { "content-type": "application/json" } : {}),
-      ...(jar.size > 0 ? { cookie: cookieHeader() } : {}),
-      ...headers,
-    },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-  captureCookies(res);
-  return res;
-}
-
-const asJson = async (res: Response): Promise<unknown> =>
-  (await res.json()) as unknown;
-
-async function registerUser(): Promise<string> {
-  const email = uniqueEmail();
-  const res = await api("/api/auth/register", {
-    method: "POST",
-    body: { email, password: "Password123", name: "Device Owner" },
-  });
-  expect(res.status).toBe(201);
-  return email;
-}
-
-async function registerDevice(): Promise<{
-  id: string;
-  token: string;
-}> {
-  const res = await api("/api/devices", {
-    method: "POST",
-    body: { name: "MacBook Pro" },
-  });
-  expect(res.status).toBe(201);
-  const body = (await asJson(res)) as {
-    data: { device: { id: string }; token: string };
-  };
-  return { id: body.data.device.id, token: body.data.token };
-}
+const uniqueKey = (): string => `devkey-${Date.now()}-${++keyCounter}`;
 
 beforeAll(async () => {
-  await ensureConnected();
-  server = createApp().listen(0);
-  await new Promise<void>((resolve) => server.once("listening", resolve));
-  const address = server.address();
-  if (address && typeof address === "object") {
-    baseUrl = `http://localhost:${address.port}`;
-  }
+  const started = await startServer();
+  server = started.server;
+  c = makeClient(started.baseUrl);
 });
 
 afterAll(async () => {
-  await new Promise<void>((resolve) => server.close(() => resolve()));
-  await prisma.$disconnect();
-  closeRedis();
+  await stopServer(server);
 });
 
 describe("device register", () => {
   test("returns 401 without an authenticated session", async () => {
-    jar.clear();
-    const res = await api("/api/devices", {
+    c.clearJar();
+    const res = await c.api("/api/devices", {
       method: "POST",
       body: { name: "Nope" },
     });
@@ -114,8 +33,8 @@ describe("device register", () => {
   });
 
   test("creates a device and returns a prefixed token", async () => {
-    await registerUser();
-    const { token } = await registerDevice();
+    await c.registerUser();
+    const { token } = await c.registerDevice();
 
     expect(token.startsWith("hive_dev_")).toBe(true);
     expect(token.length).toBeGreaterThan("hive_dev_".length);
@@ -128,12 +47,12 @@ describe("device register", () => {
     expect(key!.status).toBe(ApiKeyStatus.ACTIVE);
     expect(key!.prefix).toBe("hive_dev_");
     expect(key!.scopes).toEqual(["collect"]);
-    expect(key!.device!.name).toBe("MacBook Pro");
+    expect(key!.device!.name).toBe("Collector");
   });
 
   test("stores type, os and arch", async () => {
-    await registerUser();
-    const res = await api("/api/devices", {
+    await c.registerUser();
+    const res = await c.api("/api/devices", {
       method: "POST",
       body: {
         name: "CI Runner",
@@ -143,17 +62,17 @@ describe("device register", () => {
       },
     });
     expect(res.status).toBe(201);
-    const body = (await asJson(res)) as {
+    const body = await c.asJson<{
       data: { device: { type: string; os: string; arch: string } };
-    };
+    }>(res);
     expect(body.data.device.type).toBe("ci");
     expect(body.data.device.os).toBe("linux");
     expect(body.data.device.arch).toBe("arm64");
   });
 
   test("rejects an empty name", async () => {
-    await registerUser();
-    const res = await api("/api/devices", {
+    await c.registerUser();
+    const res = await c.api("/api/devices", {
       method: "POST",
       body: { name: " " },
     });
@@ -161,23 +80,23 @@ describe("device register", () => {
   });
 
   test("replays the same response for a duplicate idempotency key", async () => {
-    const email = await registerUser();
+    const email = await c.registerUser();
     const key = uniqueKey();
-    const first = await api("/api/devices", {
+    const first = await c.api("/api/devices", {
       method: "POST",
       body: { name: "Idem Device" },
       headers: { "idempotency-key": key },
     });
     expect(first.status).toBe(201);
 
-    const second = await api("/api/devices", {
+    const second = await c.api("/api/devices", {
       method: "POST",
       body: { name: "Idem Device" },
       headers: { "idempotency-key": key },
     });
     expect(second.status).toBe(201);
 
-    const [one, two] = await Promise.all([asJson(first), asJson(second)]);
+    const [one, two] = await Promise.all([c.asJson(first), c.asJson(second)]);
     expect(one).toEqual(two);
 
     const count = await prisma.device.count({
@@ -189,15 +108,15 @@ describe("device register", () => {
 
 describe("device list", () => {
   test("lists devices newest first", async () => {
-    await registerUser();
-    const a = await registerDevice();
-    const b = await registerDevice();
+    await c.registerUser();
+    const a = await c.registerDevice();
+    const b = await c.registerDevice();
 
-    const res = await api("/api/devices");
+    const res = await c.api("/api/devices");
     expect(res.status).toBe(200);
-    const body = (await asJson(res)) as {
+    const body = await c.asJson<{
       data: { devices: { id: string }[] };
-    };
+    }>(res);
     const ids = body.data.devices.map((d) => d.id);
     expect(ids).toContain(a.id);
     expect(ids).toContain(b.id);
@@ -207,33 +126,37 @@ describe("device list", () => {
 
 describe("device heartbeat", () => {
   test("updates lastSeenAt", async () => {
-    await registerUser();
-    const { id } = await registerDevice();
+    await c.registerUser();
+    const { id } = await c.registerDevice();
 
-    const res = await api(`/api/devices/${id}/heartbeat`, { method: "POST" });
+    const res = await c.api(`/api/devices/${id}/heartbeat`, {
+      method: "POST",
+    });
     expect(res.status).toBe(200);
-    const body = (await asJson(res)) as {
+    const body = await c.asJson<{
       data: { device: { lastSeenAt: string | null } };
-    };
+    }>(res);
     expect(body.data.device.lastSeenAt).not.toBeNull();
   });
 
   test("returns 404 for another user's device", async () => {
-    await registerUser();
-    const { id } = await registerDevice();
+    await c.registerUser();
+    const { id } = await c.registerDevice();
 
-    await registerUser();
-    const res = await api(`/api/devices/${id}/heartbeat`, { method: "POST" });
+    await c.registerUser();
+    const res = await c.api(`/api/devices/${id}/heartbeat`, {
+      method: "POST",
+    });
     expect(res.status).toBe(404);
   });
 });
 
 describe("device revoke", () => {
   test("revokes the token so it no longer authenticates", async () => {
-    await registerUser();
-    const { id, token } = await registerDevice();
+    await c.registerUser();
+    const { id, token } = await c.registerDevice();
 
-    const res = await api(`/api/devices/${id}`, { method: "DELETE" });
+    const res = await c.api(`/api/devices/${id}`, { method: "DELETE" });
     expect(res.status).toBe(200);
 
     const key = await prisma.apiKey.findUnique({
@@ -246,10 +169,10 @@ describe("device revoke", () => {
     const context = await service.findByKeyHash(hashToken(token));
     expect(context).toBeNull();
 
-    const list = await api("/api/devices");
-    const body = (await asJson(list)) as {
+    const list = await c.api("/api/devices");
+    const body = await c.asJson<{
       data: { devices: { status: string }[] };
-    };
+    }>(list);
     expect(body.data.devices[0]?.status).toBe("revoked");
   });
 });
