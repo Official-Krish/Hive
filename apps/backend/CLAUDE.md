@@ -30,6 +30,11 @@ Default to using Bun instead of Node.js.
   - New repos auto-link to the owning account user's primary workspace (`workspaceId` = first `WorkspaceMember`), then broadcast `repo.push`/`pr.updated` realtime events.
   - GitHub account/repo ids are stored as Int (`githubId`, `githubRepoId`) — must fit Postgres int4.
 
+## Devices + Ingest (collector telemetry)
+
+- **Devices** (src/modules/devices/) let the local collector authenticate as a user's machine. `POST /api/devices` creates a `Device` + an `ApiKey` (`scopes: ["collect"]`, `keyHash` = sha256, prefix `hive_dev_`); the plaintext token is shown once. `requireDevice` middleware reads `X-Device-Token`, resolves the key, and sets `res.locals.device = { userId, deviceId, keyId }` (`getDevice(res)` to read it). Revoke = mark the ApiKey REVOKED.
+- **Ingest** (src/modules/ingest/, `POST /api/ingest/events`) accepts an `ingestBatchSchema` batch from `@hive/events`. Per-batch checks: device belongs to the user AND the user is a `WorkspaceMember` of `batch.workspaceId` (else 403). Event→DB mapping is idempotent: client-generated `sessionId`/`activityId`/`testRunId` become DB row ids via upsert-on-id, repos upsert on `(workspaceId, name)`, commits on `(repositoryId, sha)`, PRs on `(repositoryId, number)`. Token costs are derived from `Model` pricing. `process.*`/`terminal.command`/`file.modified` attach as `AgentEvent`/`ActivityEvent` rows (payload + sequence) to the developer's most recent RUNNING session or IN_PROGRESS activity. Live updates broadcast via `realtimeBus` (`agent.started/stopped`, `activity.updated`, `repo.push`, `pr.updated`). A failed event increments `failures` but never drops the rest of the batch.
+
 ## Testing
 
 Use `bun test`. Tests run against the dev PostgreSQL database with a cookie jar to exercise the auth flows.

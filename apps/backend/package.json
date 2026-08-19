@@ -23,6 +23,7 @@
   },
   "dependencies": {
     "@hive/db": "workspace:*",
+    "@hive/events": "workspace:*",
     "@hive/queue": "workspace:*",
     "@hive/types": "workspace:*",
     "cookie-parser": "^1.4.7",

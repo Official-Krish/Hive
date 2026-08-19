@@ -1,4 +1,4 @@
-import type { RequestHandler } from "express";
+import type { RequestHandler, Response } from "express";
 import type { DeviceContext } from "../core/context";
 import { UnauthorizedError } from "../core/errors";
 import { hashToken } from "../lib/crypto";
@@ -25,4 +25,10 @@ export function requireDevice(): RequestHandler {
       next(err);
     }
   };
+}
+
+export function getDevice(res: Response): DeviceContext {
+  const device = res.locals.device;
+  if (!device) throw new UnauthorizedError("Device not authenticated");
+  return device;
 }

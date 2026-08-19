@@ -21,7 +21,7 @@ export function idempotency(): RequestHandler {
     }
 
     const route = `${req.method} ${req.originalUrl}`;
-    const userId = res.locals.auth?.userId;
+    const userId = res.locals.auth?.userId ?? res.locals.device?.userId;
 
     try {
       const existing = await prisma.idempotencyKey.findUnique({

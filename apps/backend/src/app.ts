@@ -12,6 +12,7 @@ import { notFound } from "./middleware/notFound";
 import { requestContext } from "./middleware/requestContext";
 import { authRouter } from "./modules/auth/auth.routes";
 import { devicesRouter } from "./modules/devices/devices.routes";
+import { ingestRouter } from "./modules/ingest/ingest.routes";
 import {
   githubRouter,
   githubWebhookRouter,
@@ -60,6 +61,7 @@ export function createApp() {
   app.use("/api/auth", authRouter);
   app.use("/api/auth", usersRouter);
   app.use("/api/devices", devicesRouter);
+  app.use("/api/ingest", ingestRouter);
   app.use("/api/github", githubRouter);
 
   app.use(notFound());

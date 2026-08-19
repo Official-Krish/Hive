@@ -26,6 +26,7 @@ export type {
   PullRequest,
   GitHubAccount,
   WebhookDelivery,
+  Prisma,
 } from "./src/generated/prisma/client";
 
 export * from "./src/generated/prisma/enums";
