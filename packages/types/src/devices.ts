@@ -18,6 +18,8 @@ export interface DeviceSummary {
   os: string | null;
   arch: string | null;
   status: z.infer<typeof deviceStatusSchema>;
+  /** True when the collector is currently connected or was seen recently. */
+  online: boolean;
   lastSeenAt: string | null;
   createdAt: string;
 }

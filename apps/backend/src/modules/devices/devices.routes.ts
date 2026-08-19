@@ -18,4 +18,5 @@ devicesRouter.post(
 );
 devicesRouter.get("/", requireAuth(), controller.list);
 devicesRouter.post("/:id/heartbeat", requireAuth(), controller.heartbeat);
+devicesRouter.post("/:id/stop", requireAuth(), controller.stop);
 devicesRouter.delete("/:id", requireAuth(), controller.revoke);

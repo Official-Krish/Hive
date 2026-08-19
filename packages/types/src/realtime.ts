@@ -117,7 +117,37 @@ export const realtimeClientMessageSchema = z.discriminatedUnion("type", [
 
 export type RealtimeClientMessage = z.infer<typeof realtimeClientMessageSchema>;
 
+/** Commands the backend can push to a connected collector device. */
+export const deviceCommandSchema = z.enum(["shutdown", "reconnect", "ping"]);
+
+/**
+ * Server → device control message, sent over the device WebSocket channel.
+ * `ping` doubles as a connection acknowledgement on open.
+ */
+export const deviceControlSchema = z.object({
+  type: z.literal("control"),
+  cmd: deviceCommandSchema,
+  timestamp: z.number(),
+});
+export type DeviceControl = z.infer<typeof deviceControlSchema>;
+
+/**
+ * Messages sent from a collector device to the server over WebSocket.
+ */
+export const deviceMessageSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("heartbeat"),
+    timestamp: z.number(),
+  }),
+]);
+export type DeviceMessage = z.infer<typeof deviceMessageSchema>;
+
 /** Bun WebSocket pub/sub topic per workspace. */
 export function realtimeChannel(workspaceId: string): string {
   return `realtime:workspace:${workspaceId}`;
+}
+
+/** Bun WebSocket pub/sub topic per device (collector control channel). */
+export function deviceChannel(deviceId: string): string {
+  return `realtime:device:${deviceId}`;
 }

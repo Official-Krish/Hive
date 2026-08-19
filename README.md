@@ -6,8 +6,8 @@ Cursor, OpenCode), the terminal, git, and tests, and ships normalized telemetry
 events to a cloud backend that provides dashboards, efficiency metrics, alerts,
 and a spatial "AI lab" office.
 
-> This repository contains the **cloud platform** (API, worker, dashboard) and
-> the **event contracts**. The local collector daemon is developed separately.
+> This repository contains the **cloud platform** (API, worker, dashboard), the
+> **event contracts**, and the **local collector daemon** (`apps/collector`).
 
 ---
 
@@ -16,8 +16,13 @@ and a spatial "AI lab" office.
 - **Telemetry ingest** — batched, idempotent event pipeline (`agent.*`,
   `activity.*`, `git.*`, `test.*`, `process.*`, `terminal.*`, `file.*`) with
   device-authenticated uploads.
+- **Local collector** — a lightweight Rust background agent
+  (`apps/collector`) that watches git, files, the terminal, and AI agents, and
+  keeps a live control channel to the backend (`hive start` / `hive stop`, and
+  remote shutdown from the dashboard).
 - **Workspaces & organizations** — org/workspace hierarchy, role-based access
-  (`owner` / `admin` / `member`), email-bound invites, and workspace maps.
+  (`owner` / `admin` / `member`), email-bound invites gated on a connected
+  collector, and workspace maps.
 - **Read API layer** — activities, agent sessions, repositories, pull requests,
   metrics, alerts, tasks, test runs, and per-developer stats with pagination and
   filters.
@@ -41,34 +46,39 @@ Developer machine
 ├── Claude Code / Codex / Cursor / OpenCode / IDE / terminal / git / tests
 │
 ▼
-Local collector (separate repo)          ──normalized events──▶
-                                                              │
-                                    ┌─────────────────────────▼────────────┐
-                                    │  apps/backend  (Express 5 + Bun)     │
-                                    │  · REST API          :4000           │
-                                    │  · Realtime WS       :4001           │
-                                    │  · GitHub webhooks                   │
-                                    └───────┬─────────────────┬────────────┘
-                                            │                 │
-                              writes        │                 │ broadcasts
-                                            ▼                 ▼
-                                    ┌──────────────┐   ┌──────────────┐
-                                    │ PostgreSQL 17│   │ Redis 7      │
-                                    │ (source of  │   │ (queue +     │
-                                    │  truth)     │   │  pub/sub)    │
-                                    └──────┬───────┘   └──────────────┘
-                                           │
-                                           ▼
-                                    ┌──────────────┐
-                                    │ apps/worker  │  scheduled jobs + consumer
-                                    └──────────────┘
-                                    ┌──────────────┐
-                                    │ apps/frontend│  dashboard (Bun-served)
-                                    └──────────────┘
+apps/collector (Rust agent) ──batched events (X-Device-Token)──▶
+│   │  ▲                                                       │
+│   │  └─ control channel (/ws/device): online, heartbeats,    │
+│   │     control.shutdown (from dashboard Stop button)        │
+│   └── join gating: invite accept requires an online device   │
+│                                                              ▼
+                                     ┌─────────────────────────▼────────────┐
+                                     │  apps/backend  (Express 5 + Bun)     │
+                                     │  · REST API          :4000           │
+                                     │  · Realtime WS       :4001           │
+                                     │  · Device control    /ws/device      │
+                                     │  · GitHub webhooks                   │
+                                     └───────┬─────────────────┬────────────┘
+                                             │                 │
+                               writes        │                 │ broadcasts
+                                             ▼                 ▼
+                                     ┌──────────────┐   ┌──────────────┐
+                                     │ PostgreSQL 17│   │ Redis 7      │
+                                     │ (source of  │   │ (queue +     │
+                                     │  truth)     │   │  pub/sub)    │
+                                     └──────┬───────┘   └──────────────┘
+                                            │
+                                            ▼
+                                     ┌──────────────┐
+                                     │ apps/worker  │  scheduled jobs + consumer
+                                     └──────────────┘
+                                     ┌──────────────┐
+                                     │ apps/frontend│  dashboard (Bun-served)
+                                     └──────────────┘
 ```
 
-All apps/packages are 100% TypeScript, run on **Bun 1.3+**, and are managed as a
-**Turborepo + Bun workspaces** monorepo.
+All apps/packages are 100% TypeScript (except the Rust collector), run on
+**Bun 1.3+**, and are managed as a **Turborepo + Bun workspaces** monorepo.
 
 ---
 
@@ -78,6 +88,7 @@ All apps/packages are 100% TypeScript, run on **Bun 1.3+**, and are managed as a
 | ---------------------------- | ---------------------------------------------------------- |
 | `apps/backend`               | REST API, realtime hub, GitHub integration, auth, ingest   |
 | `apps/worker`                | Background job scheduler + queue consumer                  |
+| `apps/collector`             | Local Rust collector daemon (`hive`) — not a Bun workspace |
 | `apps/frontend`              | Dashboard / API tester served by Bun                       |
 | `packages/db`                | Prisma 7 schema, migrations, seed, shared client singleton |
 | `packages/types`             | Shared zod validation schemas + TypeScript API types       |
@@ -93,6 +104,7 @@ All apps/packages are 100% TypeScript, run on **Bun 1.3+**, and are managed as a
 
 - **Bun** `1.3.14` or newer (the pinned package manager — see
   `devEngines.packageManager`).
+- **Rust** `1.85+` (edition 2024) for the collector (`apps/collector`).
 - **Docker** with the compose plugin (Postgres 17 + Redis 7).
 - Node.js `>=18` for tooling that requires it (Turborepo).
 
@@ -124,6 +136,24 @@ bun run worker:dev     # in a second terminal — queue consumer + scheduler
 > `bun run dev` runs every workspace's `dev` script via Turborepo. The backend
 > binds the REST API on `PORT` (default `4000`) and the realtime hub on
 > `WS_PORT` (default `4001`); the frontend serves its own HTTP server.
+
+### Local collector
+
+The collector is a separate Rust crate, not a Turborepo workspace. Build and
+run it with `hive`:
+
+```sh
+cd apps/collector
+cargo build --release          # → target/release/collector
+./target/release/collector --help
+
+# configure (device created from the dashboard), then:
+hive config init && hive config set device_id <id> && hive config set device_token <hive_dev_…>
+hive start && hive status && hive stop
+```
+
+See [`apps/collector/README.md`](apps/collector/README.md) for full setup,
+the control channel, and remote shutdown.
 
 ---
 
@@ -192,6 +222,7 @@ Run everything:
 cd apps/backend && LOG_LEVEL=silent bun test
 cd apps/worker  && bun test
 cd packages/events && bun test
+cd apps/collector && cargo test
 ```
 
 ---

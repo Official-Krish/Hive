@@ -11,12 +11,14 @@ import type {
 } from "@hive/types";
 import {
   ConflictError,
+  DeviceRequiredError,
   ForbiddenError,
   NotFoundError,
 } from "../../core/errors";
 import { generateRandomToken, hashToken } from "../../lib/crypto";
 import { slugify, uniqueSlug } from "../../lib/slug";
 import { roleFromString, roleToString } from "../../middleware/workspace";
+import { DeviceService } from "../devices/devices.service";
 
 const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -30,6 +32,8 @@ type WorkspaceWithCount = {
 };
 
 export class WorkspaceService {
+  constructor(private readonly devices = new DeviceService()) {}
+
   async listMy(userId: string): Promise<WorkspaceSummary[]> {
     const memberships = await prisma.workspaceMember.findMany({
       where: { userId },
@@ -270,6 +274,11 @@ export class WorkspaceService {
     });
     if (!user || user.email.toLowerCase() !== invite.email) {
       throw new ForbiddenError("This invite was issued to a different email");
+    }
+
+    const hasDevice = await this.devices.hasOnlineDevice(userId);
+    if (!hasDevice) {
+      throw new DeviceRequiredError();
     }
 
     const role = invite.role;

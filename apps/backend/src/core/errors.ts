@@ -46,6 +46,22 @@ export class ConflictError extends AppError {
   }
 }
 
+/** Raised when a workspace join requires an online collector device. */
+export class DeviceRequiredError extends AppError {
+  constructor(
+    message = "Connect your collector before joining this workspace",
+  ) {
+    super(409, "DEVICE_REQUIRED", message);
+  }
+}
+
+/** Raised when a control command targets a device that is not online. */
+export class DeviceOfflineError extends AppError {
+  constructor(message = "Device is offline") {
+    super(409, "DEVICE_OFFLINE", message);
+  }
+}
+
 export function isAppError(error: unknown): error is AppError {
   return error instanceof AppError;
 }

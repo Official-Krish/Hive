@@ -19,6 +19,7 @@ healthRouter.get("/", async (_req, res) => {
       timestamp: new Date().toISOString(),
       db,
       redis,
+      wsPort: Number(process.env.WS_PORT ?? 4001),
     },
   });
 });

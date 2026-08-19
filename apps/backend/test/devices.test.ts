@@ -124,6 +124,53 @@ describe("device list", () => {
   });
 });
 
+describe("device online", () => {
+  test("reports online true for a freshly registered device", async () => {
+    await c.registerUser();
+    const { id } = await c.registerDevice();
+
+    const res = await c.api("/api/devices");
+    const body = await c.asJson<{
+      data: { devices: { id: string; online: boolean }[] };
+    }>(res);
+    const device = body.data.devices.find((d) => d.id === id);
+    expect(device?.online).toBe(true);
+  });
+});
+
+describe("device stop", () => {
+  test("returns 404 for another user's device", async () => {
+    await c.registerUser();
+    const { id } = await c.registerDevice();
+
+    await c.registerUser();
+    const res = await c.api(`/api/devices/${id}/stop`, { method: "POST" });
+    expect(res.status).toBe(404);
+  });
+
+  test("returns 409 DEVICE_OFFLINE when the device was not seen recently", async () => {
+    await c.registerUser();
+    const { id } = await c.registerDevice();
+
+    await prisma.device.update({
+      where: { id },
+      data: { lastSeenAt: new Date(Date.now() - 10 * 60 * 1000) },
+    });
+    const res = await c.api(`/api/devices/${id}/stop`, { method: "POST" });
+    expect(res.status).toBe(409);
+    const body = await c.asJson<{ error: { code: string } }>(res);
+    expect(body.error.code).toBe("DEVICE_OFFLINE");
+  });
+
+  test("returns 200 for an online device", async () => {
+    await c.registerUser();
+    const { id } = await c.registerDevice();
+
+    const res = await c.api(`/api/devices/${id}/stop`, { method: "POST" });
+    expect(res.status).toBe(200);
+  });
+});
+
 describe("device heartbeat", () => {
   test("updates lastSeenAt", async () => {
     await c.registerUser();

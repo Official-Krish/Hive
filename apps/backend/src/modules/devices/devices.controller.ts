@@ -30,6 +30,12 @@ export class DevicesController {
     res.json({ data: { device } });
   };
 
+  stop = async (req: Request, res: Response): Promise<void> => {
+    const auth = getAuth(res);
+    await this.deviceService.stop(String(req.params.id), auth.userId);
+    res.json({ data: { success: true } });
+  };
+
   revoke = async (req: Request, res: Response): Promise<void> => {
     const auth = getAuth(res);
     await this.deviceService.revoke(String(req.params.id), auth.userId);

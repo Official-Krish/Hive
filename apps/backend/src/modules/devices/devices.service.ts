@@ -1,13 +1,16 @@
 import { ApiKeyStatus, DeviceType, prisma } from "@hive/db";
 import { deviceTypeSchema } from "@hive/types";
 import type { DeviceSummary, RegisterDeviceInput } from "@hive/types";
+import { deviceBus } from "../realtime/realtime.bus";
 import type { DeviceContext } from "../../core/context";
-import { NotFoundError } from "../../core/errors";
+import { DeviceOfflineError, NotFoundError } from "../../core/errors";
+import { logger } from "../../lib/logger";
 import { generateRandomToken, hashToken } from "../../lib/crypto";
 import { z } from "zod";
 
 const TOKEN_PREFIX = "hive_dev_";
 const COLLECT_SCOPE = "collect";
+const ONLINE_WINDOW_MS = 5 * 60 * 1000;
 
 const DEVICE_TYPE_MAP: Record<z.infer<typeof deviceTypeSchema>, DeviceType> = {
   laptop: DeviceType.LAPTOP,
@@ -41,6 +44,7 @@ export class DeviceService {
           type: DEVICE_TYPE_MAP[input.type ?? "laptop"],
           os: input.os,
           arch: input.arch,
+          lastSeenAt: new Date(),
         },
       });
       await tx.apiKey.create({
@@ -64,6 +68,7 @@ export class DeviceService {
         os: device.os,
         arch: device.arch,
         status: "active",
+        online: this.isOnline(device.id, device.lastSeenAt),
         lastSeenAt: device.lastSeenAt?.toISOString() ?? null,
         createdAt: device.createdAt.toISOString(),
       },
@@ -112,6 +117,50 @@ export class DeviceService {
     return this.summarize(updated);
   }
 
+  /** Best-effort write of the device's last-seen timestamp. */
+  async markSeen(deviceId: string): Promise<unknown> {
+    return prisma.device
+      .update({
+        where: { id: deviceId },
+        data: { lastSeenAt: new Date() },
+      })
+      .catch((err: unknown) => {
+        logger.error({ err, deviceId }, "Failed to mark device seen");
+      });
+  }
+
+  async hasOnlineDevice(userId: string): Promise<boolean> {
+    const devices = await prisma.device.findMany({
+      where: { userId },
+      include: {
+        apiKeys: { select: { status: true, expiresAt: true } },
+      },
+    });
+    return devices.some(
+      (d) =>
+        this.statusOf(d.apiKeys) === "active" &&
+        this.isOnline(d.id, d.lastSeenAt),
+    );
+  }
+
+  async stop(deviceId: string, userId: string): Promise<void> {
+    const device = await prisma.device.findFirst({
+      where: { id: deviceId, userId },
+      include: {
+        apiKeys: { select: { status: true, expiresAt: true } },
+      },
+    });
+    if (!device) throw new NotFoundError("Device not found");
+    if (!this.isOnline(device.id, device.lastSeenAt)) {
+      throw new DeviceOfflineError();
+    }
+    deviceBus.send(device.id, {
+      type: "control",
+      cmd: "shutdown",
+      timestamp: Date.now(),
+    });
+  }
+
   async findByKeyHash(keyHash: string): Promise<DeviceContext | null> {
     const key = await prisma.apiKey.findUnique({
       where: { keyHash },
@@ -148,9 +197,16 @@ export class DeviceService {
       os: d.os,
       arch: d.arch,
       status: this.statusOf(d.apiKeys),
+      online: this.isOnline(d.id, d.lastSeenAt),
       lastSeenAt: d.lastSeenAt?.toISOString() ?? null,
       createdAt: d.createdAt.toISOString(),
     };
+  }
+
+  private isOnline(deviceId: string, lastSeenAt: Date | null): boolean {
+    if (deviceBus.isOnline(deviceId)) return true;
+    if (!lastSeenAt) return false;
+    return Date.now() - lastSeenAt.getTime() <= ONLINE_WINDOW_MS;
   }
 
   private statusOf(

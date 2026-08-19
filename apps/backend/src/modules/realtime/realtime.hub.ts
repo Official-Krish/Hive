@@ -1,15 +1,20 @@
 import { PresenceStatus } from "@hive/db";
 import {
+  deviceChannel,
+  deviceMessageSchema,
   realtimeChannel,
   realtimeClientMessageSchema,
+  type DeviceControl,
   type RealtimeClientMessage,
   type RealtimeEvent,
 } from "@hive/types";
 import { logger } from "../../lib/logger";
 import { ACCESS_COOKIE } from "../../lib/cookies";
+import { hashToken } from "../../lib/crypto";
 import { verifyAccessToken } from "../../lib/jwt";
+import { DeviceService } from "../devices/devices.service";
 import { RealtimeService } from "./realtime.service";
-import { realtimeBus } from "./realtime.bus";
+import { deviceBus, realtimeBus } from "./realtime.bus";
 
 export interface RealtimeClientData {
   userId: string;
@@ -18,10 +23,22 @@ export interface RealtimeClientData {
   mapId?: string;
 }
 
-type Socket = Bun.ServerWebSocket<RealtimeClientData>;
-type WsServer = Bun.Server<RealtimeClientData>;
+export interface DeviceSocketData {
+  userId: string;
+  deviceId: string;
+  keyId: string;
+}
+
+type ClientData = RealtimeClientData | DeviceSocketData;
+type Socket = Bun.ServerWebSocket<ClientData>;
+type WsServer = Bun.Server<ClientData>;
 
 const WS_PATH = "/ws";
+const DEVICE_WS_PATH = "/ws/device";
+
+function isDeviceData(data: ClientData): data is DeviceSocketData {
+  return "workspaceId" in data === false;
+}
 
 export interface RealtimeHubOptions {
   port: number;
@@ -29,7 +46,9 @@ export interface RealtimeHubOptions {
 
 export class RealtimeHub {
   private readonly service = new RealtimeService();
+  private readonly devices = new DeviceService();
   private readonly clients = new Map<Socket, RealtimeClientData>();
+  private readonly deviceSockets = new Map<Socket, DeviceSocketData>();
   private server: WsServer | null = null;
 
   constructor(private readonly options: RealtimeHubOptions) {}
@@ -45,7 +64,7 @@ export class RealtimeHub {
       port,
       fetch: (req, server) => this.onFetch(req, server),
       websocket: {
-        data: {} as RealtimeClientData,
+        data: {} as ClientData,
         open: (ws) => void this.onOpen(ws),
         message: (ws, message) => void this.onMessage(ws, message),
         close: (ws) => void this.onClose(ws),
@@ -56,6 +75,10 @@ export class RealtimeHub {
     realtimeBus.setPublisher((workspaceId, event) =>
       this.publishToWorkspace(workspaceId, event),
     );
+    deviceBus.setSender((deviceId, event) =>
+      this.sendToDevice(deviceId, event),
+    );
+    deviceBus.setOnlineChecker((deviceId) => this.isDeviceOnline(deviceId));
 
     logger.info({ port: this.server.port }, "Realtime server listening");
     return this;
@@ -63,7 +86,10 @@ export class RealtimeHub {
 
   async stop(): Promise<void> {
     realtimeBus.setPublisher(null);
+    deviceBus.setSender(null);
+    deviceBus.setOnlineChecker(null);
     this.clients.clear();
+    this.deviceSockets.clear();
     if (this.server) {
       await this.server.stop(true);
       this.server = null;
@@ -75,6 +101,15 @@ export class RealtimeHub {
     this.server?.publish(realtimeChannel(workspaceId), JSON.stringify(event));
   }
 
+  /** Push a control command to a connected collector device. */
+  sendToDevice(deviceId: string, event: DeviceControl): void {
+    this.server?.publish(deviceChannel(deviceId), JSON.stringify(event));
+  }
+
+  isDeviceOnline(deviceId: string): boolean {
+    return (this.server?.subscriberCount(deviceChannel(deviceId)) ?? 0) > 0;
+  }
+
   subscriberCount(workspaceId: string): number {
     return this.server?.subscriberCount(realtimeChannel(workspaceId)) ?? 0;
   }
@@ -84,6 +119,9 @@ export class RealtimeHub {
     server: WsServer,
   ): Promise<Response | undefined> {
     const url = new URL(req.url);
+    if (url.pathname === DEVICE_WS_PATH) {
+      return this.onDeviceFetch(req, server, url);
+    }
     if (url.pathname !== WS_PATH) {
       return new Response("Not Found", { status: 404 });
     }
@@ -131,8 +169,41 @@ export class RealtimeHub {
     return undefined;
   }
 
+  private async onDeviceFetch(
+    req: Request,
+    server: WsServer,
+    url: URL,
+  ): Promise<Response | undefined> {
+    const token = url.searchParams.get("token");
+    if (!token) {
+      return new Response("Unauthorized", { status: 401 });
+    }
+    const device = await this.devices.findByKeyHash(hashToken(token));
+    if (!device) {
+      return new Response("Unauthorized", { status: 401 });
+    }
+
+    const upgraded = server.upgrade(req, {
+      data: {
+        userId: device.userId,
+        deviceId: device.deviceId,
+        keyId: device.keyId,
+      },
+    });
+
+    if (!upgraded) {
+      return new Response("Upgrade failed", { status: 400 });
+    }
+    return undefined;
+  }
+
   private async onOpen(ws: Socket): Promise<void> {
-    const client = ws.data;
+    const data = ws.data;
+    if (isDeviceData(data)) {
+      void this.onDeviceOpen(ws, data);
+      return;
+    }
+    const client = data;
     if (!client.mapId) return;
 
     try {
@@ -173,8 +244,35 @@ export class RealtimeHub {
     }
   }
 
+  private async onDeviceOpen(
+    ws: Socket,
+    data: DeviceSocketData,
+  ): Promise<void> {
+    this.deviceSockets.set(ws, data);
+    ws.subscribe(deviceChannel(data.deviceId));
+    this.devices.markSeen(data.deviceId);
+    this.devices.touch(data.keyId);
+
+    const ping: DeviceControl = {
+      type: "control",
+      cmd: "ping",
+      timestamp: Date.now(),
+    };
+    ws.send(JSON.stringify(ping));
+
+    logger.info(
+      { deviceId: data.deviceId, userId: data.userId },
+      "Collector device connected",
+    );
+  }
+
   private async onMessage(ws: Socket, message: string | Buffer): Promise<void> {
-    const client = ws.data;
+    const data = ws.data;
+    if (isDeviceData(data)) {
+      this.onDeviceMessage(ws, data, message);
+      return;
+    }
+    const client = data;
     if (!client.mapId) return;
 
     const text = typeof message === "string" ? message : message.toString();
@@ -228,8 +326,32 @@ export class RealtimeHub {
     }
   }
 
+  private onDeviceMessage(
+    ws: Socket,
+    data: DeviceSocketData,
+    message: string | Buffer,
+  ): void {
+    const text = typeof message === "string" ? message : message.toString();
+    let parsed;
+    try {
+      const result = deviceMessageSchema.safeParse(JSON.parse(text));
+      if (!result.success) return;
+      parsed = result.data;
+    } catch {
+      return;
+    }
+    if (parsed.type === "heartbeat") {
+      this.devices.markSeen(data.deviceId);
+    }
+  }
+
   private async onClose(ws: Socket): Promise<void> {
-    const client = this.clients.get(ws) ?? ws.data;
+    const data = ws.data;
+    if (isDeviceData(data)) {
+      this.onDeviceClose(ws, data);
+      return;
+    }
+    const client = this.clients.get(ws) ?? data;
     if (!client) return;
 
     this.clients.delete(ws);
@@ -252,5 +374,15 @@ export class RealtimeHub {
     } catch (err) {
       logger.error({ err, userId: client.userId }, "Realtime close failed");
     }
+  }
+
+  private onDeviceClose(ws: Socket, data: DeviceSocketData): void {
+    const existing = this.deviceSockets.get(ws);
+    if (existing) this.deviceSockets.delete(ws);
+    ws.unsubscribe(deviceChannel(data.deviceId));
+    logger.info(
+      { deviceId: data.deviceId, userId: data.userId },
+      "Collector device disconnected",
+    );
   }
 }

@@ -1,4 +1,4 @@
-import type { RealtimeEvent } from "@hive/types";
+import type { DeviceControl, RealtimeEvent } from "@hive/types";
 
 export type RealtimePublisher = (
   workspaceId: string,
@@ -19,4 +19,29 @@ export const realtimeBus = {
   },
 };
 
+export type DeviceSender = (deviceId: string, event: DeviceControl) => void;
+export type DeviceOnlineChecker = (deviceId: string) => boolean;
+
+/**
+ * Registry for the collector device control plane. The hub registers its
+ * sender + online checker on start, so non-WS modules (devices routes,
+ * invite gate) can push control commands to a device without a hub reference.
+ */
+export const deviceBus = {
+  setSender(sender: DeviceSender | null): void {
+    currentDeviceSender = sender;
+  },
+  send(deviceId: string, event: DeviceControl): void {
+    currentDeviceSender?.(deviceId, event);
+  },
+  setOnlineChecker(checker: DeviceOnlineChecker | null): void {
+    currentDeviceChecker = checker;
+  },
+  isOnline(deviceId: string): boolean {
+    return currentDeviceChecker?.(deviceId) ?? false;
+  },
+};
+
 let currentPublisher: RealtimePublisher | null = null;
+let currentDeviceSender: DeviceSender | null = null;
+let currentDeviceChecker: DeviceOnlineChecker | null = null;

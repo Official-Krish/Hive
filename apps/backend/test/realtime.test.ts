@@ -94,6 +94,28 @@ class TestSocket {
     }
   }
 
+  async waitForControl(
+    cmd: string,
+    ms = 3000,
+  ): Promise<{ cmd: string; timestamp: number }> {
+    const started = Date.now();
+    for (;;) {
+      const index = this.messages.findIndex(
+        (m) => m.type === "control" && m.cmd === cmd,
+      );
+      if (index !== -1) {
+        return this.messages.splice(index, 1)[0] as {
+          cmd: string;
+          timestamp: number;
+        };
+      }
+      if (Date.now() - started > ms) {
+        throw new Error(`Timed out waiting for control: ${cmd}`);
+      }
+      await Bun.sleep(10);
+    }
+  }
+
   send(message: Record<string, unknown>): void {
     this.ws.send(JSON.stringify(message));
   }
@@ -137,6 +159,21 @@ async function connect(
   });
   await socket.waitOpen();
   return { socket, userId };
+}
+
+async function registerDevice(
+  cookie: string,
+): Promise<{ id: string; token: string }> {
+  const res = await fetch(`${baseUrl}/api/devices`, {
+    method: "POST",
+    headers: { "content-type": "application/json", cookie },
+    body: JSON.stringify({ name: "Collector" }),
+  });
+  expect(res.status).toBe(201);
+  const body = (await res.json()) as {
+    data: { device: { id: string }; token: string };
+  };
+  return { id: body.data.device.id, token: body.data.token };
 }
 
 beforeAll(async () => {
@@ -290,6 +327,96 @@ describe("realtime hub", () => {
     } finally {
       a.close();
       await a.waitClose();
+    }
+  });
+});
+
+describe("device control channel", () => {
+  test("rejects a connection with an invalid token", async () => {
+    const socket = new TestSocket(`${wsBaseUrl}/ws/device?token=nope`);
+    await socket.waitClose();
+    expect(socket.isOpen).toBe(false);
+  });
+
+  test("connects, receives a ping ack, and marks the device online", async () => {
+    const { cookie } = await register("Device Owner");
+    const { id, token } = await registerDevice(cookie);
+
+    const socket = new TestSocket(
+      `${wsBaseUrl}/ws/device?token=${encodeURIComponent(token)}`,
+    );
+    await socket.waitOpen();
+    try {
+      const ping = await socket.waitForControl("ping");
+      expect(ping.cmd).toBe("ping");
+      expect(typeof ping.timestamp).toBe("number");
+      expect(hub.isDeviceOnline(id)).toBe(true);
+    } finally {
+      socket.close();
+      await socket.waitClose();
+    }
+  });
+
+  test("delivers control.shutdown from the stop endpoint", async () => {
+    const { cookie } = await register("Device Owner 2");
+    const { id, token } = await registerDevice(cookie);
+
+    const socket = new TestSocket(
+      `${wsBaseUrl}/ws/device?token=${encodeURIComponent(token)}`,
+    );
+    await socket.waitOpen();
+    try {
+      const res = await fetch(`${baseUrl}/api/devices/${id}/stop`, {
+        method: "POST",
+        headers: { cookie },
+      });
+      expect(res.status).toBe(200);
+
+      const shutdown = await socket.waitForControl("shutdown");
+      expect(shutdown.cmd).toBe("shutdown");
+    } finally {
+      socket.close();
+      await socket.waitClose();
+    }
+  });
+
+  test("heartbeats refresh lastSeenAt", async () => {
+    const { cookie } = await register("Device Owner 3");
+    const { id, token } = await registerDevice(cookie);
+
+    await prisma.device.update({
+      where: { id },
+      data: { lastSeenAt: new Date(Date.now() - 10 * 60 * 1000) },
+    });
+
+    const socket = new TestSocket(
+      `${wsBaseUrl}/ws/device?token=${encodeURIComponent(token)}`,
+    );
+    await socket.waitOpen();
+    try {
+      await socket.waitForControl("ping");
+      socket.send({ type: "heartbeat", timestamp: Date.now() });
+
+      const started = Date.now();
+      let device = await prisma.device.findUniqueOrThrow({
+        where: { id },
+        select: { lastSeenAt: true },
+      });
+      while (
+        !device.lastSeenAt ||
+        Date.now() - device.lastSeenAt.getTime() > 5000
+      ) {
+        if (Date.now() - started > 3000) break;
+        await Bun.sleep(10);
+        device = await prisma.device.findUniqueOrThrow({
+          where: { id },
+          select: { lastSeenAt: true },
+        });
+      }
+      expect(device.lastSeenAt).not.toBeNull();
+    } finally {
+      socket.close();
+      await socket.waitClose();
     }
   });
 });

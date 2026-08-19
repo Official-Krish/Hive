@@ -221,6 +221,29 @@ describe("invites", () => {
     });
     expect(accept.status).toBe(403);
   });
+
+  test("accepting requires an online collector device", async () => {
+    c.clearJar();
+    await c.registerUser();
+    const workspaceId = await c.createWorkspace("Gated");
+    const gatedEmail = uniqueEmail("gated");
+
+    const token = await c.inviteAndGetToken(workspaceId, gatedEmail);
+
+    await c.registerUserWith(gatedEmail);
+    const accept = await c.api(`/api/invites/${token}/accept`, {
+      method: "POST",
+    });
+    expect(accept.status).toBe(409);
+    const body = await c.asJson<{ error: { code: string } }>(accept);
+    expect(body.error.code).toBe("DEVICE_REQUIRED");
+
+    await c.registerDevice();
+    const retry = await c.api(`/api/invites/${token}/accept`, {
+      method: "POST",
+    });
+    expect(retry.status).toBe(200);
+  });
 });
 
 describe("members", () => {
