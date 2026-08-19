@@ -19,6 +19,10 @@ import {
 } from "./modules/github/github.routes";
 import { healthRouter } from "./modules/health/health.routes";
 import { usersRouter } from "./modules/users/users.routes";
+import {
+  invitesRouter,
+  workspacesRouter,
+} from "./modules/workspaces/workspaces.routes";
 
 export function createApp() {
   const app = express();
@@ -63,6 +67,8 @@ export function createApp() {
   app.use("/api/devices", devicesRouter);
   app.use("/api/ingest", ingestRouter);
   app.use("/api/github", githubRouter);
+  app.use("/api/workspaces", workspacesRouter);
+  app.use("/api/invites", invitesRouter);
 
   app.use(notFound());
   app.use(errorHandler());

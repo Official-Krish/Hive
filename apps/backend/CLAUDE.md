@@ -35,6 +35,14 @@ Default to using Bun instead of Node.js.
 - **Devices** (src/modules/devices/) let the local collector authenticate as a user's machine. `POST /api/devices` creates a `Device` + an `ApiKey` (`scopes: ["collect"]`, `keyHash` = sha256, prefix `hive_dev_`); the plaintext token is shown once. `requireDevice` middleware reads `X-Device-Token`, resolves the key, and sets `res.locals.device = { userId, deviceId, keyId }` (`getDevice(res)` to read it). Revoke = mark the ApiKey REVOKED.
 - **Ingest** (src/modules/ingest/, `POST /api/ingest/events`) accepts an `ingestBatchSchema` batch from `@hive/events`. Per-batch checks: device belongs to the user AND the user is a `WorkspaceMember` of `batch.workspaceId` (else 403). Event→DB mapping is idempotent: client-generated `sessionId`/`activityId`/`testRunId` become DB row ids via upsert-on-id, repos upsert on `(workspaceId, name)`, commits on `(repositoryId, sha)`, PRs on `(repositoryId, number)`. Token costs are derived from `Model` pricing. `process.*`/`terminal.command`/`file.modified` attach as `AgentEvent`/`ActivityEvent` rows (payload + sequence) to the developer's most recent RUNNING session or IN_PROGRESS activity. Live updates broadcast via `realtimeBus` (`agent.started/stopped`, `activity.updated`, `repo.push`, `pr.updated`). A failed event increments `failures` but never drops the rest of the batch.
 
+## Workspaces (org + team management)
+
+- **Middleware** (src/middleware/workspace.ts): `requireWorkspaceMember()` resolves the caller's membership for `:workspaceId` into `res.locals.membership` (`{ workspaceId, userId, role }`). `requireWorkspaceRole("admin", "owner")` gates routes on the role. Run after `requireAuth()`.
+- **Routes** (src/modules/workspaces/): `workspacesRouter` at `/api/workspaces`, `invitesRouter` at `/api/invites`. CRUD + members + invites; DELETE is owner-only, PATCH/invite/revoke are admin+.
+- Registration auto-provisions a personal org + "Main" workspace, so a fresh user already has one. `WorkspaceService.primaryOrgId` reuses the first `OrganizationMember` (or creates an org if none exists).
+- Invites: raw token is hashed (`hashToken`) into `Invite.tokenHash` and shown once in the create response. `POST /api/invites/:token/accept` requires the accepting user's email to match `Invite.email` (403 otherwise), upserts `OrganizationMember` + `WorkspaceMember`, and sets `acceptedAt` in a transaction. Status is derived: revoked → accepted → expired → pending.
+- Slug uniqueness is per-org (`@@unique([orgId, slug])`); a conflicting slug gets a random hex suffix.
+
 ## Testing
 
 Use `bun test`. Tests run against the dev PostgreSQL database with a cookie jar to exercise the auth flows.
