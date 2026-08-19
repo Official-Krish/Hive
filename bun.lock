@@ -115,6 +115,18 @@
         "typescript-eslint": "^8.50.0",
       },
     },
+    "packages/events": {
+      "name": "@hive/events",
+      "dependencies": {
+        "zod": "^4.4.3",
+      },
+      "devDependencies": {
+        "@types/bun": "latest",
+      },
+      "peerDependencies": {
+        "typescript": "^5",
+      },
+    },
     "packages/queue": {
       "name": "@hive/queue",
       "devDependencies": {
@@ -194,6 +206,8 @@
     "@hive/backend": ["@hive/backend@workspace:apps/backend"],
 
     "@hive/db": ["@hive/db@workspace:packages/db"],
+
+    "@hive/events": ["@hive/events@workspace:packages/events"],
 
     "@hive/frontend": ["@hive/frontend@workspace:apps/frontend"],
 

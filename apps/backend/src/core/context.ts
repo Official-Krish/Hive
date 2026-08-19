@@ -3,3 +3,9 @@ export interface AuthContext {
   deviceId?: string;
   jti: string;
 }
+
+export interface DeviceContext {
+  userId: string;
+  deviceId: string;
+  keyId: string;
+}
