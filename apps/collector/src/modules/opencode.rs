@@ -135,6 +135,7 @@ impl OpenCodeTracker {
                 }
             } else if active {
                 let repository = directory_repo(&row.directory);
+                let branch = directory_branch(&row.directory);
                 let (model, _) = parse_model(&row.model);
                 tracing::debug!(session = %row.id, model = %model, "opencode: emitting started");
                 crate::bus::try_send(
@@ -147,7 +148,7 @@ impl OpenCodeTracker {
                         version: None,
                         title: Some(row.title.clone()),
                         repository,
-                        branch: None,
+                        branch,
                     },
                 );
                 self.sessions.insert(
@@ -277,6 +278,16 @@ fn directory_repo(directory: &str) -> Option<String> {
     Path::new(directory)
         .file_name()
         .map(|s| s.to_string_lossy().into_owned())
+}
+
+fn directory_branch(directory: &str) -> Option<String> {
+    let repo = git2::Repository::open(directory).ok()?;
+    let head = repo.find_reference("HEAD").ok()?;
+    let target = head
+        .symbolic_target()
+        .or_else(|| head.name())
+        .map(String::from)?;
+    target.strip_prefix("refs/heads/").map(|s| s.to_string())
 }
 
 fn emit_stopped(tx: &EventSender, session_id: &str, title: &str) {
@@ -411,6 +422,20 @@ mod tests {
             Some("repo")
         );
         assert_eq!(directory_repo("/"), None);
+    }
+
+    #[test]
+    fn directory_branch_resolves_git_head() {
+        let dir = std::env::temp_dir().join(format!("hive-opencode-branch-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let repo = git2::Repository::init(&dir).unwrap();
+        repo.set_head("refs/heads/issue/123-fix").unwrap();
+        assert_eq!(
+            directory_branch(&dir.to_string_lossy()).as_deref(),
+            Some("issue/123-fix")
+        );
+        assert_eq!(directory_branch("/nonexistent-dir"), None);
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]
