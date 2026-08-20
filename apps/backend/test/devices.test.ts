@@ -25,7 +25,7 @@ afterAll(async () => {
 describe("device register", () => {
   test("returns 401 without an authenticated session", async () => {
     c.clearJar();
-    const res = await c.api("/api/devices", {
+    const res = await c.api("/api/v1/devices", {
       method: "POST",
       body: { name: "Nope" },
     });
@@ -52,7 +52,7 @@ describe("device register", () => {
 
   test("stores type, os and arch", async () => {
     await c.registerUser();
-    const res = await c.api("/api/devices", {
+    const res = await c.api("/api/v1/devices", {
       method: "POST",
       body: {
         name: "CI Runner",
@@ -72,7 +72,7 @@ describe("device register", () => {
 
   test("rejects an empty name", async () => {
     await c.registerUser();
-    const res = await c.api("/api/devices", {
+    const res = await c.api("/api/v1/devices", {
       method: "POST",
       body: { name: " " },
     });
@@ -82,14 +82,14 @@ describe("device register", () => {
   test("replays the same response for a duplicate idempotency key", async () => {
     const email = await c.registerUser();
     const key = uniqueKey();
-    const first = await c.api("/api/devices", {
+    const first = await c.api("/api/v1/devices", {
       method: "POST",
       body: { name: "Idem Device" },
       headers: { "idempotency-key": key },
     });
     expect(first.status).toBe(201);
 
-    const second = await c.api("/api/devices", {
+    const second = await c.api("/api/v1/devices", {
       method: "POST",
       body: { name: "Idem Device" },
       headers: { "idempotency-key": key },
@@ -112,7 +112,7 @@ describe("device list", () => {
     const a = await c.registerDevice();
     const b = await c.registerDevice();
 
-    const res = await c.api("/api/devices");
+    const res = await c.api("/api/v1/devices");
     expect(res.status).toBe(200);
     const body = await c.asJson<{
       data: { devices: { id: string }[] };
@@ -129,7 +129,7 @@ describe("device online", () => {
     await c.registerUser();
     const { id } = await c.registerDevice();
 
-    const res = await c.api("/api/devices");
+    const res = await c.api("/api/v1/devices");
     const body = await c.asJson<{
       data: { devices: { id: string; online: boolean }[] };
     }>(res);
@@ -144,7 +144,7 @@ describe("device stop", () => {
     const { id } = await c.registerDevice();
 
     await c.registerUser();
-    const res = await c.api(`/api/devices/${id}/stop`, { method: "POST" });
+    const res = await c.api(`/api/v1/devices/${id}/stop`, { method: "POST" });
     expect(res.status).toBe(404);
   });
 
@@ -156,7 +156,7 @@ describe("device stop", () => {
       where: { id },
       data: { lastSeenAt: new Date(Date.now() - 10 * 60 * 1000) },
     });
-    const res = await c.api(`/api/devices/${id}/stop`, { method: "POST" });
+    const res = await c.api(`/api/v1/devices/${id}/stop`, { method: "POST" });
     expect(res.status).toBe(409);
     const body = await c.asJson<{ error: { code: string } }>(res);
     expect(body.error.code).toBe("DEVICE_OFFLINE");
@@ -166,7 +166,7 @@ describe("device stop", () => {
     await c.registerUser();
     const { id } = await c.registerDevice();
 
-    const res = await c.api(`/api/devices/${id}/stop`, { method: "POST" });
+    const res = await c.api(`/api/v1/devices/${id}/stop`, { method: "POST" });
     expect(res.status).toBe(200);
   });
 });
@@ -176,7 +176,7 @@ describe("device heartbeat", () => {
     await c.registerUser();
     const { id } = await c.registerDevice();
 
-    const res = await c.api(`/api/devices/${id}/heartbeat`, {
+    const res = await c.api(`/api/v1/devices/${id}/heartbeat`, {
       method: "POST",
     });
     expect(res.status).toBe(200);
@@ -191,7 +191,7 @@ describe("device heartbeat", () => {
     const { id } = await c.registerDevice();
 
     await c.registerUser();
-    const res = await c.api(`/api/devices/${id}/heartbeat`, {
+    const res = await c.api(`/api/v1/devices/${id}/heartbeat`, {
       method: "POST",
     });
     expect(res.status).toBe(404);
@@ -203,7 +203,7 @@ describe("device revoke", () => {
     await c.registerUser();
     const { id, token } = await c.registerDevice();
 
-    const res = await c.api(`/api/devices/${id}`, { method: "DELETE" });
+    const res = await c.api(`/api/v1/devices/${id}`, { method: "DELETE" });
     expect(res.status).toBe(200);
 
     const key = await prisma.apiKey.findUnique({
@@ -216,7 +216,7 @@ describe("device revoke", () => {
     const context = await service.findByKeyHash(hashToken(token));
     expect(context).toBeNull();
 
-    const list = await c.api("/api/devices");
+    const list = await c.api("/api/v1/devices");
     const body = await c.asJson<{
       data: { devices: { status: string }[] };
     }>(list);

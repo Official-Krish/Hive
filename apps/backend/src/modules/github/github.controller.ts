@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
+import type { GithubTokenInput } from "@hive/types";
 import { env } from "../../config/env";
-import { ACCESS_COOKIE } from "../../lib/cookies";
+import { setAccessTokenCookie, setRefreshTokenCookie } from "../../lib/cookies";
 import { verifyAccessToken } from "../../lib/jwt";
 import { getAuth } from "../../middleware/authenticate";
 import type { SessionContext } from "../auth/auth.service";
@@ -51,6 +52,31 @@ export class GitHubController {
     res.json({ data: { success: true } });
   };
 
+  /**
+   * CLI device-flow login: the collector presents a GitHub user access token
+   * (obtained via the OAuth device flow) and receives a Hive session. Tokens
+   * are returned in the body because the CLI has no cookie jar.
+   */
+  exchangeToken = async (req: Request, res: Response): Promise<void> => {
+    const { accessToken } = req.body as GithubTokenInput;
+    const session = await this.githubService.exchangeUserToken(
+      accessToken,
+      this.context(req),
+      // Accounts are only created through the web app. The collector must
+      // link to an existing account, never auto-provision a new one.
+      { provisionIfMissing: false },
+    );
+    this.setSession(res, session);
+    res.json({
+      data: {
+        user: session.user,
+        accessToken: session.accessToken,
+        refreshToken: session.refreshToken,
+        accessTokenExpiresIn: session.accessTokenExpiresIn,
+      },
+    });
+  };
+
   webhook = async (req: Request, res: Response): Promise<void> => {
     const result = await this.githubService.handleWebhook({
       event: singleHeader(req.headers["x-github-event"]),
@@ -85,20 +111,16 @@ export class GitHubController {
       accessTokenExpiresIn: number;
     },
   ): void {
-    res.cookie(ACCESS_COOKIE, session.accessToken, {
-      httpOnly: true,
-      secure: env.COOKIE_SECURE,
-      sameSite: "lax",
-      path: "/",
-      maxAge: session.accessTokenExpiresIn * 1000,
-    });
-    res.cookie("refresh_token", session.refreshToken, {
-      httpOnly: true,
-      secure: env.COOKIE_SECURE,
-      sameSite: "lax",
-      path: "/api/auth",
-      maxAge: env.REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000,
-    });
+    setAccessTokenCookie(
+      res,
+      session.accessToken,
+      session.accessTokenExpiresIn,
+    );
+    setRefreshTokenCookie(
+      res,
+      session.refreshToken,
+      env.REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60,
+    );
   }
 
   private context(req: Request): SessionContext {

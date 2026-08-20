@@ -62,6 +62,21 @@ export class DeviceOfflineError extends AppError {
   }
 }
 
+/**
+ * Raised when GitHub login succeeds but the user has no Hive account yet.
+ * Accounts are created through the web app first; the collector login only
+ * links to an existing account.
+ */
+export class WebAccountRequiredError extends AppError {
+  constructor(email: string, webUrl: string) {
+    super(
+      404,
+      "ACCOUNT_REQUIRED",
+      `No Hive account found for ${email}. Connect with GitHub on the web first: ${webUrl}`,
+    );
+  }
+}
+
 export function isAppError(error: unknown): error is AppError {
   return error instanceof AppError;
 }

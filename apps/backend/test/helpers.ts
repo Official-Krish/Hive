@@ -94,7 +94,7 @@ export function makeClient(baseUrl: string) {
 
     registerUser: async (): Promise<string> => {
       const email = uniqueEmail("user");
-      const res = await client.api("/api/auth/register", {
+      const res = await client.api("/api/v1/auth/register", {
         method: "POST",
         body: { email, password: "Password123", name: "Test User" },
       });
@@ -103,7 +103,7 @@ export function makeClient(baseUrl: string) {
     },
 
     registerUserWith: async (email: string): Promise<void> => {
-      const res = await client.api("/api/auth/register", {
+      const res = await client.api("/api/v1/auth/register", {
         method: "POST",
         body: { email, password: "Password123", name: "Invited User" },
       });
@@ -111,7 +111,7 @@ export function makeClient(baseUrl: string) {
     },
 
     createWorkspace: async (name: string): Promise<string> => {
-      const res = await client.api("/api/workspaces", {
+      const res = await client.api("/api/v1/workspaces", {
         method: "POST",
         body: { name },
       });
@@ -125,10 +125,13 @@ export function makeClient(baseUrl: string) {
       email: string,
       role?: string,
     ): Promise<string> => {
-      const res = await client.api(`/api/workspaces/${workspaceId}/invites`, {
-        method: "POST",
-        body: { email, ...(role ? { role } : {}) },
-      });
+      const res = await client.api(
+        `/api/v1/workspaces/${workspaceId}/invites`,
+        {
+          method: "POST",
+          body: { email, ...(role ? { role } : {}) },
+        },
+      );
       expect(res.status).toBe(201);
       const body = await client.asJson<{ data: { token: string } }>(res);
       return body.data.token;
@@ -137,14 +140,14 @@ export function makeClient(baseUrl: string) {
     acceptInviteAs: async (token: string, email: string): Promise<void> => {
       await client.registerUserWith(email);
       await client.registerDevice();
-      const res = await client.api(`/api/invites/${token}/accept`, {
+      const res = await client.api(`/api/v1/invites/${token}/accept`, {
         method: "POST",
       });
       expect(res.status).toBe(200);
     },
 
     registerDevice: async (): Promise<{ id: string; token: string }> => {
-      const res = await client.api("/api/devices", {
+      const res = await client.api("/api/v1/devices", {
         method: "POST",
         body: { name: "Collector" },
       });
@@ -156,7 +159,7 @@ export function makeClient(baseUrl: string) {
     },
 
     primaryWorkspaceId: async (): Promise<string> => {
-      const res = await client.api("/api/workspaces");
+      const res = await client.api("/api/v1/workspaces");
       expect(res.status).toBe(200);
       const body = await client.asJson<{ data: Array<{ id: string }> }>(res);
       expect(body.data.length).toBeGreaterThan(0);

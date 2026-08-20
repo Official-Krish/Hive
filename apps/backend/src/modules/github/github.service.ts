@@ -9,7 +9,12 @@ import type { RealtimeEvent } from "@hive/types";
 import { createHmac } from "node:crypto";
 import { env } from "../../config/env";
 import { encryptSecret } from "../../lib/encryption";
-import { GitHubClient } from "../../lib/github";
+import {
+  GitHubClient,
+  OAUTH_SCOPES,
+  type GitHubEmail,
+  type GitHubUser,
+} from "../../lib/github";
 import { signOAuthState, verifyOAuthState } from "../../lib/jwt";
 import { safeEqual } from "../../lib/crypto";
 import {
@@ -17,6 +22,7 @@ import {
   type SessionContext,
   type SessionResult,
 } from "../auth/auth.service";
+import { WebAccountRequiredError } from "../../core/errors";
 import { realtimeBus } from "../realtime/realtime.bus";
 
 interface GitHubPushPayload {
@@ -78,24 +84,79 @@ export class GitHubService {
     ctx: SessionContext;
   }): Promise<{ session: SessionResult; next: string }> {
     const statePayload = verifyOAuthState(input.state);
-
     const token = await this.client.exchangeCodeForToken(input.code);
+    const session = await this.exchangeUserToken(
+      token.access_token,
+      input.ctx,
+      {
+        existingUserId: input.existingUserId,
+        scopes: token.scope.split(" ").filter(Boolean),
+      },
+    );
+    return { session, next: statePayload.next };
+  }
+
+  /**
+   * Turn a GitHub user access token (from the browser flow or the CLI device
+   * flow) into a Hive session: resolve the GitHub user, link or provision the
+   * Hive account, and store the token for webhooks. The device flow is a
+   * public client, so `existingUserId` is undefined and `scopes` falls back to
+   * the app's default scopes.
+   */
+  async exchangeUserToken(
+    githubAccessToken: string,
+    ctx: SessionContext,
+    opts: {
+      existingUserId?: string;
+      scopes?: string[];
+      provisionIfMissing?: boolean;
+    } = {},
+  ): Promise<SessionResult> {
     const [ghUser, emails] = await Promise.all([
-      this.client.getUser(token.access_token),
-      this.client.getUserEmails(token.access_token),
+      this.client.getUser(githubAccessToken),
+      this.client.getUserEmails(githubAccessToken),
     ]);
 
+    const userId = await this.linkOrProvisionUser(
+      ghUser,
+      emails,
+      opts.existingUserId,
+      opts.provisionIfMissing ?? true,
+    );
+    await this.upsertAccount(
+      ghUser,
+      emails,
+      userId,
+      opts.scopes ?? OAUTH_SCOPES,
+      githubAccessToken,
+    );
+
+    return this.authService.issueSession(userId, ctx);
+  }
+
+  private async linkOrProvisionUser(
+    ghUser: GitHubUser,
+    emails: GitHubEmail[],
+    existingUserId?: string,
+    provisionIfMissing = true,
+  ): Promise<string> {
     const primaryEmail =
       emails.find((email) => email.primary && email.verified)?.email ??
       ghUser.email;
 
-    let userId = input.existingUserId;
+    let userId = existingUserId;
     if (!userId) {
       if (primaryEmail) {
         const byEmail = await prisma.user.findUnique({
           where: { email: primaryEmail.toLowerCase() },
         });
         userId = byEmail?.id;
+      }
+      if (!userId && !provisionIfMissing) {
+        throw new WebAccountRequiredError(
+          primaryEmail ?? ghUser.login,
+          env.clientOrigins[0] ?? env.API_URL,
+        );
       }
       if (!userId) {
         userId = await this.authService.provisionUser({
@@ -107,8 +168,19 @@ export class GitHubService {
         });
       }
     }
+    return userId;
+  }
 
-    const scopes = token.scope.split(" ").filter(Boolean);
+  private async upsertAccount(
+    ghUser: GitHubUser,
+    emails: GitHubEmail[],
+    userId: string,
+    scopes: string[],
+    accessToken: string,
+  ): Promise<void> {
+    const primaryEmail =
+      emails.find((email) => email.primary && email.verified)?.email ??
+      ghUser.email;
     await prisma.gitHubAccount.upsert({
       where: { githubId: ghUser.id },
       create: {
@@ -118,7 +190,7 @@ export class GitHubService {
         name: ghUser.name,
         email: primaryEmail,
         avatarUrl: ghUser.avatar_url,
-        accessToken: encryptSecret(token.access_token),
+        accessToken: encryptSecret(accessToken),
         scopes,
       },
       update: {
@@ -127,14 +199,11 @@ export class GitHubService {
         name: ghUser.name,
         email: primaryEmail,
         avatarUrl: ghUser.avatar_url,
-        accessToken: encryptSecret(token.access_token),
+        accessToken: encryptSecret(accessToken),
         scopes,
         lastSyncedAt: new Date(),
       },
     });
-
-    const session = await this.authService.issueSession(userId, input.ctx);
-    return { session, next: statePayload.next };
   }
 
   async disconnect(userId: string): Promise<void> {

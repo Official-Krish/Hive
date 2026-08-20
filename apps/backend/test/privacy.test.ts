@@ -24,7 +24,7 @@ afterAll(async () => {
 
 async function loginAs(email: string): Promise<void> {
   c.clearJar();
-  const res = await c.api("/api/auth/login", {
+  const res = await c.api("/api/v1/auth/login", {
     method: "POST",
     body: { email, password: "Password123" },
   });
@@ -60,7 +60,7 @@ async function seedWorkspace(): Promise<Seeded> {
     update: {},
   });
 
-  const res = await c.api("/api/ingest/events", {
+  const res = await c.api("/api/v1/ingest/events", {
     method: "POST",
     body: {
       deviceId: "dev",
@@ -155,7 +155,7 @@ async function seedWorkspace(): Promise<Seeded> {
 describe("privacy access", () => {
   test("returns 401 without a session", async () => {
     c.clearJar();
-    const res = await c.api("/api/workspaces/x/privacy");
+    const res = await c.api("/api/v1/workspaces/x/privacy");
     expect(res.status).toBe(401);
   });
 
@@ -168,10 +168,10 @@ describe("privacy access", () => {
     await c.acceptInviteAs(token, memberEmail);
     await loginAs(memberEmail);
 
-    const get = await c.api(`/api/workspaces/${workspaceId}/privacy`);
+    const get = await c.api(`/api/v1/workspaces/${workspaceId}/privacy`);
     expect(get.status).toBe(200);
 
-    const patch = await c.api(`/api/workspaces/${workspaceId}/privacy`, {
+    const patch = await c.api(`/api/v1/workspaces/${workspaceId}/privacy`, {
       method: "PATCH",
       body: { allowTokenUsage: false },
     });
@@ -184,7 +184,7 @@ describe("privacy get + update", () => {
     await c.registerUser();
     const workspaceId = await c.primaryWorkspaceId();
 
-    const res = await c.api(`/api/workspaces/${workspaceId}/privacy`);
+    const res = await c.api(`/api/v1/workspaces/${workspaceId}/privacy`);
     expect(res.status).toBe(200);
     const body = await c.asJson<{ data: Record<string, unknown> }>(res);
     expect(body.data).toMatchObject({
@@ -203,11 +203,11 @@ describe("privacy get + update", () => {
   test("patch persists and records the actor", async () => {
     await c.registerUser();
     const workspaceId = await c.primaryWorkspaceId();
-    const me = await c.api("/api/auth/me");
+    const me = await c.api("/api/v1/auth/me");
     const meBody = await c.asJson<{ data: { user: { id: string } } }>(me);
     const userId = meBody.data.user.id;
 
-    const patch = await c.api(`/api/workspaces/${workspaceId}/privacy`, {
+    const patch = await c.api(`/api/v1/workspaces/${workspaceId}/privacy`, {
       method: "PATCH",
       body: { allowTokenUsage: false, allowFilePaths: true },
     });
@@ -236,14 +236,14 @@ describe("privacy get + update", () => {
 describe("privacy read gating", () => {
   test("allowTokenUsage=false zeroes token data everywhere", async () => {
     const seed = await seedWorkspace();
-    const res = await c.api(`/api/workspaces/${seed.workspaceId}/privacy`, {
+    const res = await c.api(`/api/v1/workspaces/${seed.workspaceId}/privacy`, {
       method: "PATCH",
       body: { allowTokenUsage: false },
     });
     expect(res.status).toBe(200);
 
     const sessions = await c.api(
-      `/api/workspaces/${seed.workspaceId}/agent-sessions`,
+      `/api/v1/workspaces/${seed.workspaceId}/agent-sessions`,
     );
     const sessionsBody = await c.asJson<{
       data: {
@@ -261,7 +261,7 @@ describe("privacy read gating", () => {
     });
 
     const detail = await c.api(
-      `/api/workspaces/${seed.workspaceId}/agent-sessions/${seed.sessionId}`,
+      `/api/v1/workspaces/${seed.workspaceId}/agent-sessions/${seed.sessionId}`,
     );
     const detailBody = await c.asJson<{
       data: { tokenUsage: unknown[]; inputTokens: number };
@@ -269,11 +269,11 @@ describe("privacy read gating", () => {
     expect(detailBody.data.tokenUsage).toHaveLength(0);
     expect(detailBody.data.inputTokens).toBe(0);
 
-    const me = await c.api("/api/auth/me");
+    const me = await c.api("/api/v1/auth/me");
     const meBody = await c.asJson<{ data: { user: { id: string } } }>(me);
     const devId = meBody.data.user.id;
     const stats = await c.api(
-      `/api/workspaces/${seed.workspaceId}/developers/${devId}/stats`,
+      `/api/v1/workspaces/${seed.workspaceId}/developers/${devId}/stats`,
     );
     const statsBody = await c.asJson<{
       data: { inputTokens: number; costCents: number | null };
@@ -292,7 +292,7 @@ describe("privacy read gating", () => {
       },
     });
     const metrics = await c.api(
-      `/api/workspaces/${seed.workspaceId}/metrics?period=week`,
+      `/api/v1/workspaces/${seed.workspaceId}/metrics?period=week`,
     );
     const metricsBody = await c.asJson<{
       data: Array<{
@@ -308,14 +308,17 @@ describe("privacy read gating", () => {
 
   test("allowActivitySummaries=false and allowAgentStatus=false null summaries and statuses", async () => {
     const seed = await seedWorkspace();
-    const patch = await c.api(`/api/workspaces/${seed.workspaceId}/privacy`, {
-      method: "PATCH",
-      body: { allowActivitySummaries: false, allowAgentStatus: false },
-    });
+    const patch = await c.api(
+      `/api/v1/workspaces/${seed.workspaceId}/privacy`,
+      {
+        method: "PATCH",
+        body: { allowActivitySummaries: false, allowAgentStatus: false },
+      },
+    );
     expect(patch.status).toBe(200);
 
     const activities = await c.api(
-      `/api/workspaces/${seed.workspaceId}/activities`,
+      `/api/v1/workspaces/${seed.workspaceId}/activities`,
     );
     const actBody = await c.asJson<{
       data: { items: Array<{ summary: string | null; status: string | null }> };
@@ -326,7 +329,7 @@ describe("privacy read gating", () => {
     });
 
     const sessions = await c.api(
-      `/api/workspaces/${seed.workspaceId}/agent-sessions`,
+      `/api/v1/workspaces/${seed.workspaceId}/agent-sessions`,
     );
     const sessBody = await c.asJson<{
       data: { items: Array<{ summary: string | null; status: string | null }> };
@@ -336,7 +339,7 @@ describe("privacy read gating", () => {
       status: null,
     });
 
-    const map = await c.api(`/api/workspaces/${seed.workspaceId}/map`);
+    const map = await c.api(`/api/v1/workspaces/${seed.workspaceId}/map`);
     const mapBody = await c.asJson<{
       data: { members: Array<{ status: string | null }> };
     }>(map);
@@ -345,19 +348,22 @@ describe("privacy read gating", () => {
 
   test("allowGitMetadata=false empties commit/PR content", async () => {
     const seed = await seedWorkspace();
-    const patch = await c.api(`/api/workspaces/${seed.workspaceId}/privacy`, {
-      method: "PATCH",
-      body: { allowGitMetadata: false },
-    });
+    const patch = await c.api(
+      `/api/v1/workspaces/${seed.workspaceId}/privacy`,
+      {
+        method: "PATCH",
+        body: { allowGitMetadata: false },
+      },
+    );
     expect(patch.status).toBe(200);
 
     const repos = await c.api(
-      `/api/workspaces/${seed.workspaceId}/repositories`,
+      `/api/v1/workspaces/${seed.workspaceId}/repositories`,
     );
     const reposBody = await c.asJson<{ data: Array<{ id: string }> }>(repos);
     const repoId = reposBody.data[0]!.id;
     const repoDetail = await c.api(
-      `/api/workspaces/${seed.workspaceId}/repositories/${repoId}`,
+      `/api/v1/workspaces/${seed.workspaceId}/repositories/${repoId}`,
     );
     const repoBody = await c.asJson<{
       data: {
@@ -370,7 +376,7 @@ describe("privacy read gating", () => {
     expect(repoBody.data.pullRequests).toHaveLength(0);
 
     const prs = await c.api(
-      `/api/workspaces/${seed.workspaceId}/pull-requests`,
+      `/api/v1/workspaces/${seed.workspaceId}/pull-requests`,
     );
     const prsBody = await c.asJson<{ data: { items: unknown[] } }>(prs);
     expect(prsBody.data.items).toHaveLength(0);
@@ -379,7 +385,7 @@ describe("privacy read gating", () => {
   test("default privacy masks paths, commands and prompt titles in events", async () => {
     const seed = await seedWorkspace();
     const detail = await c.api(
-      `/api/workspaces/${seed.workspaceId}/agent-sessions/${seed.sessionId}`,
+      `/api/v1/workspaces/${seed.workspaceId}/agent-sessions/${seed.sessionId}`,
     );
     const body = await c.asJson<{
       data: {
@@ -402,18 +408,21 @@ describe("privacy read gating", () => {
 
   test("allowing sensitive fields exposes them", async () => {
     const seed = await seedWorkspace();
-    const patch = await c.api(`/api/workspaces/${seed.workspaceId}/privacy`, {
-      method: "PATCH",
-      body: {
-        allowExactCommands: true,
-        allowFilePaths: true,
-        allowPromptMetadata: true,
+    const patch = await c.api(
+      `/api/v1/workspaces/${seed.workspaceId}/privacy`,
+      {
+        method: "PATCH",
+        body: {
+          allowExactCommands: true,
+          allowFilePaths: true,
+          allowPromptMetadata: true,
+        },
       },
-    });
+    );
     expect(patch.status).toBe(200);
 
     const detail = await c.api(
-      `/api/workspaces/${seed.workspaceId}/agent-sessions/${seed.sessionId}`,
+      `/api/v1/workspaces/${seed.workspaceId}/agent-sessions/${seed.sessionId}`,
     );
     const body = await c.asJson<{
       data: {

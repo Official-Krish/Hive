@@ -20,7 +20,7 @@ afterAll(async () => {
 describe("workspace auth", () => {
   test("returns 401 without a session", async () => {
     c.clearJar();
-    const res = await c.api("/api/workspaces");
+    const res = await c.api("/api/v1/workspaces");
     expect(res.status).toBe(401);
   });
 });
@@ -32,7 +32,7 @@ describe("workspace create + list", () => {
     const name = uniqueEmail("proj");
     const id = await c.createWorkspace(name);
 
-    const detail = await c.api(`/api/workspaces/${id}`);
+    const detail = await c.api(`/api/v1/workspaces/${id}`);
     expect(detail.status).toBe(200);
     const body = await c.asJson<{
       data: { id: string; name: string; role: string; memberCount: number };
@@ -44,7 +44,7 @@ describe("workspace create + list", () => {
       memberCount: 1,
     });
 
-    const list = await c.api("/api/workspaces");
+    const list = await c.api("/api/v1/workspaces");
     const listBody = await c.asJson<{
       data: Array<{
         id: string;
@@ -65,7 +65,7 @@ describe("workspace create + list", () => {
   test("applies the custom slug and validates invalid input", async () => {
     c.clearJar();
     await c.registerUser();
-    const res = await c.api("/api/workspaces", {
+    const res = await c.api("/api/v1/workspaces", {
       method: "POST",
       body: { name: "My Slash", slug: "my-slash" },
     });
@@ -73,7 +73,7 @@ describe("workspace create + list", () => {
     const body = await c.asJson<{ data: { slug: string } }>(res);
     expect(body.data.slug).toBe("my-slash");
 
-    const bad = await c.api("/api/workspaces", {
+    const bad = await c.api("/api/v1/workspaces", {
       method: "POST",
       body: { name: "" },
     });
@@ -86,7 +86,7 @@ describe("workspace create + list", () => {
     const id = await c.createWorkspace("Private");
     await c.registerUser();
 
-    const res = await c.api(`/api/workspaces/${id}`);
+    const res = await c.api(`/api/v1/workspaces/${id}`);
     expect(res.status).toBe(403);
   });
 });
@@ -97,7 +97,7 @@ describe("workspace update + delete", () => {
     await c.registerUser();
     const id = await c.createWorkspace("Rename Me");
 
-    const patch = await c.api(`/api/workspaces/${id}`, {
+    const patch = await c.api(`/api/v1/workspaces/${id}`, {
       method: "PATCH",
       body: { name: "Renamed", description: "New desc" },
     });
@@ -110,10 +110,10 @@ describe("workspace update + delete", () => {
       description: "New desc",
     });
 
-    const del = await c.api(`/api/workspaces/${id}`, { method: "DELETE" });
+    const del = await c.api(`/api/v1/workspaces/${id}`, { method: "DELETE" });
     expect(del.status).toBe(204);
 
-    const get = await c.api(`/api/workspaces/${id}`);
+    const get = await c.api(`/api/v1/workspaces/${id}`);
     expect(get.status).toBe(403);
   });
 
@@ -123,7 +123,7 @@ describe("workspace update + delete", () => {
     const id = await c.createWorkspace("No Touch");
 
     await c.registerUser();
-    const res = await c.api(`/api/workspaces/${id}`, {
+    const res = await c.api(`/api/v1/workspaces/${id}`, {
       method: "PATCH",
       body: { name: "Hacked" },
     });
@@ -139,7 +139,7 @@ describe("invites", () => {
     const joinerEmail = uniqueEmail("joiner");
 
     const token = await c.inviteAndGetToken(workspaceId, joinerEmail, "admin");
-    const listRes = await c.api(`/api/workspaces/${workspaceId}/invites`);
+    const listRes = await c.api(`/api/v1/workspaces/${workspaceId}/invites`);
     const listBody = await c.asJson<{
       data: Array<{ status: string }>;
     }>(listRes);
@@ -148,7 +148,7 @@ describe("invites", () => {
 
     await c.acceptInviteAs(token, joinerEmail);
 
-    const membersRes = await c.api(`/api/workspaces/${workspaceId}/members`);
+    const membersRes = await c.api(`/api/v1/workspaces/${workspaceId}/members`);
     const membersBody = await c.asJson<{
       data: Array<{ email: string; role: string }>;
     }>(membersRes);
@@ -156,7 +156,7 @@ describe("invites", () => {
     const joiner = membersBody.data.find((m) => m.email === joinerEmail);
     expect(joiner).toMatchObject({ role: "admin" });
 
-    const invites = await c.api(`/api/workspaces/${workspaceId}/invites`);
+    const invites = await c.api(`/api/v1/workspaces/${workspaceId}/invites`);
     const invitesBody = await c.asJson<{
       data: Array<{ status: string }>;
     }>(invites);
@@ -169,7 +169,7 @@ describe("invites", () => {
     const workspaceId = await c.createWorkspace("Invites");
     const revokeEmail = uniqueEmail("revoked");
 
-    const inviteRes = await c.api(`/api/workspaces/${workspaceId}/invites`, {
+    const inviteRes = await c.api(`/api/v1/workspaces/${workspaceId}/invites`, {
       method: "POST",
       body: { email: revokeEmail },
     });
@@ -180,13 +180,13 @@ describe("invites", () => {
     const token = inviteBody.data.token;
 
     const revoke = await c.api(
-      `/api/workspaces/${workspaceId}/invites/${inviteId}`,
+      `/api/v1/workspaces/${workspaceId}/invites/${inviteId}`,
       { method: "DELETE" },
     );
     expect(revoke.status).toBe(204);
 
     await c.registerUserWith(revokeEmail);
-    const accept = await c.api(`/api/invites/${token}/accept`, {
+    const accept = await c.api(`/api/v1/invites/${token}/accept`, {
       method: "POST",
     });
     expect(accept.status).toBe(403);
@@ -198,7 +198,7 @@ describe("invites", () => {
     const workspaceId = await c.createWorkspace("Expiry");
     const expiredEmail = uniqueEmail("expired");
 
-    const inviteRes = await c.api(`/api/workspaces/${workspaceId}/invites`, {
+    const inviteRes = await c.api(`/api/v1/workspaces/${workspaceId}/invites`, {
       method: "POST",
       body: { email: expiredEmail },
     });
@@ -216,7 +216,7 @@ describe("invites", () => {
     });
 
     await c.registerUserWith(expiredEmail);
-    const accept = await c.api(`/api/invites/${token}/accept`, {
+    const accept = await c.api(`/api/v1/invites/${token}/accept`, {
       method: "POST",
     });
     expect(accept.status).toBe(403);
@@ -231,7 +231,7 @@ describe("invites", () => {
     const token = await c.inviteAndGetToken(workspaceId, gatedEmail);
 
     await c.registerUserWith(gatedEmail);
-    const accept = await c.api(`/api/invites/${token}/accept`, {
+    const accept = await c.api(`/api/v1/invites/${token}/accept`, {
       method: "POST",
     });
     expect(accept.status).toBe(409);
@@ -239,7 +239,7 @@ describe("invites", () => {
     expect(body.error.code).toBe("DEVICE_REQUIRED");
 
     await c.registerDevice();
-    const retry = await c.api(`/api/invites/${token}/accept`, {
+    const retry = await c.api(`/api/v1/invites/${token}/accept`, {
       method: "POST",
     });
     expect(retry.status).toBe(200);
@@ -258,19 +258,19 @@ describe("members", () => {
     await c.acceptInviteAs(token, promoteEmail);
 
     c.restoreJar(ownerJar);
-    const members = await c.api(`/api/workspaces/${workspaceId}/members`);
+    const members = await c.api(`/api/v1/workspaces/${workspaceId}/members`);
     const membersBody = await c.asJson<{
       data: Array<{ email: string; userId: string }>;
     }>(members);
     const joiner = membersBody.data.find((m) => m.email === promoteEmail)!;
 
     const promote = await c.api(
-      `/api/workspaces/${workspaceId}/members/${joiner.userId}`,
+      `/api/v1/workspaces/${workspaceId}/members/${joiner.userId}`,
       { method: "PATCH", body: { role: "admin" } },
     );
     expect(promote.status).toBe(204);
 
-    const mid = await c.api(`/api/workspaces/${workspaceId}/members`);
+    const mid = await c.api(`/api/v1/workspaces/${workspaceId}/members`);
     const midBody = await c.asJson<{
       data: Array<{ email: string; role: string }>;
     }>(mid);
@@ -278,12 +278,12 @@ describe("members", () => {
     expect(promoted).toMatchObject({ role: "admin" });
 
     const remove = await c.api(
-      `/api/workspaces/${workspaceId}/members/${joiner.userId}`,
+      `/api/v1/workspaces/${workspaceId}/members/${joiner.userId}`,
       { method: "DELETE" },
     );
     expect(remove.status).toBe(204);
 
-    const after = await c.api(`/api/workspaces/${workspaceId}/members`);
+    const after = await c.api(`/api/v1/workspaces/${workspaceId}/members`);
     const afterBody = await c.asJson<{ data: unknown[] }>(after);
     expect(afterBody.data).toHaveLength(1);
   });
@@ -303,18 +303,18 @@ describe("members", () => {
     });
 
     const removeOwner = await c.api(
-      `/api/workspaces/${workspaceId}/members/${owner.userId}`,
+      `/api/v1/workspaces/${workspaceId}/members/${owner.userId}`,
       { method: "DELETE" },
     );
     expect(removeOwner.status).toBe(403);
 
     const changeOwner = await c.api(
-      `/api/workspaces/${workspaceId}/members/${owner.userId}`,
+      `/api/v1/workspaces/${workspaceId}/members/${owner.userId}`,
       { method: "PATCH", body: { role: "member" } },
     );
     expect(changeOwner.status).toBe(403);
 
-    const members = await c.api(`/api/workspaces/${workspaceId}/members`);
+    const members = await c.api(`/api/v1/workspaces/${workspaceId}/members`);
     const membersBody = await c.asJson<{ data: unknown[] }>(members);
     expect(membersBody.data).toHaveLength(2);
   });

@@ -9,9 +9,9 @@ const envSchema = z.object({
   NODE_ENV: z
     .enum(["development", "test", "production"])
     .default("development"),
-  PORT: z.coerce.number().int().positive().default(4000),
+  PORT: z.coerce.number().int().positive().default(3000),
   WS_PORT: z.coerce.number().int().positive().default(4001),
-  API_URL: z.url().default("http://localhost:4000"),
+  API_URL: z.url().default("http://localhost:3000"),
   WS_URL: z.string().default("ws://localhost:4001"),
   CLIENT_URLS: z.string().default("http://localhost:5173"),
   DATABASE_URL: z.string().min(1),
@@ -26,7 +26,7 @@ const envSchema = z.object({
   GITHUB_WEBHOOK_SECRET: z.string().min(1),
   GITHUB_OAUTH_REDIRECT_URI: z
     .url()
-    .default("http://localhost:4000/api/github/auth/callback"),
+    .default("http://localhost:3000/api/v1/github/auth/callback"),
   GITHUB_TOKEN_ENCRYPTION_KEY: z.string().min(16),
   LOG_LEVEL: z
     .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])

@@ -35,7 +35,7 @@ async function ingest(
   events: unknown[],
   headers: Record<string, string> = {},
 ): Promise<Response> {
-  return c.api("/api/ingest/events", {
+  return c.api("/api/v1/ingest/events", {
     method: "POST",
     body: {
       deviceId: "dev",
@@ -60,7 +60,7 @@ afterAll(async () => {
 describe("ingest auth", () => {
   test("rejects a batch without a device token", async () => {
     const { workspaceId } = await setupCollector();
-    const res = await c.api("/api/ingest/events", {
+    const res = await c.api("/api/v1/ingest/events", {
       method: "POST",
       body: { deviceId: "dev", workspaceId, events: [] },
     });

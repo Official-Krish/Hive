@@ -26,7 +26,7 @@ export interface GitHubClientOptions {
   loginBaseUrl?: string;
 }
 
-const OAUTH_SCOPES = ["read:user", "user:email"];
+export const OAUTH_SCOPES = ["read:user", "user:email"];
 
 /** Minimal GitHub OAuth App client. Base URLs are overridable for tests. */
 export class GitHubClient {

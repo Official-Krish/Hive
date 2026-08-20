@@ -81,7 +81,7 @@ function sign(body: string): string {
 }
 
 async function sendWebhook(event: string, body: string): Promise<Response> {
-  return fetch(`${baseUrl}/api/github/webhooks`, {
+  return fetch(`${baseUrl}/api/v1/github/webhooks`, {
     method: "POST",
     headers: {
       "content-type": "application/json",
@@ -213,6 +213,101 @@ describe("github oauth", () => {
     expect(account).not.toBeNull();
   });
 
+  test("exchangeUserToken refuses to provision a new account for the CLI", async () => {
+    const user = ghUser();
+    const service = new GitHubService(new StubGitHubClient(user));
+
+    await expect(
+      service.exchangeUserToken(
+        "gho_device_token",
+        {},
+        { provisionIfMissing: false },
+      ),
+    ).rejects.toThrow(/web first/);
+
+    const account = await prisma.gitHubAccount.findUnique({
+      where: { githubId: user.id },
+    });
+    expect(account).toBeNull();
+  });
+
+  test("exchangeUserToken links a device-flow token to an existing account", async () => {
+    const user = ghUser();
+    const { userId } = await createUserWithWorkspace("Existing Dev");
+    await prisma.user.update({
+      where: { id: userId },
+      data: { email: user.email! },
+    });
+    const service = new GitHubService(new StubGitHubClient(user));
+
+    const result = await service.exchangeUserToken(
+      "gho_device_token",
+      {},
+      { provisionIfMissing: false },
+    );
+
+    expect(result.user.id).toBe(userId);
+    const account = await prisma.gitHubAccount.findUnique({
+      where: { githubId: user.id },
+    });
+    expect(account).not.toBeNull();
+    expect(account!.accessToken).not.toContain("gho_device_token");
+  });
+
+  test("POST /api/v1/github/auth/token returns a session with tokens in the body", async () => {
+    const user = ghUser();
+    const { userId } = await createUserWithWorkspace("Existing Dev");
+    await prisma.user.update({
+      where: { id: userId },
+      data: { email: user.email! },
+    });
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/user/emails")) {
+        return new Response(
+          JSON.stringify([
+            { email: user.email!, primary: true, verified: true },
+          ]),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      if (url.endsWith("/user")) {
+        return new Response(JSON.stringify(user), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      return realFetch(input, init);
+    };
+
+    try {
+      const res = await fetch(`${baseUrl}/api/v1/github/auth/token`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ accessToken: "gho_device_token" }),
+      });
+      expect(res.status).toBe(200);
+
+      const body = (await res.json()) as {
+        data: {
+          user: { email: string };
+          accessToken: string;
+          refreshToken: string;
+        };
+      };
+      expect(body.data.user.email).toBe(user.email!);
+      expect(body.data.accessToken.length).toBeGreaterThan(0);
+      expect(body.data.refreshToken.length).toBeGreaterThan(0);
+
+      const cookies = res.headers.getSetCookie().map((c) => c.split(";")[0]!);
+      expect(cookies.some((c) => c.startsWith("access_token="))).toBe(true);
+      expect(cookies.some((c) => c.startsWith("refresh_token="))).toBe(true);
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+
   test("disconnect removes the github account", async () => {
     const { userId } = await createUserWithWorkspace("Disconnector");
     const user = ghUser();
@@ -235,7 +330,7 @@ describe("github oauth", () => {
 
 describe("github webhooks", () => {
   test("rejects a missing signature", async () => {
-    const res = await fetch(`${baseUrl}/api/github/webhooks`, {
+    const res = await fetch(`${baseUrl}/api/v1/github/webhooks`, {
       method: "POST",
       headers: { "content-type": "application/json", "x-github-event": "ping" },
       body: "{}",
@@ -244,7 +339,7 @@ describe("github webhooks", () => {
   });
 
   test("rejects an invalid signature", async () => {
-    const res = await fetch(`${baseUrl}/api/github/webhooks`, {
+    const res = await fetch(`${baseUrl}/api/v1/github/webhooks`, {
       method: "POST",
       headers: {
         "content-type": "application/json",

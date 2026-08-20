@@ -18,7 +18,7 @@ afterAll(async () => {
 
 describe("boot smoke", () => {
   test("health reports ok with db and redis connected", async () => {
-    const res = await c.api("/api/health");
+    const res = await c.api("/api/v1/health");
     expect(res.status).toBe(200);
     const body = await c.asJson<{
       data: { status: string; db: string; redis: string };
@@ -27,7 +27,7 @@ describe("boot smoke", () => {
   });
 
   test("unknown routes return 404 JSON", async () => {
-    const res = await c.api("/api/does-not-exist");
+    const res = await c.api("/api/v1/does-not-exist");
     expect(res.status).toBe(404);
     const body = await c.asJson<{ error: { code: string } }>(res);
     expect(body.error.code).toBe("NOT_FOUND");

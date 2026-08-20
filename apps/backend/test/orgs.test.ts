@@ -32,7 +32,7 @@ async function userIdFor(email: string): Promise<string> {
 
 async function loginAs(email: string): Promise<void> {
   c.clearJar();
-  const res = await c.api("/api/auth/login", {
+  const res = await c.api("/api/v1/auth/login", {
     method: "POST",
     body: { email, password: "Password123" },
   });
@@ -42,7 +42,7 @@ async function loginAs(email: string): Promise<void> {
 describe("orgs access", () => {
   test("returns 401 without a session", async () => {
     c.clearJar();
-    const res = await c.api("/api/orgs/some-org");
+    const res = await c.api("/api/v1/orgs/some-org");
     expect(res.status).toBe(401);
   });
 
@@ -50,7 +50,7 @@ describe("orgs access", () => {
     const ownerEmail = await c.registerUser();
     const orgId = await primaryOrgId(ownerEmail);
     await c.registerUser();
-    const res = await c.api(`/api/orgs/${orgId}`);
+    const res = await c.api(`/api/v1/orgs/${orgId}`);
     expect(res.status).toBe(403);
   });
 });
@@ -60,7 +60,7 @@ describe("org detail + update", () => {
     const ownerEmail = await c.registerUser();
     const orgId = await primaryOrgId(ownerEmail);
 
-    const get = await c.api(`/api/orgs/${orgId}`);
+    const get = await c.api(`/api/v1/orgs/${orgId}`);
     expect(get.status).toBe(200);
     const getBody = await c.asJson<{
       data: {
@@ -81,7 +81,7 @@ describe("org detail + update", () => {
     expect(getBody.data.workspaceCount).toBeGreaterThanOrEqual(1);
 
     const slug = `acme-${Date.now()}`;
-    const patch = await c.api(`/api/orgs/${orgId}`, {
+    const patch = await c.api(`/api/v1/orgs/${orgId}`, {
       method: "PATCH",
       body: { name: "Acme", slug },
     });
@@ -105,26 +105,26 @@ describe("org admin role", () => {
     await c.acceptInviteAs(token, adminEmail);
     await loginAs(adminEmail);
 
-    const get = await c.api(`/api/orgs/${orgId}`);
+    const get = await c.api(`/api/v1/orgs/${orgId}`);
     const getBody = await c.asJson<{
       data: { role: string; memberCount: number };
     }>(get);
     expect(getBody.data).toMatchObject({ role: "admin", memberCount: 2 });
 
-    const rename = await c.api(`/api/orgs/${orgId}`, {
+    const rename = await c.api(`/api/v1/orgs/${orgId}`, {
       method: "PATCH",
       body: { name: "Acme Admin" },
     });
     expect(rename.status).toBe(200);
 
-    const planPatch = await c.api(`/api/orgs/${orgId}`, {
+    const planPatch = await c.api(`/api/v1/orgs/${orgId}`, {
       method: "PATCH",
       body: { plan: "team" },
     });
     expect(planPatch.status).toBe(403);
 
     const rolePatch = await c.api(
-      `/api/orgs/${orgId}/members/${ownerId}/role`,
+      `/api/v1/orgs/${orgId}/members/${ownerId}/role`,
       { method: "PATCH", body: { role: "admin" } },
     );
     expect(rolePatch.status).toBe(403);
@@ -144,7 +144,7 @@ describe("org member management (owner)", () => {
     const memberId = await userIdFor(memberEmail);
     await loginAs(ownerEmail);
 
-    const membersRes = await c.api(`/api/orgs/${orgId}/members`);
+    const membersRes = await c.api(`/api/v1/orgs/${orgId}/members`);
     const membersBody = await c.asJson<{
       data: Array<{ userId: string; role: string; status: string }>;
     }>(membersRes);
@@ -155,35 +155,41 @@ describe("org member management (owner)", () => {
       status: "active",
     });
 
-    const workspacesRes = await c.api(`/api/orgs/${orgId}/workspaces`);
+    const workspacesRes = await c.api(`/api/v1/orgs/${orgId}/workspaces`);
     const workspacesBody = await c.asJson<{ data: Array<{ id: string }> }>(
       workspacesRes,
     );
     expect(workspacesBody.data.map((w) => w.id)).toContain(workspaceId);
 
-    const selfRole = await c.api(`/api/orgs/${orgId}/members/${ownerId}/role`, {
-      method: "PATCH",
-      body: { role: "member" },
-    });
+    const selfRole = await c.api(
+      `/api/v1/orgs/${orgId}/members/${ownerId}/role`,
+      {
+        method: "PATCH",
+        body: { role: "member" },
+      },
+    );
     expect(selfRole.status).toBe(403);
 
-    const selfRemove = await c.api(`/api/orgs/${orgId}/members/${ownerId}`, {
+    const selfRemove = await c.api(`/api/v1/orgs/${orgId}/members/${ownerId}`, {
       method: "DELETE",
     });
     expect(selfRemove.status).toBe(403);
 
-    const demote = await c.api(`/api/orgs/${orgId}/members/${memberId}/role`, {
-      method: "PATCH",
-      body: { role: "member" },
-    });
+    const demote = await c.api(
+      `/api/v1/orgs/${orgId}/members/${memberId}/role`,
+      {
+        method: "PATCH",
+        body: { role: "member" },
+      },
+    );
     expect(demote.status).toBe(204);
 
-    const remove = await c.api(`/api/orgs/${orgId}/members/${memberId}`, {
+    const remove = await c.api(`/api/v1/orgs/${orgId}/members/${memberId}`, {
       method: "DELETE",
     });
     expect(remove.status).toBe(204);
 
-    const after = await c.api(`/api/orgs/${orgId}/members`);
+    const after = await c.api(`/api/v1/orgs/${orgId}/members`);
     const afterBody = await c.asJson<{ data: Array<{ userId: string }> }>(
       after,
     );

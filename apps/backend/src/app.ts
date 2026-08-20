@@ -56,7 +56,7 @@ export function createApp() {
   // GitHub webhooks need the raw body for HMAC verification and arrive without
   // an allowed Origin, so they must bypass CSRF and the JSON body parser.
   app.use(
-    "/api/github/webhooks",
+    "/api/v1/github/webhooks",
     express.raw({ type: "*/*" }),
     githubWebhookRouter,
   );
@@ -64,18 +64,18 @@ export function createApp() {
   app.use(express.json({ limit: "1mb" }));
   app.use(cookieParser());
 
-  app.use("/api/health", healthRouter);
-  app.use("/api/auth", authRouter);
-  app.use("/api/auth", usersRouter);
-  app.use("/api/devices", devicesRouter);
-  app.use("/api/ingest", ingestRouter);
-  app.use("/api/github", githubRouter);
-  app.use("/api/workspaces", workspacesRouter);
-  app.use("/api/workspaces", readsRouter);
-  app.use("/api/workspaces", privacyRouter);
-  app.use("/api/models", modelsRouter);
-  app.use("/api/invites", invitesRouter);
-  app.use("/api/orgs", orgsRouter);
+  app.use("/api/v1/health", healthRouter);
+  app.use("/api/v1/auth", authRouter);
+  app.use("/api/v1/auth", usersRouter);
+  app.use("/api/v1/devices", devicesRouter);
+  app.use("/api/v1/ingest", ingestRouter);
+  app.use("/api/v1/github", githubRouter);
+  app.use("/api/v1/workspaces", workspacesRouter);
+  app.use("/api/v1/workspaces", readsRouter);
+  app.use("/api/v1/workspaces", privacyRouter);
+  app.use("/api/v1/models", modelsRouter);
+  app.use("/api/v1/invites", invitesRouter);
+  app.use("/api/v1/orgs", orgsRouter);
 
   app.use(notFound());
   app.use(errorHandler());

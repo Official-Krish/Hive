@@ -42,7 +42,7 @@ refuses to start on invalid configuration.
 
 ### Health check
 
-`GET /api/health` reports `{ status, db, redis }` — useful for load balancers
+`GET /api/v1/health` reports `{ status, db, redis }` — useful for load balancers
 and the boot smoke test.
 
 ---
@@ -66,7 +66,7 @@ src/
 └── modules/
     ├── auth/              # register/login/logout, refresh rotation, GitHub provision
     ├── devices/           # collector devices + API-key auth (X-Device-Token)
-    ├── ingest/            # POST /api/ingest/events -> event-to-DB mapping + broadcasts
+    ├── ingest/            # POST /api/v1/ingest/events -> event-to-DB mapping + broadcasts
     ├── workspaces/        # workspace CRUD, members, invites
     ├── reads/             # query API: activities, sessions, repos, PRs, metrics, alerts, tasks
     ├── privacy/           # privacy GET/PATCH + read-gating
@@ -74,13 +74,13 @@ src/
     ├── realtime/          # WebSocket hub + snapshot service (avatars, presence)
     ├── github/            # OAuth App connect + webhooks (push, pull_request)
     ├── users/             # /me
-    └── health/            # /api/health
+    └── health/            # /api/v1/health
 ```
 
 ### Auth model
 
 - **Dual-token**: short-lived JWT access token (`access_token` cookie) + opaque
-  hashed refresh token (`refresh_token` cookie, path-scoped to `/api/auth`).
+  hashed refresh token (`refresh_token` cookie, path-scoped to `/api/v1/auth`).
 - Refresh tokens **rotate on every use**; reuse of a rotated token revokes the
   whole family.
 - `csrfProtect` rejects cross-origin state-changing requests; GitHub webhooks
@@ -98,7 +98,7 @@ src/
 
 ### Ingest
 
-`POST /api/ingest/events` accepts a batch of `@hive/events` telemetry events.
+`POST /api/v1/ingest/events` accepts a batch of `@hive/events` telemetry events.
 Per batch it verifies the device token and workspace membership (403
 otherwise). Mapping is idempotent — collector-generated ids (`sessionId`,
 `activityId`, `testRunId`) become DB row ids; repos/commits/PRs upsert on their
@@ -110,7 +110,7 @@ Every workspace has a `PrivacySetting` row (created on workspace creation).
 Reads apply gating **server-side** via `modules/privacy/privacy-gate.ts`:
 masked fields are nulled/emptied so the response shape stays stable. By
 default file paths, exact commands, and prompt metadata are hidden. See
-`GET/PATCH /api/workspaces/:workspaceId/privacy` (patch is admin+).
+`GET/PATCH /api/v1/workspaces/:workspaceId/privacy` (patch is admin+).
 
 ---
 

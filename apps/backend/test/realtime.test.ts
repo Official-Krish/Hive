@@ -129,7 +129,7 @@ async function register(
   name: string,
 ): Promise<{ userId: string; cookie: string }> {
   const email = uniqueEmail();
-  const res = await fetch(`${baseUrl}/api/auth/register`, {
+  const res = await fetch(`${baseUrl}/api/v1/auth/register`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ email, password: "Password123", name }),
@@ -164,7 +164,7 @@ async function connect(
 async function registerDevice(
   cookie: string,
 ): Promise<{ id: string; token: string }> {
-  const res = await fetch(`${baseUrl}/api/devices`, {
+  const res = await fetch(`${baseUrl}/api/v1/devices`, {
     method: "POST",
     headers: { "content-type": "application/json", cookie },
     body: JSON.stringify({ name: "Collector" }),
@@ -366,7 +366,7 @@ describe("device control channel", () => {
     );
     await socket.waitOpen();
     try {
-      const res = await fetch(`${baseUrl}/api/devices/${id}/stop`, {
+      const res = await fetch(`${baseUrl}/api/v1/devices/${id}/stop`, {
         method: "POST",
         headers: { cookie },
       });

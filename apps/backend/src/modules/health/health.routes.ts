@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { prisma } from "@hive/db";
 import { getRedis } from "@hive/queue";
+import { env } from "../../config/env";
 
 export const healthRouter = Router();
 
@@ -20,6 +21,8 @@ healthRouter.get("/", async (_req, res) => {
       db,
       redis,
       wsPort: Number(process.env.WS_PORT ?? 4001),
+      githubClientId: env.GITHUB_CLIENT_ID,
+      clientUrl: env.clientOrigins[0] ?? env.API_URL,
     },
   });
 });

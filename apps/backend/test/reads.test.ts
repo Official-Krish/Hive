@@ -30,7 +30,7 @@ async function setupSeeded(): Promise<Collector> {
     select: { workspaceId: true },
   });
   const workspaceId = membership!.workspaceId;
-  const me = await c.api("/api/auth/me");
+  const me = await c.api("/api/v1/auth/me");
   const meBody = await c.asJson<{ data: { user: { id: string } } }>(me);
   const developerId = meBody.data.user.id;
 
@@ -50,7 +50,7 @@ async function setupSeeded(): Promise<Collector> {
     update: {},
   });
 
-  const res = await c.api("/api/ingest/events", {
+  const res = await c.api("/api/v1/ingest/events", {
     method: "POST",
     body: {
       deviceId: "dev",
@@ -168,7 +168,7 @@ afterAll(async () => {
 describe("reads auth + membership", () => {
   test("returns 401 without a session", async () => {
     c.clearJar();
-    const res = await c.api("/api/workspaces/x/map");
+    const res = await c.api("/api/v1/workspaces/x/map");
     expect(res.status).toBe(401);
   });
 
@@ -176,15 +176,15 @@ describe("reads auth + membership", () => {
     const seed = await setupSeeded();
     await c.registerUser();
     const endpoints = [
-      `/api/workspaces/${seed.workspaceId}/map`,
-      `/api/workspaces/${seed.workspaceId}/activities`,
-      `/api/workspaces/${seed.workspaceId}/agent-sessions`,
-      `/api/workspaces/${seed.workspaceId}/repositories`,
-      `/api/workspaces/${seed.workspaceId}/pull-requests`,
-      `/api/workspaces/${seed.workspaceId}/metrics`,
-      `/api/workspaces/${seed.workspaceId}/alerts`,
-      `/api/workspaces/${seed.workspaceId}/tasks`,
-      `/api/workspaces/${seed.workspaceId}/test-runs`,
+      `/api/v1/workspaces/${seed.workspaceId}/map`,
+      `/api/v1/workspaces/${seed.workspaceId}/activities`,
+      `/api/v1/workspaces/${seed.workspaceId}/agent-sessions`,
+      `/api/v1/workspaces/${seed.workspaceId}/repositories`,
+      `/api/v1/workspaces/${seed.workspaceId}/pull-requests`,
+      `/api/v1/workspaces/${seed.workspaceId}/metrics`,
+      `/api/v1/workspaces/${seed.workspaceId}/alerts`,
+      `/api/v1/workspaces/${seed.workspaceId}/tasks`,
+      `/api/v1/workspaces/${seed.workspaceId}/test-runs`,
     ];
     for (const path of endpoints) {
       const res = await c.api(path);
@@ -196,7 +196,7 @@ describe("reads auth + membership", () => {
 describe("map", () => {
   test("returns the workspace map with the member in the snapshot", async () => {
     const seed = await setupSeeded();
-    const res = await c.api(`/api/workspaces/${seed.workspaceId}/map`);
+    const res = await c.api(`/api/v1/workspaces/${seed.workspaceId}/map`);
     expect(res.status).toBe(200);
     const body = await c.asJson<{
       data: {
@@ -215,7 +215,7 @@ describe("activities", () => {
   test("lists seeded activities with pagination metadata", async () => {
     const seed = await setupSeeded();
     const res = await c.api(
-      `/api/workspaces/${seed.workspaceId}/activities?page=1&pageSize=10`,
+      `/api/v1/workspaces/${seed.workspaceId}/activities?page=1&pageSize=10`,
     );
     expect(res.status).toBe(200);
     const body = await c.asJson<{
@@ -235,7 +235,7 @@ describe("activities", () => {
   test("filters by status and paginates", async () => {
     const seed = await setupSeeded();
     const secondActivity = uniqueId("act");
-    await c.api("/api/ingest/events", {
+    await c.api("/api/v1/ingest/events", {
       method: "POST",
       body: {
         deviceId: "dev",
@@ -260,7 +260,7 @@ describe("activities", () => {
       headers: { "x-device-token": seed.token },
     });
     const res = await c.api(
-      `/api/workspaces/${seed.workspaceId}/activities?status=completed&pageSize=1`,
+      `/api/v1/workspaces/${seed.workspaceId}/activities?status=completed&pageSize=1`,
     );
     const body = await c.asJson<{
       data: { items: unknown[]; total: number; hasMore: boolean };
@@ -273,7 +273,7 @@ describe("activities", () => {
   test("returns full activity detail", async () => {
     const seed = await setupSeeded();
     const res = await c.api(
-      `/api/workspaces/${seed.workspaceId}/activities/${seed.activityId}`,
+      `/api/v1/workspaces/${seed.workspaceId}/activities/${seed.activityId}`,
     );
     expect(res.status).toBe(200);
     const body = await c.asJson<{
@@ -295,7 +295,7 @@ describe("agent sessions", () => {
   test("lists sessions with token totals", async () => {
     const seed = await setupSeeded();
     const res = await c.api(
-      `/api/workspaces/${seed.workspaceId}/agent-sessions`,
+      `/api/v1/workspaces/${seed.workspaceId}/agent-sessions`,
     );
     const body = await c.asJson<{
       data: {
@@ -316,7 +316,7 @@ describe("agent sessions", () => {
   test("returns session detail with the event timeline", async () => {
     const seed = await setupSeeded();
     const res = await c.api(
-      `/api/workspaces/${seed.workspaceId}/agent-sessions/${seed.sessionId}`,
+      `/api/v1/workspaces/${seed.workspaceId}/agent-sessions/${seed.sessionId}`,
     );
     expect(res.status).toBe(200);
     const body = await c.asJson<{
@@ -335,7 +335,9 @@ describe("agent sessions", () => {
 describe("repositories + PRs", () => {
   test("lists repositories with open PR count", async () => {
     const seed = await setupSeeded();
-    const res = await c.api(`/api/workspaces/${seed.workspaceId}/repositories`);
+    const res = await c.api(
+      `/api/v1/workspaces/${seed.workspaceId}/repositories`,
+    );
     const body = await c.asJson<{
       data: Array<{ name: string; openPrCount: number }>;
     }>(res);
@@ -346,13 +348,13 @@ describe("repositories + PRs", () => {
   test("returns repository detail with branch, commit and PR", async () => {
     const seed = await setupSeeded();
     const list = await c.api(
-      `/api/workspaces/${seed.workspaceId}/repositories`,
+      `/api/v1/workspaces/${seed.workspaceId}/repositories`,
     );
     const listBody = await c.asJson<{ data: Array<{ id: string }> }>(list);
     const repoId = listBody.data[0]!.id;
 
     const res = await c.api(
-      `/api/workspaces/${seed.workspaceId}/repositories/${repoId}`,
+      `/api/v1/workspaces/${seed.workspaceId}/repositories/${repoId}`,
     );
     expect(res.status).toBe(200);
     const body = await c.asJson<{
@@ -373,7 +375,7 @@ describe("repositories + PRs", () => {
   test("lists pull requests with the status filter", async () => {
     const seed = await setupSeeded();
     const res = await c.api(
-      `/api/workspaces/${seed.workspaceId}/pull-requests?status=open`,
+      `/api/v1/workspaces/${seed.workspaceId}/pull-requests?status=open`,
     );
     const body = await c.asJson<{
       data: {
@@ -400,7 +402,7 @@ describe("metrics, alerts, tasks", () => {
       },
     });
     const metricsRes = await c.api(
-      `/api/workspaces/${seed.workspaceId}/metrics?period=week`,
+      `/api/v1/workspaces/${seed.workspaceId}/metrics?period=week`,
     );
     const metricsBody = await c.asJson<{
       data: Array<{ period: string; tasksCompleted: number }>;
@@ -420,7 +422,7 @@ describe("metrics, alerts, tasks", () => {
       },
     });
     const alertsRes = await c.api(
-      `/api/workspaces/${seed.workspaceId}/alerts?severity=warning`,
+      `/api/v1/workspaces/${seed.workspaceId}/alerts?severity=warning`,
     );
     const alertsBody = await c.asJson<{
       data: { items: Array<{ id: string; status: string }> };
@@ -431,7 +433,7 @@ describe("metrics, alerts, tasks", () => {
     });
 
     const resolve = await c.api(
-      `/api/workspaces/${seed.workspaceId}/alerts/${alert.id}/resolve`,
+      `/api/v1/workspaces/${seed.workspaceId}/alerts/${alert.id}/resolve`,
       { method: "POST" },
     );
     expect(resolve.status).toBe(204);
@@ -453,7 +455,7 @@ describe("metrics, alerts, tasks", () => {
       },
     });
     const res = await c.api(
-      `/api/workspaces/${seed.workspaceId}/tasks?priority=high`,
+      `/api/v1/workspaces/${seed.workspaceId}/tasks?priority=high`,
     );
     const body = await c.asJson<{
       data: {
@@ -471,7 +473,7 @@ describe("metrics, alerts, tasks", () => {
 describe("models, test runs, developer stats", () => {
   test("lists models including the seeded one", async () => {
     await setupSeeded();
-    const res = await c.api("/api/models");
+    const res = await c.api("/api/v1/models");
     expect(res.status).toBe(200);
     const body = await c.asJson<{
       data: Array<{ provider: string; name: string }>;
@@ -484,7 +486,7 @@ describe("models, test runs, developer stats", () => {
   test("lists test runs", async () => {
     const seed = await setupSeeded();
     const res = await c.api(
-      `/api/workspaces/${seed.workspaceId}/test-runs?status=passed`,
+      `/api/v1/workspaces/${seed.workspaceId}/test-runs?status=passed`,
     );
     const body = await c.asJson<{
       data: {
@@ -501,7 +503,7 @@ describe("models, test runs, developer stats", () => {
   test("returns developer stats with token totals and counts", async () => {
     const seed = await setupSeeded();
     const res = await c.api(
-      `/api/workspaces/${seed.workspaceId}/developers/${seed.developerId}/stats`,
+      `/api/v1/workspaces/${seed.workspaceId}/developers/${seed.developerId}/stats`,
     );
     expect(res.status).toBe(200);
     const body = await c.asJson<{
