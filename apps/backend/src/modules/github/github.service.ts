@@ -24,6 +24,7 @@ import {
 } from "../auth/auth.service";
 import { WebAccountRequiredError } from "../../core/errors";
 import { realtimeBus } from "../realtime/realtime.bus";
+import { IssueLinksService } from "../issues/issue-links";
 
 interface GitHubPushPayload {
   ref?: string;
@@ -47,6 +48,24 @@ interface GitHubPullRequestPayload {
     closed_at?: string | null;
     head?: { ref?: string | null };
     base?: { ref?: string | null };
+  };
+}
+
+interface GitHubIssuePayload {
+  action?: string;
+  repository?: GitHubRepoPayload;
+  issue?: {
+    number?: number;
+    title?: string;
+    body?: string | null;
+    html_url?: string | null;
+    state?: string;
+    created_at?: string;
+    closed_at?: string | null;
+    updated_at?: string;
+    user?: { login?: string };
+    labels?: { name?: string }[];
+    assignees?: { login?: string }[];
   };
 }
 
@@ -284,6 +303,10 @@ export class GitHubService {
       case "pull_request":
         await this.handlePullRequest(payload as GitHubPullRequestPayload);
         break;
+      case "issues":
+      case "issue_comment":
+        await this.handleIssue(payload as GitHubIssuePayload);
+        break;
       case "ping":
         break;
       default:
@@ -308,6 +331,7 @@ export class GitHubService {
       },
       update: { lastCommitSha: headSha || null },
     });
+    await IssueLinksService.linkBranch(repo.id, branchName);
 
     for (const commit of payload.commits ?? []) {
       if (!commit.id) continue;
@@ -321,6 +345,11 @@ export class GitHubService {
         },
         update: { message: commit.message ?? "" },
       });
+      await IssueLinksService.linkCommit(
+        repo.id,
+        commit.id,
+        commit.message ?? "",
+      );
     }
 
     await prisma.repository.update({
@@ -403,6 +432,54 @@ export class GitHubService {
       };
       realtimeBus.publish(repo.workspaceId, event);
     }
+  }
+
+  private async handleIssue(payload: GitHubIssuePayload): Promise<void> {
+    const ghIssue = payload.issue;
+    if (!payload.repository?.id || !ghIssue?.number) return;
+
+    const account = await this.resolveAccount(payload.repository);
+    const repo = await this.findOrCreateRepository(payload.repository, account);
+
+    const state = ghIssue.state === "closed" ? "closed" : "open";
+    await prisma.issue.upsert({
+      where: {
+        repositoryId_number: { repositoryId: repo.id, number: ghIssue.number },
+      },
+      create: {
+        repositoryId: repo.id,
+        number: ghIssue.number,
+        title: ghIssue.title ?? "",
+        state,
+        body: ghIssue.body ?? null,
+        url: ghIssue.html_url ?? null,
+        authorLogin: ghIssue.user?.login ?? null,
+        labels: (ghIssue.labels ?? [])
+          .map((l) => l.name)
+          .filter((n): n is string => Boolean(n)),
+        assignees: (ghIssue.assignees ?? [])
+          .map((a) => a.login)
+          .filter((n): n is string => Boolean(n)),
+        openedAt: this.safeDate(ghIssue.created_at) ?? new Date(),
+        closedAt: this.safeDate(ghIssue.closed_at),
+      },
+      update: {
+        title: ghIssue.title ?? "",
+        state,
+        body: ghIssue.body ?? null,
+        url: ghIssue.html_url ?? null,
+        authorLogin: ghIssue.user?.login ?? null,
+        labels: (ghIssue.labels ?? [])
+          .map((l) => l.name)
+          .filter((n): n is string => Boolean(n)),
+        assignees: (ghIssue.assignees ?? [])
+          .map((a) => a.login)
+          .filter((n): n is string => Boolean(n)),
+        closedAt: this.safeDate(ghIssue.closed_at),
+      },
+    });
+
+    await IssueLinksService.relinkIssue(repo.id, ghIssue.number);
   }
 
   private async resolveAccount(

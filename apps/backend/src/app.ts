@@ -26,6 +26,7 @@ import {
 } from "./modules/workspaces/workspaces.routes";
 import { privacyRouter } from "./modules/privacy/privacy.routes";
 import { orgsRouter } from "./modules/orgs/orgs.routes";
+import { issuesRouter } from "./modules/issues/issues.routes";
 
 export function createApp() {
   const app = express();
@@ -73,6 +74,7 @@ export function createApp() {
   app.use("/api/v1/workspaces", workspacesRouter);
   app.use("/api/v1/workspaces", readsRouter);
   app.use("/api/v1/workspaces", privacyRouter);
+  app.use("/api/v1/workspaces", issuesRouter);
   app.use("/api/v1/models", modelsRouter);
   app.use("/api/v1/invites", invitesRouter);
   app.use("/api/v1/orgs", orgsRouter);

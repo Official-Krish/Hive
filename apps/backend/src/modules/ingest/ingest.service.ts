@@ -16,6 +16,7 @@ import type { RealtimeEvent } from "@hive/types";
 import type { DeviceContext } from "../../core/context";
 import { ForbiddenError } from "../../core/errors";
 import { realtimeBus } from "../realtime/realtime.bus";
+import { IssueLinksService } from "../issues/issue-links";
 
 const AGENT_TYPE_MAP: Record<
   "claude" | "codex" | "cursor" | "opencode" | "generic",
@@ -218,6 +219,11 @@ export class IngestService {
       },
       update: {},
     });
+    await IssueLinksService.linkSession(
+      repositoryId,
+      event.branch ?? null,
+      event.sessionId,
+    );
     await prisma.agent.update({
       where: { id: agent.id },
       data: {
@@ -400,6 +406,7 @@ export class IngestService {
       },
       update: { lastCommitSha: event.sha },
     });
+    await IssueLinksService.linkBranch(repo.id, branchName);
 
     await prisma.commit.upsert({
       where: { repositoryId_sha: { repositoryId: repo.id, sha: event.sha } },
@@ -420,6 +427,7 @@ export class IngestService {
         filesChanged: event.filesChanged,
       },
     });
+    await IssueLinksService.linkCommit(repo.id, event.sha, event.message);
 
     this.broadcast({
       type: "repo.push",
@@ -500,6 +508,7 @@ export class IngestService {
       },
       update: { lastCommitSha: event.lastCommitSha },
     });
+    await IssueLinksService.linkBranch(repo.id, event.name);
   }
 
   private async handleTestStarted(

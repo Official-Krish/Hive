@@ -3,6 +3,8 @@ import type {
   ActivityEventRead,
   ActivitySummary,
   DeveloperStats,
+  IssueDetail,
+  IssueSummary,
   MapRead,
   MetricSummary,
   PrivacySetting,
@@ -102,6 +104,56 @@ export class PrivacyGate {
       commits: [],
       pullRequests: [],
     };
+  }
+
+  static issueSummary(i: IssueSummary, p: PrivacySetting): IssueSummary {
+    let out: IssueSummary = { ...i };
+    if (!p.allowTokenUsage) {
+      out = { ...out, inputTokens: 0, outputTokens: 0, costCents: null };
+    }
+    if (!p.allowGitMetadata) {
+      out = { ...out, branchCount: 0, sessionCount: 0 };
+    }
+    return out;
+  }
+
+  static issueDetail(d: IssueDetail, p: PrivacySetting): IssueDetail {
+    let out: IssueDetail = { ...d };
+    if (!p.allowTokenUsage) {
+      out = { ...out, inputTokens: 0, outputTokens: 0, costCents: null };
+      out = {
+        ...out,
+        sessions: d.sessions.map((s) => PrivacyGate.sessionSummary(s, p)),
+      };
+    }
+    if (!p.allowGitMetadata) {
+      out = {
+        ...out,
+        branches: [],
+        commits: [],
+        branchCount: 0,
+        sessionCount: 0,
+      };
+    }
+    if (!p.allowActivitySummaries) {
+      out = {
+        ...out,
+        sessions: d.sessions.map((s) => PrivacyGate.sessionSummary(s, p)),
+      };
+    }
+    if (!p.allowAgentStatus) {
+      out = {
+        ...out,
+        sessions: d.sessions.map((s) => PrivacyGate.sessionSummary(s, p)),
+      };
+    }
+    if (!p.allowPromptMetadata) {
+      out = {
+        ...out,
+        sessions: d.sessions.map((s) => PrivacyGate.sessionSummary(s, p)),
+      };
+    }
+    return out;
   }
 
   static metric(m: MetricSummary, p: PrivacySetting): MetricSummary {

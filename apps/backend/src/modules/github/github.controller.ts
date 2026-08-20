@@ -1,7 +1,11 @@
 import type { Request, Response } from "express";
 import type { GithubTokenInput } from "@hive/types";
 import { env } from "../../config/env";
-import { setAccessTokenCookie, setRefreshTokenCookie } from "../../lib/cookies";
+import {
+  setAccessTokenCookie,
+  setRefreshTokenCookie,
+  ACCESS_COOKIE,
+} from "../../lib/cookies";
 import { verifyAccessToken } from "../../lib/jwt";
 import { getAuth } from "../../middleware/authenticate";
 import type { SessionContext } from "../auth/auth.service";
