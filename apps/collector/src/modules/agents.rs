@@ -264,51 +264,13 @@ fn parse_codex(line: &str, session_id: &str, _agent: &str) -> Vec<TelemetryEvent
 }
 
 // ---------------------------------------------------------------------------
-// OpenCode: `~/.local/share/opencode/project/*/storage/*/message/*/message.json`
-// ---------------------------------------------------------------------------
-
-fn parse_opencode(path: &Path) -> Option<TelemetryEvent> {
-    let raw = std::fs::read_to_string(path).ok()?;
-    let value: Value = serde_json::from_str(&raw).ok()?;
-    if value.get("role").and_then(|v| v.as_str()) != Some("assistant") {
-        return None;
-    }
-    let session_id = value
-        .get("sessionID")
-        .and_then(|v| v.as_str())
-        .or_else(|| value.get("session_id").and_then(|v| v.as_str()))?;
-    let tokens = value.pointer("/info/tokens")?;
-    let input_tokens = tokens.get("input").and_then(|v| v.as_u64()).unwrap_or(0);
-    let output_tokens = tokens.get("output").and_then(|v| v.as_u64()).unwrap_or(0);
-    let model = value
-        .pointer("/info/model/model")
-        .and_then(|v| v.as_str())
-        .unwrap_or("opencode")
-        .to_string();
-    let provider = value
-        .pointer("/info/model/provider")
-        .and_then(|v| v.as_str())
-        .unwrap_or("opencode")
-        .to_string();
-    Some(TelemetryEvent::AgentTokenUsage {
-        timestamp: now_rfc3339(),
-        session_id: session_id.to_string(),
-        provider,
-        model,
-        input_tokens,
-        output_tokens,
-        cached_input_tokens: None,
-    })
-}
-
-// ---------------------------------------------------------------------------
 // Spawners
 // ---------------------------------------------------------------------------
 
-pub async fn spawn_agents(tx: EventSender, _config: Config, mut shutdown: watch::Receiver<bool>) {
+pub async fn spawn_agents(tx: EventSender, config: Config, mut shutdown: watch::Receiver<bool>) {
     let mut claude = JsonlAgent::new("claude");
     let mut codex = JsonlAgent::new("codex");
-    let mut opencode_seen: Option<(PathBuf, i64)> = None;
+    let mut opencode = crate::modules::opencode::OpenCodeTracker::new(&config.opencode_db);
     let mut interval = tokio::time::interval(Duration::from_secs(5));
 
     loop {
@@ -321,7 +283,7 @@ pub async fn spawn_agents(tx: EventSender, _config: Config, mut shutdown: watch:
                         }
                     }
                     codex.poll(&tx, &home.join(".codex").join("sessions"), parse_codex);
-                    poll_opencode(&mut opencode_seen, &tx);
+                    opencode.poll(&tx);
                 }
             }
             _ = shutdown.changed() => {
@@ -331,50 +293,6 @@ pub async fn spawn_agents(tx: EventSender, _config: Config, mut shutdown: watch:
             }
         }
     }
-}
-
-fn poll_opencode(seen: &mut Option<(PathBuf, i64)>, tx: &EventSender) {
-    let Some(home) = home_dir() else {
-        return;
-    };
-    let base = home.join(".local").join("share").join("opencode").join("project");
-    let Ok(projects) = std::fs::read_dir(&base) else {
-        return;
-    };
-    let mut newest: Option<(PathBuf, i64)> = None;
-    for project in projects.flatten() {
-        let storage = project.path().join("storage");
-        let Ok(sessions) = std::fs::read_dir(&storage) else {
-            continue;
-        };
-        for session in sessions.flatten() {
-            let message_dir = session.path().join("message");
-            let Ok(messages) = std::fs::read_dir(&message_dir) else {
-                continue;
-            };
-            for msg_dir in messages.flatten() {
-                let candidate = msg_dir.path().join("message.json");
-                if !candidate.exists() {
-                    continue;
-                }
-                let mtime = candidate.mtime_ms();
-                if newest.as_ref().map(|(_, t)| mtime > *t).unwrap_or(true) {
-                    newest = Some((candidate, mtime));
-                }
-            }
-        }
-    }
-
-    let Some((path, mtime)) = newest else {
-        return;
-    };
-    if seen.as_ref().map(|(p, t)| p == &path && t == &mtime).unwrap_or(false) {
-        return;
-    }
-    if let Some(event) = parse_opencode(&path) {
-        crate::bus::try_send(tx, event);
-    }
-    *seen = Some((path, mtime));
 }
 
 #[cfg(test)]

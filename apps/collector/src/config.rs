@@ -34,6 +34,9 @@ pub struct Config {
     #[serde(skip)]
     pub path: PathBuf,
     pub watch: Vec<WatchDir>,
+    /// Path to opencode's SQLite DB (`~/.local/share/opencode/opencode.db`
+    /// when empty). `hive config set opencode_db <path>` to override.
+    pub opencode_db: String,
 }
 
 impl Default for Config {
@@ -50,6 +53,7 @@ impl Default for Config {
             flush_max_events: 200,
             path: PathBuf::new(),
             watch: Vec::new(),
+            opencode_db: String::new(),
         }
     }
 }
@@ -120,6 +124,7 @@ impl Config {
             "workspace_id" => self.workspace_id = value.trim().to_string(),
             "poll_interval_ms" => self.poll_interval_ms = value.trim().parse()?,
             "git_poll_interval_ms" => self.git_poll_interval_ms = value.trim().parse()?,
+            "opencode_db" => self.opencode_db = value.trim().to_string(),
             _ => bail!("unknown config key: {key}"),
         }
         Ok(())
