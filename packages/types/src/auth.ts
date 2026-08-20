@@ -21,6 +21,11 @@ export const loginInputSchema = z.object({
 });
 export type LoginInput = z.infer<typeof loginInputSchema>;
 
+export const githubTokenSchema = z.object({
+  accessToken: z.string().min(1).max(2048),
+});
+export type GithubTokenInput = z.infer<typeof githubTokenSchema>;
+
 export const changePasswordInputSchema = z.object({
   currentPassword: z.string().min(1).max(128),
   newPassword: password,

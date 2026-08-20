@@ -24,6 +24,7 @@ export type {
   AgentSession,
   Repository,
   PullRequest,
+  Issue,
   GitHubAccount,
   WebhookDelivery,
   Prisma,

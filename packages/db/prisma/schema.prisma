@@ -334,6 +334,7 @@ model Repository {
   pullRequests   PullRequest[]
   agentSessions  AgentSession[]
   testRuns       TestRun[]
+  issues         Issue[]
 
   @@unique([workspaceId, name])
 }
@@ -342,14 +343,17 @@ model Branch {
   id            String   @id @default(cuid())
   repositoryId  String
   name          String
+  issueId       String?
   lastCommitSha String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
   repository Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
   commits    Commit[]
+  issue      Issue?     @relation(fields: [issueId], references: [id], onDelete: SetNull)
 
   @@unique([repositoryId, name])
+  @@index([issueId])
 }
 
 model Agent {
@@ -378,6 +382,7 @@ model AgentSession {
   activityId   String?
   repositoryId String?
   branch       String?
+  issueId      String?
   title        String?
   status       AgentStatus @default(RUNNING)
   startedAt    DateTime    @default(now())
@@ -391,12 +396,14 @@ model AgentSession {
   workspace   Workspace?   @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
   activity    Activity?    @relation(fields: [activityId], references: [id], onDelete: SetNull)
   repository  Repository?  @relation(fields: [repositoryId], references: [id], onDelete: SetNull)
+  issue       Issue?       @relation(fields: [issueId], references: [id], onDelete: SetNull)
   events      AgentEvent[]
   tokenUsages TokenUsage[]
   alerts      Alert[]
 
   @@index([developerId, startedAt])
   @@index([status])
+  @@index([issueId])
 }
 
 model AgentEvent {
@@ -521,6 +528,7 @@ model Commit {
   id           String   @id @default(cuid())
   repositoryId String
   branchId     String?
+  issueId      String?
   sha          String
   message      String
   authorId     String?
@@ -532,10 +540,37 @@ model Commit {
 
   repository Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
   branch     Branch?    @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  issue      Issue?     @relation(fields: [issueId], references: [id], onDelete: SetNull)
   author     User?      @relation(fields: [authorId], references: [id], onDelete: SetNull)
   activities Activity[]
 
   @@unique([repositoryId, sha])
+  @@index([issueId])
+}
+
+model Issue {
+  id           String    @id @default(cuid())
+  repositoryId String
+  number       Int
+  title        String
+  state        String    @default("open")
+  body         String?
+  url          String?
+  authorLogin  String?
+  labels       Json?
+  assignees    Json?
+  openedAt     DateTime
+  closedAt     DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  repository Repository    @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  branches   Branch[]
+  commits    Commit[]
+  sessions   AgentSession[]
+
+  @@unique([repositoryId, number])
+  @@index([repositoryId, state])
 }
 
 model PullRequest {

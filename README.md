@@ -145,12 +145,17 @@ run it with `hive`:
 ```sh
 cd apps/collector
 cargo build --release          # → target/release/collector
-./target/release/collector --help
+ln -s "$PWD/target/release/collector" ~/.local/bin/hive
 
-# configure (device created from the dashboard), then:
-hive config init && hive config set device_id <id> && hive config set device_token <hive_dev_…>
-hive start && hive status && hive stop
+hive login                    # once: GitHub device flow (opens browser, enter code)
+hive start                    # registers the device on first run, then starts
+hive status                   # running? connected?
+hive stop
 ```
+
+For distributed installs, `apps/collector/scripts/install.sh` downloads the
+platform binary from a CDN and installs it as `~/.local/bin/hive`
+(`curl -fsSL <CDN>/install.sh | bash`).
 
 See [`apps/collector/README.md`](apps/collector/README.md) for full setup,
 the control channel, and remote shutdown.

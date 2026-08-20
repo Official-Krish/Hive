@@ -41,6 +41,12 @@ export const prFilterSchema = paginationSchema.extend({
 });
 export type PrFilter = z.infer<typeof prFilterSchema>;
 
+export const issueFilterSchema = paginationSchema.extend({
+  state: z.enum(["open", "closed"]).optional(),
+  repositoryId: z.string().optional(),
+});
+export type IssueFilter = z.infer<typeof issueFilterSchema>;
+
 export const alertFilterSchema = paginationSchema.extend({
   status: z.enum(["open", "acknowledged", "resolved"]).optional(),
   severity: z.enum(["info", "warning", "critical"]).optional(),
@@ -218,6 +224,39 @@ export interface PullRequestSummary {
   updatedAt: string;
   mergedAt: string | null;
   closedAt: string | null;
+}
+
+export interface IssueSummary {
+  id: string;
+  repository: RepositoryRef;
+  number: number;
+  title: string;
+  state: string;
+  url: string | null;
+  authorLogin: string | null;
+  labels: string[];
+  openedAt: string;
+  closedAt: string | null;
+  updatedAt: string;
+  sessionCount: number;
+  branchCount: number;
+  inputTokens: number;
+  outputTokens: number;
+  costCents: number | null;
+}
+
+export interface IssueDetail extends IssueSummary {
+  body: string | null;
+  assignees: string[];
+  branches: Array<{ id: string; name: string; lastCommitSha: string | null }>;
+  commits: Array<{
+    sha: string;
+    message: string;
+    authoredAt: string;
+    insertions: number | null;
+    deletions: number | null;
+  }>;
+  sessions: SessionSummary[];
 }
 
 export interface MetricSummary {
