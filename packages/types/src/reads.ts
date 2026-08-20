@@ -336,3 +336,28 @@ export interface DeveloperStats {
   tasksCompleted: number;
   prsMerged: number;
 }
+
+/**
+ * Live per-developer context shown on the map when avatars are near each
+ * other. Backed by the most recent agent session (and its linked issue),
+ * plus a lifetime token rollup. Privacy-gated like the rest of the read API.
+ */
+export interface MapOverlay {
+  developer: DeveloperRef;
+  currentSession: {
+    id: string;
+    agent: { id: string; name: string; type: string; model: string | null };
+    title: string | null;
+    status: string | null;
+    startedAt: string;
+  } | null;
+  issue: {
+    id: string;
+    number: number;
+    title: string;
+    state: string;
+  } | null;
+  inputTokens: number;
+  outputTokens: number;
+  costCents: number | null;
+}

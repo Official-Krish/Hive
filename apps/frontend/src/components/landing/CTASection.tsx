@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Magnetic, Reveal } from "@/components/motion";
+import { Link } from "react-router-dom";
+import { Reveal } from "@/components/motion";
 import {
   FiArrowRight,
   FiCheck,
@@ -47,10 +48,13 @@ export function CTASection() {
 
               {/* Action Buttons & Terminal Snippet */}
               <div className="mt-10 flex flex-col sm:flex-row items-center gap-4">
-                <Magnetic className="w-full sm:w-auto group relative flex items-center justify-center gap-2.5 rounded-full bg-gradient-to-r from-cyan-400 via-sky-400 to-indigo-500 px-8 py-4 text-sm font-semibold text-slate-950 shadow-[0_0_35px_rgba(56,189,248,0.4)] hover:shadow-[0_0_50px_rgba(56,189,248,0.7)] transition-all">
+                <Link
+                  to="/auth"
+                  className="w-full sm:w-auto group relative flex items-center justify-center gap-2.5 rounded-full bg-gradient-to-r from-cyan-400 via-sky-400 to-indigo-500 px-8 py-4 text-sm font-semibold text-slate-950 shadow-[0_0_35px_rgba(56,189,248,0.4)] hover:shadow-[0_0_50px_rgba(56,189,248,0.7)] transition-all hover:scale-[1.02]"
+                >
                   <span>Create Free Workspace</span>
                   <FiArrowRight className="text-base transition-transform group-hover:translate-x-1" />
-                </Magnetic>
+                </Link>
 
                 <div className="flex items-center gap-2 px-4 py-3 rounded-full bg-black/60 border border-white/15 text-xs font-mono text-slate-300 backdrop-blur-md w-full sm:w-auto justify-between">
                   <div className="flex items-center gap-2">

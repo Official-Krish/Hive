@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Magnetic } from "@/components/motion";
 import {
   FiTerminal,
   FiActivity,
@@ -186,10 +186,13 @@ export function HeroSection() {
           transition={{ duration: 0.7, delay: 0.3, ease: [0.16, 1, 0.3, 1] }}
           className="mt-10 flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto"
         >
-          <Magnetic className="w-full sm:w-auto group relative flex items-center justify-center gap-2.5 rounded-full bg-gradient-to-r from-cyan-400 via-sky-400 to-indigo-500 px-8 py-3.5 text-sm font-semibold text-slate-950 shadow-[0_0_30px_rgba(56,189,248,0.4)] hover:shadow-[0_0_40px_rgba(56,189,248,0.6)] transition-all">
+          <Link
+            to="/auth"
+            className="w-full sm:w-auto group relative flex items-center justify-center gap-2.5 rounded-full bg-gradient-to-r from-cyan-400 via-sky-400 to-indigo-500 px-8 py-3.5 text-sm font-semibold text-slate-950 shadow-[0_0_30px_rgba(56,189,248,0.4)] hover:shadow-[0_0_40px_rgba(56,189,248,0.6)] transition-all hover:scale-[1.02]"
+          >
             <span>Deploy Free Ingest</span>
             <FiArrowRight className="text-base transition-transform group-hover:translate-x-1" />
-          </Magnetic>
+          </Link>
 
           {/* Quick CLI Copy Box */}
           <div className="flex items-center gap-2 px-4 py-2.5 rounded-full bg-slate-900/80 border border-white/10 text-xs font-mono text-slate-300 backdrop-blur-md hover:border-cyan-500/40 transition-colors w-full sm:w-auto justify-between">

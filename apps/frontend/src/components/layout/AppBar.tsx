@@ -1,7 +1,7 @@
 import { motion, useMotionValueEvent, useScroll } from "framer-motion";
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { HiveLogo } from "@/components/icons";
-import { Magnetic } from "@/components/motion";
 import { cn } from "@/lib/utils";
 import { FiArrowUpRight, FiRadio, FiMenu, FiX } from "react-icons/fi";
 
@@ -91,10 +91,13 @@ export function AppBar() {
             Docs
           </a>
 
-          <Magnetic className="group relative inline-flex items-center gap-1.5 overflow-hidden rounded-full bg-gradient-to-r from-cyan-500 via-sky-500 to-indigo-600 px-4 py-2 text-xs font-semibold text-slate-950 shadow-[0_0_20px_rgba(56,189,248,0.35)] transition-all hover:shadow-[0_0_28px_rgba(56,189,248,0.5)] hover:scale-[1.02]">
+          <Link
+            to="/auth"
+            className="group relative inline-flex items-center gap-1.5 overflow-hidden rounded-full bg-gradient-to-r from-cyan-500 via-sky-500 to-indigo-600 px-4 py-2 text-xs font-semibold text-slate-950 shadow-[0_0_20px_rgba(56,189,248,0.35)] transition-all hover:shadow-[0_0_28px_rgba(56,189,248,0.5)] hover:scale-[1.02]"
+          >
             <span>Launch Console</span>
             <FiArrowUpRight className="text-sm transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
-          </Magnetic>
+          </Link>
         </div>
 
         {/* Mobile Hamburger Button */}
@@ -135,9 +138,12 @@ export function AppBar() {
               </span>
               <span>Online (3ms)</span>
             </div>
-            <Magnetic className="w-full justify-center rounded-xl bg-gradient-to-r from-cyan-400 to-indigo-500 py-3 text-center text-xs font-semibold text-slate-950">
+            <Link
+              to="/auth"
+              className="w-full justify-center rounded-xl bg-gradient-to-r from-cyan-400 to-indigo-500 py-3 text-center text-xs font-semibold text-slate-950 transition-transform hover:scale-[1.02]"
+            >
               Launch Console
-            </Magnetic>
+            </Link>
           </div>
         </div>
       </motion.nav>
