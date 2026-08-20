@@ -7,7 +7,7 @@ socket.
 
 ```
 ┌─────────────────┐   HTTP batches (X-Device-Token + Idempotency-Key)
-│   Observation   │ ────────────────────────────►  POST /api/ingest/events
+│   Observation   │ ────────────────────────────►  POST /api/v1/ingest/events
 │     sources     │
 │                 │   WS control channel (/ws/device)
 │  process git    │ ───► online / heartbeats ──►   RealtimeHub
@@ -37,38 +37,77 @@ Parsers are tolerant — malformed lines are skipped and never crash the agent.
 
 ## Setup
 
+### From source
+
 ```sh
 cd apps/collector
 cargo build --release          # produces target/release/collector
 ln -s "$PWD/target/release/collector" ~/.local/bin/hive   # optional
 ```
 
-### 1. Register a device (web)
+### One-liner (CDN / releases)
 
-1. In the Hive dashboard, create a device (a `hive_dev_…` token is shown once).
-2. Copy the **workspace id** for the workspace you will join.
-
-### 2. Configure the collector
+Ship the release binary as `hive-<os>-<arch>` (e.g. `hive-darwin-arm64`,
+`hive-linux-x64`) and point `scripts/install.sh` at it:
 
 ```sh
-hive config init
-hive config set api_url http://localhost:4000      # default
-hive config set ws_url ws://localhost:4001         # default
-hive config set device_id <device id>
-hive config set device_token <hive_dev_… token>
-hive config set workspace_id <workspace id>
-hive config add-watch ~/code/my-project
-hive config show        # token is masked
+curl -fsSL <CDN>/install.sh | bash
+# downloads the right binary, installs it as ~/.local/bin/hive, chmod +x
 ```
 
-### 3. Run it
+Set `HIVE_DOWNLOAD_BASE`, `HIVE_VERSION`, or `HIVE_INSTALL_DIR` to override.
+
+### 1. Log in
 
 ```sh
-hive start      # background daemon (writes ~/.local/state/hive/collector.pid)
+hive login
+# 1. Open https://github.com/login/device in your browser
+# 2. Enter the code: XXXX-XXXX
+# ✓ logged in as you@example.com
+```
+
+Authentication uses the GitHub OAuth device flow — no passwords. The CLI opens
+your browser (or prints the URL + code for headless/SSH use) and exchanges the
+GitHub token for a short-lived Hive session, which it stores in
+`~/.local/state/hive/session.json` along with a refresh token for future
+silent re-auth.
+
+> Device Flow must be enabled in the GitHub OAuth app settings (one-time). The
+> CLI is a public OAuth client: it only needs the public `client_id`, which it
+> discovers from `/api/v1/health` (`data.githubClientId`), and never handles a
+> client secret.
+
+### 2. Start
+
+`hive start` registers the machine on first run (device + workspace, using
+your `hive login` session) and then launches the daemon. Registration is only
+prompted when it hasn't happened yet.
+
+```sh
+hive start
+# → not registered yet; registering this machine…
+# ✓ using session for you@example.com
+# ✓ registered device "my-macbook" (cmt…)
+# Workspaces:
+#   1. Main (owner)
+# Select workspace [1]: 1
+# ✓ config written to ~/.config/hive/config.toml
+# collector started (pid 1234)
+```
+
+The collector talks to the local backend at `http://localhost:3000`
+(WebSocket port auto-discovered from `/api/v1/health`), so the backend must be
+running first. You can also pre-register ahead of time with `hive install`.
+
+### 3. Run / stop
+
+```sh
 hive status     # running? connected? queued batches?
 hive stop       # graceful shutdown (SIGTERM)
 hive run        # foreground (useful for debugging: RUST_LOG=debug)
 ```
+
+To end the session (e.g. on a shared machine): `hive logout`.
 
 ### 4. Capture terminal commands (optional)
 
@@ -76,6 +115,22 @@ hive run        # foreground (useful for debugging: RUST_LOG=debug)
 hive install-hook      # appends a preexec hook to ~/.zshrc / ~/.bashrc
 # open a new terminal (or `source ~/.zshrc`) and type away
 hive uninstall-hook
+```
+
+### Manual configuration (headless / non-interactive)
+
+If you can't run the interactive installer, register a device in the Hive
+dashboard and set the values directly:
+
+```sh
+hive config init
+hive config set api_url http://localhost:3000      # backend base (config::API_URL)
+hive config set ws_url ws://localhost:4001         # realtime base
+hive config set device_id <device id>
+hive config set device_token <hive_dev_… token>
+hive config set workspace_id <workspace id>
+hive config add-watch ~/code/my-project
+hive config show        # token is masked
 ```
 
 ## Control plane & presence
@@ -88,10 +143,10 @@ While running, the collector keeps a persistent WebSocket open to
 - **Heartbeats** — every 30s the collector sends `{type:"heartbeat"}` which
   refreshes `lastSeenAt` (no session cookies needed).
 - **Remote shutdown** — the dashboard's Stop button calls
-  `POST /api/devices/:id/stop`; the backend publishes
+  `POST /api/v1/devices/:id/stop`; the backend publishes
   `{type:"control", cmd:"shutdown"}` and the collector flushes, disconnects,
   and exits.
-- **Join gating** — `POST /api/invites/:token/accept` returns
+- **Join gating** — `POST /api/v1/invites/:token/accept` returns
   `409 DEVICE_REQUIRED` unless the user has an online device. Connect the
   collector first, then join the workspace.
 

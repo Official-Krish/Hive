@@ -87,10 +87,8 @@ pub fn start() -> Result<u32> {
     while Instant::now() < deadline {
         if let Some(written) = read_pid()? {
             if pid_alive(written) {
-                let status = Status {
-                    running: true,
-                    ..Status::default()
-                };
+                let mut status = read_status();
+                status.running = true;
                 write_status(&status)?;
                 return Ok(written);
             }

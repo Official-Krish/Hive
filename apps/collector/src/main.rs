@@ -15,7 +15,11 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// One-time interactive setup: log in, register a device, pick a workspace.
+    /// Log in with GitHub (device flow) and store a session for registration.
+    Login,
+    /// Forget the stored session.
+    Logout,
+    /// Register a device and pick a workspace (auto-run by `start` if needed).
     Install,
     /// Run the collector in the foreground.
     Run,
@@ -70,6 +74,14 @@ async fn main() {
 
 async fn run_cli(cli: Cli) -> anyhow::Result<()> {
     match cli.command {
+        Command::Login => {
+            init_logging();
+            collector::session::login().await.map(|_| ())
+        }
+        Command::Logout => {
+            collector::session::logout();
+            Ok(())
+        }
         Command::Install => {
             init_logging();
             collector::install::run().await
@@ -78,7 +90,19 @@ async fn run_cli(cli: Cli) -> anyhow::Result<()> {
             init_logging();
             collector::runner::run().await
         }
-        Command::Start => daemon::start().map(|pid| println!("collector started (pid {pid})")),
+        Command::Start => {
+            init_logging();
+            if !collector::config::Config::load()?.is_configured() {
+                println!("→ not registered yet; registering this machine…");
+                collector::install::run().await?;
+            }
+            if !collector::config::Config::load()?.is_configured() {
+                // install printed guidance (e.g. "create or join a workspace
+                // from the web") but did not register; nothing to start.
+                return Ok(());
+            }
+            daemon::start().map(|pid| println!("collector started (pid {pid})"))
+        }
         Command::Stop => daemon::stop().map(|()| println!("collector stopped")),
         Command::Status => {
             let status = daemon::current_status();

@@ -17,7 +17,7 @@ pub enum SendError {
     Rejected(String),
 }
 
-/// Thin HTTP client for `POST /api/ingest/events`. The batch is sent with the
+/// Thin HTTP client for `POST /api/v1/ingest/events`. The batch is sent with the
 /// device token header and a per-batch `Idempotency-Key` so retries (network
 /// blips, outbox replay) never duplicate side effects server-side.
 pub struct IngestClient {
@@ -44,7 +44,7 @@ impl IngestClient {
     }
 
     pub async fn send(&self, batch: &IngestBatch, idempotency_key: &str) -> Result<(), SendError> {
-        let url = format!("{}/api/ingest/events", self.api_url.trim_end_matches('/'));
+        let url = format!("{}/api/v1/ingest/events", self.api_url.trim_end_matches('/'));
         let res = self
             .http
             .post(&url)

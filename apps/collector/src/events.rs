@@ -202,7 +202,7 @@ pub enum TelemetryEvent {
     },
 }
 
-/// Batch envelope posted to `POST /api/ingest/events`.
+/// Batch envelope posted to `POST /api/v1/ingest/events`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct IngestBatch {

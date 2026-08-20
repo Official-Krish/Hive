@@ -7,6 +7,7 @@ pub mod flusher;
 pub mod install;
 pub mod modules;
 pub mod runner;
+pub mod session;
 pub mod status;
 pub mod storage;
 pub mod transport;

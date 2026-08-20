@@ -39,8 +39,8 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            api_url: "http://localhost:4000".into(),
-            ws_url: "ws://localhost:4001".into(),
+            api_url: API_URL.into(),
+            ws_url: WS_URL.into(),
             device_id: String::new(),
             device_token: String::new(),
             workspace_id: String::new(),
@@ -52,6 +52,27 @@ impl Default for Config {
             watch: Vec::new(),
         }
     }
+}
+
+/// Local backend HTTP base the collector talks to (hardcoded so install/login
+/// need no prompt). Change here if your backend runs on another port.
+pub const API_URL: &str = "http://localhost:3000";
+
+/// Local backend realtime base; install overrides this from `/api/v1/health`.
+pub const WS_URL: &str = "ws://localhost:4001";
+
+/// GitHub OAuth endpoints for the device flow (`hive login`). The client id is
+/// public and comes from the backend's `/api/v1/health`; only the user's token is
+/// exchanged with the backend, never a secret.
+pub const GITHUB_LOGIN_BASE: &str = "https://github.com";
+pub const GITHUB_SCOPE: &str = "read:user user:email";
+
+pub fn github_device_code_url() -> String {
+    format!("{GITHUB_LOGIN_BASE}/login/device/code")
+}
+
+pub fn github_oauth_token_url() -> String {
+    format!("{GITHUB_LOGIN_BASE}/login/oauth/access_token")
 }
 
 impl Config {
@@ -183,7 +204,7 @@ mod tests {
     fn defaults_are_unconfigured() {
         let cfg = Config::default();
         assert!(!cfg.is_configured());
-        assert_eq!(cfg.api_url, "http://localhost:4000");
+        assert_eq!(cfg.api_url, API_URL);
     }
 
     #[test]
