@@ -156,4 +156,13 @@ export class ReadsController {
       ),
     });
   };
+
+  getMapOverlay = async (req: Request, res: Response): Promise<void> => {
+    res.json({
+      data: await this.service.getMapOverlay(
+        ReadsController.workspaceId(req),
+        ReadsController.param(req, "developerId"),
+      ),
+    });
+  };
 }

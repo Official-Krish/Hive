@@ -26,6 +26,11 @@ const member = requireWorkspaceMember();
 
 readsRouter.get("/:workspaceId/map", member, controller.map);
 readsRouter.get(
+  "/:workspaceId/map/overlay/:developerId",
+  member,
+  controller.getMapOverlay,
+);
+readsRouter.get(
   "/:workspaceId/activities",
   member,
   validateQuery(activityFilterSchema),

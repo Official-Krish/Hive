@@ -211,6 +211,113 @@ describe("map", () => {
   });
 });
 
+describe("map overlay", () => {
+  test("returns the developer with current session and token rollup", async () => {
+    const seed = await setupSeeded();
+    const res = await c.api(
+      `/api/v1/workspaces/${seed.workspaceId}/map/overlay/${seed.developerId}`,
+    );
+    expect(res.status).toBe(200);
+    const body = await c.asJson<{
+      data: {
+        developer: { id: string; name: string };
+        currentSession: {
+          id: string;
+          status: string;
+          title: string | null;
+          agent: { name: string };
+        } | null;
+        issue: { number: number; title: string; state: string } | null;
+        inputTokens: number;
+        outputTokens: number;
+        costCents: number | null;
+      };
+    }>(res);
+    expect(body.data.developer.id).toBe(seed.developerId);
+    expect(body.data.currentSession).toMatchObject({
+      id: seed.sessionId,
+      status: "completed",
+      agent: { name: "claude" },
+    });
+    expect(body.data.issue).toBeNull();
+    expect(body.data.inputTokens).toBe(100_000);
+    expect(body.data.outputTokens).toBe(20_000);
+    expect(body.data.costCents).toBe(40);
+  });
+
+  test("prefers an active running session and surfaces its linked issue", async () => {
+    const seed = await setupSeeded();
+
+    const repo = await prisma.repository.findFirst({
+      where: { workspaceId: seed.workspaceId, name: "acme/reads" },
+    });
+    const agent = await prisma.agent.findFirst({ where: { name: "claude" } });
+    expect(repo).not.toBeNull();
+    expect(agent).not.toBeNull();
+
+    const issue = await prisma.issue.create({
+      data: {
+        repositoryId: repo!.id,
+        number: 42,
+        title: "Map overlay regression",
+        state: "open",
+        openedAt: new Date(ts),
+      },
+    });
+    const runningSession = uniqueId("sess-running");
+    await prisma.agentSession.create({
+      data: {
+        id: runningSession,
+        developerId: seed.developerId,
+        workspaceId: seed.workspaceId,
+        agentId: agent!.id,
+        issueId: issue.id,
+        title: "Fix overlay",
+        status: "RUNNING",
+        startedAt: new Date(ts),
+      },
+    });
+
+    const res = await c.api(
+      `/api/v1/workspaces/${seed.workspaceId}/map/overlay/${seed.developerId}`,
+    );
+    const body = await c.asJson<{
+      data: {
+        currentSession: {
+          id: string;
+          status: string;
+          title: string | null;
+        } | null;
+        issue: { number: number; title: string; state: string } | null;
+      };
+    }>(res);
+    expect(body.data.currentSession).toMatchObject({
+      id: runningSession,
+      status: "running",
+    });
+    expect(body.data.issue).toMatchObject({
+      number: 42,
+      title: "Map overlay regression",
+      state: "open",
+    });
+  });
+
+  test("rejects overlays for developers outside the workspace", async () => {
+    const seed = await setupSeeded();
+    const savedJar = c.saveJar();
+    await c.registerUser();
+    const me = await c.api("/api/v1/auth/me");
+    const meBody = await c.asJson<{ data: { user: { id: string } } }>(me);
+    const strangerId = meBody.data.user.id;
+    c.restoreJar(savedJar);
+
+    const res = await c.api(
+      `/api/v1/workspaces/${seed.workspaceId}/map/overlay/${strangerId}`,
+    );
+    expect(res.status).toBe(404);
+  });
+});
+
 describe("activities", () => {
   test("lists seeded activities with pagination metadata", async () => {
     const seed = await setupSeeded();

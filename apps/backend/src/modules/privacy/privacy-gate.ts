@@ -5,6 +5,7 @@ import type {
   DeveloperStats,
   IssueDetail,
   IssueSummary,
+  MapOverlay,
   MapRead,
   MetricSummary,
   PrivacySetting,
@@ -164,6 +165,20 @@ export class PrivacyGate {
   static developerStats(s: DeveloperStats, p: PrivacySetting): DeveloperStats {
     if (p.allowTokenUsage) return s;
     return { ...s, inputTokens: 0, outputTokens: 0, costCents: null };
+  }
+
+  static mapOverlay(o: MapOverlay, p: PrivacySetting): MapOverlay {
+    let out: MapOverlay = { ...o };
+    if (!p.allowTokenUsage) {
+      out = { ...out, inputTokens: 0, outputTokens: 0, costCents: null };
+    }
+    if (out.currentSession) {
+      let session = out.currentSession;
+      if (!p.allowPromptMetadata) session = { ...session, title: null };
+      if (!p.allowAgentStatus) session = { ...session, status: null };
+      out = { ...out, currentSession: session };
+    }
+    return out;
   }
 
   static map(m: MapRead, p: PrivacySetting): MapRead {

@@ -10,7 +10,9 @@ export const githubWebhookRouter = Router();
 const controller = new GitHubController();
 
 githubRouter.get("/auth/login", controller.login);
+githubRouter.get("/auth/url", controller.loginUrl);
 githubRouter.get("/auth/callback", controller.callback);
+githubRouter.get("/callback", controller.callback);
 githubRouter.post(
   "/auth/token",
   validateBody(githubTokenSchema),

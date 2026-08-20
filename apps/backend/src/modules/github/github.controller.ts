@@ -19,6 +19,11 @@ export class GitHubController {
     res.redirect(302, this.githubService.buildLoginUrl(next));
   };
 
+  loginUrl = (_req: Request, res: Response): void => {
+    const next = this.safeNext(undefined);
+    res.json({ data: { url: this.githubService.buildLoginUrl(next) } });
+  };
+
   callback = async (req: Request, res: Response): Promise<void> => {
     const code = typeof req.query.code === "string" ? req.query.code : "";
     const state = typeof req.query.state === "string" ? req.query.state : "";

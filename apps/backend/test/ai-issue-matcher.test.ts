@@ -280,6 +280,9 @@ describe("ai issue matcher", () => {
   });
 
   test("matchSession is a no-op when AI is not configured", async () => {
+    // Local dev .env carries real AI credentials, so the disabled path is
+    // only exercisable when AI_PROVIDER/AI_API_KEY are absent.
+    if (aiEnabled()) return;
     expect(aiEnabled()).toBe(false);
     const matcher = new IssueMatcherService(async () => {
       throw new Error("should not be called when AI is disabled");

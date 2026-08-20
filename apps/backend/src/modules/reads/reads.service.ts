@@ -1,8 +1,8 @@
 import {
   prisma,
+  AgentStatus,
   type ActivityStatus,
   type ActivityType,
-  type AgentStatus,
   type AgentType,
   type AlertSeverity,
   type AlertStatus,
@@ -22,6 +22,7 @@ import type {
   AlertSummary,
   DeveloperStats,
   MapRead,
+  MapOverlay,
   MetricFilter,
   MetricSummary,
   ModelRead,
@@ -676,6 +677,91 @@ export class ReadsService {
       },
       privacy,
     );
+  }
+
+  async getMapOverlay(
+    workspaceId: string,
+    developerId: string,
+  ): Promise<MapOverlay> {
+    const membership = await prisma.workspaceMember.findUnique({
+      where: { workspaceId_userId: { workspaceId, userId: developerId } },
+    });
+    if (!membership) throw new NotFoundError("Developer not found");
+
+    const developer = await prisma.user.findUnique({
+      where: { id: developerId },
+      select: { id: true, name: true, email: true, avatarUrl: true },
+    });
+    if (!developer) throw new NotFoundError("Developer not found");
+
+    const activeSession = await prisma.agentSession.findFirst({
+      where: {
+        developerId,
+        workspaceId,
+        status: {
+          in: [
+            AgentStatus.RUNNING,
+            AgentStatus.BLOCKED,
+            AgentStatus.WAITING_APPROVAL,
+          ],
+        },
+      },
+      include: {
+        agent: { select: { id: true, name: true, type: true, model: true } },
+        issue: { select: { id: true, number: true, title: true, state: true } },
+      },
+      orderBy: { startedAt: "desc" },
+    });
+
+    const session =
+      activeSession ??
+      (await prisma.agentSession.findFirst({
+        where: { developerId, workspaceId },
+        include: {
+          agent: { select: { id: true, name: true, type: true, model: true } },
+          issue: {
+            select: { id: true, number: true, title: true, state: true },
+          },
+        },
+        orderBy: { startedAt: "desc" },
+      }));
+
+    const tokens = await prisma.tokenUsage.aggregate({
+      where: { session: { developerId, workspaceId } },
+      _sum: { inputTokens: true, outputTokens: true, costCents: true },
+    });
+
+    const overlay: MapOverlay = {
+      developer,
+      currentSession: session
+        ? {
+            id: session.id,
+            agent: {
+              id: session.agent.id,
+              name: session.agent.name,
+              type: session.agent.type.toLowerCase(),
+              model: session.agent.model,
+            },
+            title: session.title,
+            status: session.status.toLowerCase(),
+            startedAt: session.startedAt.toISOString(),
+          }
+        : null,
+      issue: session?.issue
+        ? {
+            id: session.issue.id,
+            number: session.issue.number,
+            title: session.issue.title,
+            state: session.issue.state,
+          }
+        : null,
+      inputTokens: tokens._sum.inputTokens ?? 0,
+      outputTokens: tokens._sum.outputTokens ?? 0,
+      costCents: tokens._sum.costCents ?? null,
+    };
+
+    const privacy = await this.privacyOf(workspaceId);
+    return PrivacyGate.mapOverlay(overlay, privacy);
   }
 
   private async privacyOf(workspaceId: string): Promise<PrivacySetting> {
