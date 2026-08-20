@@ -28,6 +28,11 @@ const envSchema = z.object({
     .url()
     .default("http://localhost:3000/api/v1/github/auth/callback"),
   GITHUB_TOKEN_ENCRYPTION_KEY: z.string().min(16),
+  AI_PROVIDER: z.string().default(""),
+  AI_BASE_URL: z.url().default("https://integrate.api.nvidia.com/v1"),
+  AI_API_KEY: z.string().default(""),
+  AI_MODEL: z.string().default("nvidia/nemotron-3-ultra-550b-a55b"),
+  AI_MIN_CONFIDENCE: z.coerce.number().min(0).max(1).default(0.6),
   LOG_LEVEL: z
     .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
     .default("info"),

@@ -15,6 +15,8 @@ import type { IngestBatch, TelemetryEvent } from "@hive/events";
 import type { RealtimeEvent } from "@hive/types";
 import type { DeviceContext } from "../../core/context";
 import { ForbiddenError } from "../../core/errors";
+import { queue } from "../../lib/queue";
+import { aiEnabled } from "../ai/ai-client";
 import { realtimeBus } from "../realtime/realtime.bus";
 import { IssueLinksService } from "../issues/issue-links";
 
@@ -224,6 +226,9 @@ export class IngestService {
       event.branch ?? null,
       event.sessionId,
     );
+    if (aiEnabled() && repositoryId) {
+      void queue.enqueue("issue.match", { sessionId: event.sessionId });
+    }
     await prisma.agent.update({
       where: { id: agent.id },
       data: {
@@ -258,6 +263,9 @@ export class IngestService {
       where: { sessions: { some: { id: event.sessionId } } },
       data: { status: AgentStatus.IDLE, lastHeartbeatAt: new Date() },
     });
+    if (aiEnabled()) {
+      void queue.enqueue("issue.match", { sessionId: event.sessionId });
+    }
 
     this.broadcast({
       type: "agent.stopped",

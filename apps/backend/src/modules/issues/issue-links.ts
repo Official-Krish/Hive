@@ -8,8 +8,8 @@ import { prisma } from "@hive/db";
  * for that repository + number.
  */
 export function branchIssueRef(branch: string): number | null {
-  const explicit = branch.match(/issue[-/_]?(\d{2,7})/i);
-  const implicit = branch.match(/(?:^|[-/_])(\d{2,7})(?:[-/_]|$)/);
+  const explicit = branch.match(/issue[-/_]?(\d+)/i);
+  const implicit = branch.match(/(?:^|[-/_])(\d+)(?:[-/_]|$)/);
   const match = explicit ?? implicit;
   return match ? Number(match[1]) : null;
 }

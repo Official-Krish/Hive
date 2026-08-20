@@ -3,6 +3,8 @@ import { closeRedis, ensureConnected } from "@hive/queue";
 import { createApp } from "./app";
 import { env } from "./config/env";
 import { logger } from "./lib/logger";
+import { queue } from "./lib/queue";
+import { IssueMatcherService } from "./modules/ai/issue-matcher.service";
 import { RealtimeHub } from "./modules/realtime/realtime.hub";
 
 async function main(): Promise<void> {
@@ -27,8 +29,20 @@ async function main(): Promise<void> {
 
   const realtime = new RealtimeHub({ port: env.WS_PORT }).start();
 
+  const issueMatcher = new IssueMatcherService();
+  void queue.start((job) => {
+    if (job.name === "issue.match") {
+      const { sessionId } = job.payload as { sessionId?: string };
+      if (typeof sessionId === "string") {
+        return issueMatcher.matchSession(sessionId);
+      }
+    }
+    return undefined;
+  });
+
   const shutdown = async (signal: string): Promise<void> => {
     logger.info({ signal }, "Shutting down");
+    queue.stop();
     await realtime.stop();
     closeRedis();
     server.close(async () => {

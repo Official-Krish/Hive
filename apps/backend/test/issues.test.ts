@@ -67,6 +67,7 @@ describe("issue ref parsing", () => {
     expect(branchIssueRef("feature/issue-123")).toBe(123);
     expect(branchIssueRef("issue/456")).toBe(456);
     expect(branchIssueRef("feat/7890-flag")).toBe(7890);
+    expect(branchIssueRef("fix/5-e2e")).toBe(5);
   });
 
   test("branchIssueRef returns null when no issue number is present", () => {
