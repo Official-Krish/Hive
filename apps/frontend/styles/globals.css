@@ -30,6 +30,7 @@
   --color-emerald-live: #10b981;
 
   --font-sans: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
+  --font-serif: "Instrument Serif", "Source Serif Pro", "Iowan Old Style", "Apple Garamond", ui-serif, Georgia, serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 
   --radius-sm: calc(var(--radius) - 4px);
@@ -145,4 +146,23 @@
   .radial-glow-violet {
     background: radial-gradient(circle 500px at 50% 300px, rgba(129, 140, 248, 0.08), transparent 70%);
   }
+
+  .radial-glow-amber {
+    background: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(245, 158, 11, 0.15), rgba(217, 119, 6, 0.05) 50%, transparent 80%);
+  }
+
+  .horizon-arc {
+    border-top: 1px solid rgba(251, 191, 36, 0.45);
+    box-shadow: 0 -4px 40px 0 rgba(245, 158, 11, 0.35), inset 0 2px 20px 0 rgba(245, 158, 11, 0.2);
+  }
+
+  @keyframes star-twinkle {
+    0%, 100% { opacity: 0.2; transform: scale(0.8); }
+    50% { opacity: 0.9; transform: scale(1.2); }
+  }
+
+  .animate-twinkle {
+    animation: star-twinkle 3s ease-in-out infinite;
+  }
 }
+

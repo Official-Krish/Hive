@@ -1,6 +1,6 @@
-import { motion, useReducedMotion, type HTMLMotionProps } from "framer-motion";
+import { motion, useReducedMotion, type HTMLMotionProps } from "motion/react";
 import { type ReactNode, useRef } from "react";
-import { useInView } from "framer-motion";
+import { useInView } from "motion/react";
 
 type RevealProps = {
   children: ReactNode;
