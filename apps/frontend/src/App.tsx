@@ -33,15 +33,26 @@ function Layout() {
   );
 }
 
+function AuthLayout() {
+  return (
+    <div className="flex min-h-screen flex-col">
+      <main className="flex-1">
+        <AuthPage />
+      </main>
+      <Footer />
+    </div>
+  );
+}
+
 const router = createBrowserRouter([
   {
     element: <Layout />,
     children: [
       { path: "/", element: <LandingPage /> },
-      { path: "/auth", element: <AuthPage /> },
       { path: "*", element: <Navigate to="/" replace /> },
     ],
   },
+  { path: "/auth", element: <AuthLayout /> },
 ]);
 
 export function App() {

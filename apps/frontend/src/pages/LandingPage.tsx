@@ -7,7 +7,7 @@ import { CTA } from "@/components/landing/CTA";
 
 export function LandingPage() {
   return (
-    <div className="relative min-h-screen bg-[#08090D] text-slate-100 overflow-x-hidden selection:bg-cyan-500/25 selection:text-cyan-200">
+    <div className="relative min-h-screen bg-[#08090D] text-slate-100 overflow-x-hidden selection:bg-white/20 selection:text-white">
       <main>
         <HeroSection />
         <Product />

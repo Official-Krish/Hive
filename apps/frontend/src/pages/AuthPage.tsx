@@ -1,12 +1,7 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import {
-  FiAlertTriangle,
-  FiArrowUpRight,
-  FiGithub,
-  FiLoader,
-} from "react-icons/fi";
-import { Navigate } from "react-router-dom";
-import { HiveLogo } from "@/components/icons";
+import { motion } from "motion/react";
+import { FiGithub } from "react-icons/fi";
+import { Navigate, Link } from "react-router-dom";
 import { http } from "@/lib/http";
 
 export function AuthPage() {
@@ -25,8 +20,15 @@ export function AuthPage() {
 
   if (me.isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#08090D]">
-        <FiLoader className="size-6 animate-spin text-cyan-400" />
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0a0a0c]">
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="flex items-center gap-3 text-sm font-mono text-zinc-400"
+        >
+          <span className="h-2 w-2 animate-ping rounded-full bg-zinc-400" />
+          <span>Loading workspace...</span>
+        </motion.div>
       </div>
     );
   }
@@ -36,57 +38,108 @@ export function AuthPage() {
   }
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#08090D] px-4 text-slate-100">
-      <div className="pointer-events-none absolute -top-40 left-1/2 h-[480px] w-[720px] -translate-x-1/2 rounded-full bg-cyan-500/10 blur-[120px]" />
-      <div className="pointer-events-none absolute bottom-0 right-0 h-[360px] w-[520px] rounded-full bg-indigo-600/10 blur-[120px]" />
-
-      <div className="relative w-full max-w-md">
-        <div className="rounded-3xl border border-white/10 bg-[#0f131d]/80 p-8 shadow-[0_8px_40px_rgba(0,0,0,0.5)] backdrop-blur-xl">
-          <div className="mb-8 flex flex-col items-center gap-3">
-            <div className="relative flex items-center justify-center">
-              <div className="absolute -inset-2 rounded-full bg-cyan-500/20 blur-sm" />
-              <HiveLogo className="relative" size={44} />
-            </div>
-            <h1 className="font-sans text-2xl font-bold tracking-tight text-white">
-              Welcome to Hive
-            </h1>
-            <p className="text-center text-sm text-slate-400">
-              Sign in with GitHub to connect your repos and stream telemetry
-              from your local AI agents.
-            </p>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => login.mutate()}
-            disabled={login.isPending}
-            className="group relative flex w-full items-center justify-center gap-2 overflow-hidden rounded-xl bg-gradient-to-r from-cyan-500 via-sky-500 to-indigo-600 px-5 py-3 text-sm font-semibold text-slate-950 shadow-[0_0_24px_rgba(56,189,248,0.35)] transition-all hover:scale-[1.02] hover:shadow-[0_0_32px_rgba(56,189,248,0.5)] disabled:opacity-60 disabled:hover:scale-100"
+    <div className="min-h-screen w-full overflow-hidden bg-[#f0efec]">
+      <div className="flex min-h-screen w-full">
+        <div className="hidden h-screen aspect-9/16 flex-none overflow-hidden lg:block">
+          <img
+            src="https://cdn.krishlabs.tech/hive/assets/auth.png"
+            alt="Hive workspace"
+            loading="eager"
+            className="block h-full w-full"
+          />
+        </div>
+        <div className="relative flex min-h-screen min-w-0 flex-1 flex-col items-center justify-center bg-[#f0efec] px-8 py-12 sm:px-14 lg:px-20">
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{
+              duration: 0.6,
+              ease: [0.16, 1, 0.3, 1],
+            }}
+            className="flex w-full max-w-md flex-col items-start"
           >
-            {login.isPending ? (
-              <FiLoader className="size-4 animate-spin" />
-            ) : (
-              <FiGithub className="size-4 transition-transform group-hover:rotate-6" />
-            )}
-            <span>
-              {login.isPending
-                ? "Redirecting to GitHub…"
-                : "Continue with GitHub"}
+            {/* Kicker */}
+            <span className="mb-3 text-xs font-mono uppercase tracking-widest text-[#0a0a0c]/60">
+              Welcome to Hive
             </span>
-            {!login.isPending && (
-              <FiArrowUpRight className="size-4 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
-            )}
-          </button>
 
-          {login.isError && (
-            <p className="mt-4 flex items-center justify-center gap-1.5 text-xs text-rose-400">
-              <FiAlertTriangle className="size-3.5" />
-              Couldn&apos;t reach the backend to start GitHub sign-in.
-            </p>
-          )}
+            {/* Headline */}
+            <h1 className="mb-8 text-balance text-3xl font-semibold leading-[1.12] tracking-tight text-[#0a0a0c] sm:text-4xl lg:text-[2.6rem]">
+              Your team&apos;s workspace for <br className="hidden sm:inline" />
+              humans + AI agents.
+            </h1>
 
-          <div className="mt-6 flex items-center justify-center gap-2 text-[11px] text-slate-500"></div>
+            {/* Login */}
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                login.mutate();
+              }}
+              className="w-full space-y-4"
+            >
+              <button
+                type="submit"
+                disabled={login.isPending}
+                className="
+                  group relative flex w-full items-center justify-center
+                  gap-3.5 rounded-2xl bg-[#0a0a0c]
+                  px-6 py-4 text-base font-medium text-white
+                  shadow-lg
+                  transition-all duration-300
+                  hover:scale-[1.01] hover:bg-[#1f1f24]
+                  active:scale-[0.99]
+                  disabled:cursor-not-allowed
+                  disabled:opacity-60
+                  disabled:hover:scale-100
+                  focus-visible:outline-none
+                  focus-visible:ring-2
+                  focus-visible:ring-[#0a0a0c]/40
+                  cursor-pointer
+                "
+              >
+                <FiGithub
+                  className="size-5 text-white transition-transform duration-300 group-hover:scale-110"
+                  aria-hidden="true"
+                />
+
+                <span>
+                  {login.isPending
+                    ? "Connecting to GitHub..."
+                    : "Continue with GitHub"}
+                </span>
+              </button>
+
+              {/* Error */}
+              {login.isError && (
+                <p className="pt-1 text-center text-xs font-mono text-rose-600">
+                  Handshake failed. Please click to try again.
+                </p>
+              )}
+
+              {/* Terms */}
+              <p className="pt-2 text-center text-xs leading-relaxed text-[#0a0a0c]/50">
+                By continuing, you agree to Hive&apos;s{" "}
+                <Link
+                  to="/terms"
+                  className="text-[#0a0a0c]/80 underline transition-colors hover:text-[#0a0a0c]"
+                >
+                  Terms of Service
+                </Link>{" "}
+                and{" "}
+                <Link
+                  to="/privacy"
+                  className="text-[#0a0a0c]/80 underline transition-colors hover:text-[#0a0a0c]"
+                >
+                  Privacy Policy
+                </Link>
+                .
+              </p>
+            </form>
+          </motion.div>
         </div>
       </div>
     </div>
   );
 }
+
+export default AuthPage;
