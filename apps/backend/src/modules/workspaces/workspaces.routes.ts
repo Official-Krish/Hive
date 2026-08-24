@@ -1,5 +1,6 @@
 import { Router } from "express";
 import {
+  createGithubInviteInputSchema,
   createInviteInputSchema,
   createWorkspaceInputSchema,
   updateMemberRoleSchema,
@@ -67,6 +68,13 @@ workspacesRouter.post(
   validateBody(createInviteInputSchema),
   controller.invite,
 );
+workspacesRouter.post(
+  "/:workspaceId/invites/github",
+  requireWorkspaceMember(),
+  requireWorkspaceRole("admin", "owner"),
+  validateBody(createGithubInviteInputSchema),
+  controller.inviteByGithub,
+);
 workspacesRouter.get(
   "/:workspaceId/invites",
   requireWorkspaceMember(),
@@ -81,4 +89,6 @@ workspacesRouter.delete(
 
 export const invitesRouter = Router();
 invitesRouter.use(requireAuth());
+invitesRouter.get("/", controller.listReceived);
+invitesRouter.post("/id/:inviteId/accept", controller.acceptById);
 invitesRouter.post("/:token/accept", controller.accept);

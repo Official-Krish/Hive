@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import type {
+  CreateGithubInviteInput,
   CreateInviteInput,
   CreateWorkspaceInput,
   UpdateMemberRoleInput,
@@ -96,6 +97,17 @@ export class WorkspaceController {
     res.status(201).json({ data: created });
   };
 
+  inviteByGithub = async (req: Request, res: Response): Promise<void> => {
+    const auth = getAuth(res);
+    const input = req.body as CreateGithubInviteInput;
+    const created = await this.service.inviteByGithubLogin(
+      WorkspaceController.param(req, "workspaceId"),
+      auth.userId,
+      input,
+    );
+    res.status(201).json({ data: created });
+  };
+
   listInvites = async (req: Request, res: Response): Promise<void> => {
     res.json({
       data: await this.service.listInvites(
@@ -117,6 +129,21 @@ export class WorkspaceController {
     res.json({
       data: await this.service.acceptInvite(
         WorkspaceController.param(req, "token"),
+        auth.userId,
+      ),
+    });
+  };
+
+  listReceived = async (_req: Request, res: Response): Promise<void> => {
+    const auth = getAuth(res);
+    res.json({ data: await this.service.listReceivedInvites(auth.userId) });
+  };
+
+  acceptById = async (req: Request, res: Response): Promise<void> => {
+    const auth = getAuth(res);
+    res.json({
+      data: await this.service.acceptInviteById(
+        WorkspaceController.param(req, "inviteId"),
         auth.userId,
       ),
     });

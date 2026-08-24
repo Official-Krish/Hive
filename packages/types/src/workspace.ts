@@ -34,6 +34,19 @@ export const createInviteInputSchema = z.object({
 });
 export type CreateInviteInput = z.infer<typeof createInviteInputSchema>;
 
+export const createGithubInviteInputSchema = z.object({
+  githubLogin: z
+    .string()
+    .trim()
+    .min(1, "GitHub username is required")
+    .max(39)
+    .regex(/^[a-zA-Z0-9-]+$/, "Invalid GitHub username"),
+  role: z.enum(["member", "admin"]).optional(),
+});
+export type CreateGithubInviteInput = z.infer<
+  typeof createGithubInviteInputSchema
+>;
+
 export const updateMemberRoleSchema = z.object({
   role: z.enum(["member", "admin"]),
 });
@@ -71,4 +84,21 @@ export interface InviteCreated {
   invite: InviteSummary;
   /** Raw invite token — shown once on creation, used in the accept link. */
   token: string;
+}
+
+/** An invite addressed to the current user, shown in their inbox. */
+export interface ReceivedInvite {
+  id: string;
+  role: z.infer<typeof userRoleSchema>;
+  status: "pending" | "accepted" | "revoked" | "expired";
+  workspace: {
+    id: string;
+    name: string;
+    slug: string;
+    description: string | null;
+  } | null;
+  org: { id: string; name: string };
+  invitedBy: { name: string; email: string; avatarUrl: string | null } | null;
+  expiresAt: string;
+  createdAt: string;
 }

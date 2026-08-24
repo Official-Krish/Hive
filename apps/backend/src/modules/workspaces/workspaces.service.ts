@@ -1,9 +1,11 @@
 import { prisma, UserRole } from "@hive/db";
 import type {
+  CreateGithubInviteInput,
   CreateInviteInput,
   CreateWorkspaceInput,
   InviteCreated,
   InviteSummary,
+  ReceivedInvite,
   UpdateMemberRoleInput,
   UpdateWorkspaceInput,
   WorkspaceMemberPublic,
@@ -231,6 +233,84 @@ export class WorkspaceService {
     return { invite: this.summarizeInvite(invite), token };
   }
 
+  async inviteByGithubLogin(
+    workspaceId: string,
+    actorUserId: string,
+    input: CreateGithubInviteInput,
+  ): Promise<InviteCreated> {
+    const account = await prisma.gitHubAccount.findFirst({
+      where: { login: { equals: input.githubLogin, mode: "insensitive" } },
+      select: { userId: true, user: { select: { email: true } } },
+    });
+    if (!account) {
+      throw new NotFoundError("No Hive user is linked to that GitHub username");
+    }
+
+    const existing = await prisma.workspaceMember.findUnique({
+      where: {
+        workspaceId_userId: { workspaceId, userId: account.userId },
+      },
+      select: { id: true },
+    });
+    if (existing) {
+      throw new ConflictError("That user is already a workspace member");
+    }
+
+    return this.invite(workspaceId, actorUserId, {
+      email: account.user.email,
+      role: input.role,
+    });
+  }
+
+  async listReceivedInvites(userId: string): Promise<ReceivedInvite[]> {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { email: true },
+    });
+    if (!user) throw new NotFoundError("User not found");
+
+    const invites = await prisma.invite.findMany({
+      where: {
+        email: user.email.toLowerCase(),
+        acceptedAt: null,
+        revokedAt: null,
+        workspaceId: { not: null },
+      },
+      include: {
+        workspace: {
+          select: { id: true, name: true, slug: true, description: true },
+        },
+        org: { select: { id: true, name: true } },
+        inviter: { select: { name: true, email: true, avatarUrl: true } },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    return invites.map((i) => ({
+      id: i.id,
+      role: roleToString(i.role),
+      status: this.summarizeInvite(i).status,
+      workspace: i.workspace
+        ? {
+            id: i.workspace.id,
+            name: i.workspace.name,
+            slug: i.workspace.slug,
+            description: i.workspace.description,
+          }
+        : null,
+      org: { id: i.org.id, name: i.org.name },
+      invitedBy: i.inviter
+        ? {
+            name: i.inviter.name,
+            email: i.inviter.email,
+            avatarUrl: i.inviter.avatarUrl,
+          }
+        : null,
+      expiresAt: i.expiresAt.toISOString(),
+      createdAt: i.createdAt.toISOString(),
+    }));
+  }
+
   async listInvites(workspaceId: string): Promise<InviteSummary[]> {
     const invites = await prisma.invite.findMany({
       where: { workspaceId },
@@ -257,6 +337,31 @@ export class WorkspaceService {
       where: { tokenHash: hashToken(token) },
     });
     if (!invite) throw new NotFoundError("Invite not found");
+    return this.acceptInviteRecord(invite, userId);
+  }
+
+  async acceptInviteById(
+    inviteId: string,
+    userId: string,
+  ): Promise<WorkspaceSummary> {
+    const invite = await prisma.invite.findUnique({ where: { id: inviteId } });
+    if (!invite) throw new NotFoundError("Invite not found");
+    return this.acceptInviteRecord(invite, userId);
+  }
+
+  private async acceptInviteRecord(
+    invite: {
+      id: string;
+      orgId: string;
+      workspaceId: string | null;
+      email: string;
+      role: UserRole;
+      expiresAt: Date;
+      acceptedAt: Date | null;
+      revokedAt: Date | null;
+    },
+    userId: string,
+  ): Promise<WorkspaceSummary> {
     if (invite.revokedAt) throw new ForbiddenError("Invite has been revoked");
     if (invite.acceptedAt) {
       return this.get(invite.workspaceId ?? "", userId);
@@ -267,6 +372,7 @@ export class WorkspaceService {
     if (!invite.workspaceId) {
       throw new ConflictError("Invite is not scoped to a workspace");
     }
+    const workspaceId = invite.workspaceId;
 
     const user = await prisma.user.findUnique({
       where: { id: userId },
@@ -293,12 +399,12 @@ export class WorkspaceService {
       prisma.workspaceMember.upsert({
         where: {
           workspaceId_userId: {
-            workspaceId: invite.workspaceId,
+            workspaceId,
             userId,
           },
         },
         create: {
-          workspaceId: invite.workspaceId,
+          workspaceId,
           userId,
           role,
         },
@@ -310,7 +416,7 @@ export class WorkspaceService {
       }),
     ]);
 
-    return this.get(invite.workspaceId, userId);
+    return this.get(workspaceId, userId);
   }
 
   summarize(workspace: WorkspaceWithCount, role: UserRole): WorkspaceSummary {
