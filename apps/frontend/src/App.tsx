@@ -8,6 +8,7 @@ import {
 } from "react-router-dom";
 import { AuthPage } from "./pages/AuthPage";
 import { LandingPage } from "./pages/LandingPage";
+import { WorldPage } from "./pages/WorldPage";
 import { AppBar } from "./components/layout/AppBar";
 import { Footer } from "./components/layout/Footer";
 import { DashboardLayout } from "./components/dashboard/DashboardLayout";
@@ -59,6 +60,7 @@ const router = createBrowserRouter([
       { path: "*", element: <Navigate to="/" replace /> },
     ],
   },
+  { path: "/world", element: <WorldPage /> },
   { path: "/auth", element: <AuthLayout /> },
   {
     path: "/dashboard",
