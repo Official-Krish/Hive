@@ -138,6 +138,35 @@ export interface WorkspaceMemberPublic {
   joinedAt: string;
 }
 
+export interface InviteCreatedResult {
+  invite: {
+    id: string;
+    email: string;
+    role: string;
+    status: "pending" | "accepted" | "revoked" | "expired";
+    expiresAt: string;
+    createdAt: string;
+  };
+  /** Raw invite token — returned once, used in the accept link. */
+  token: string;
+}
+
+export interface ReceivedInvite {
+  id: string;
+  role: string;
+  status: "pending" | "accepted" | "revoked" | "expired";
+  workspace: {
+    id: string;
+    name: string;
+    slug: string;
+    description: string | null;
+  } | null;
+  org: { id: string; name: string };
+  invitedBy: { name: string; email: string; avatarUrl: string | null } | null;
+  expiresAt: string;
+  createdAt: string;
+}
+
 export interface HealthData {
   status: string;
   uptime: number;
@@ -419,6 +448,11 @@ export interface CreateInviteInput {
   role?: string;
 }
 
+export interface CreateGithubInviteInput {
+  githubLogin: string;
+  role?: "member" | "admin";
+}
+
 export interface RegisterDeviceInput {
   name: string;
 }
@@ -586,8 +620,17 @@ export const http = {
       create: (
         workspaceId: string,
         input: CreateInviteInput,
-      ): Promise<{ token: string; invite: unknown }> =>
+      ): Promise<InviteCreatedResult> =>
         request(`/api/v1/workspaces/${workspaceId}/invites`, {
+          method: "POST",
+          body: input,
+        }),
+
+      createByGithub: (
+        workspaceId: string,
+        input: CreateGithubInviteInput,
+      ): Promise<InviteCreatedResult> =>
+        request(`/api/v1/workspaces/${workspaceId}/invites/github`, {
           method: "POST",
           body: input,
         }),
@@ -606,8 +649,13 @@ export const http = {
   },
 
   invites: {
-    accept: (token: string): Promise<unknown> =>
+    listReceived: (): Promise<ReceivedInvite[]> => request("/api/v1/invites"),
+
+    accept: (token: string): Promise<WorkspaceSummary> =>
       request(`/api/v1/invites/${token}/accept`, { method: "POST" }),
+
+    acceptById: (inviteId: string): Promise<WorkspaceSummary> =>
+      request(`/api/v1/invites/id/${inviteId}/accept`, { method: "POST" }),
   },
 
   orgs: {

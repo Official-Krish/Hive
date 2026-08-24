@@ -10,6 +10,13 @@ import { AuthPage } from "./pages/AuthPage";
 import { LandingPage } from "./pages/LandingPage";
 import { AppBar } from "./components/layout/AppBar";
 import { Footer } from "./components/layout/Footer";
+import { DashboardLayout } from "./components/dashboard/DashboardLayout";
+import { Overview } from "./pages/dashboard/Overview";
+import { CreateWorkspace } from "./pages/dashboard/CreateWorkspace";
+import { InviteUser } from "./pages/dashboard/InviteUser";
+import { WorkspaceInvites } from "./pages/dashboard/WorkspaceInvites";
+import { WorkspaceDetail } from "./pages/dashboard/WorkspaceDetail";
+import { AuthGuard } from "./lib/ProtectedRoute";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -21,7 +28,7 @@ const queryClient = new QueryClient({
   },
 });
 
-function Layout() {
+function PublicLayout() {
   return (
     <div className="flex min-h-screen flex-col">
       <AppBar />
@@ -46,13 +53,28 @@ function AuthLayout() {
 
 const router = createBrowserRouter([
   {
-    element: <Layout />,
+    element: <PublicLayout />,
     children: [
       { path: "/", element: <LandingPage /> },
       { path: "*", element: <Navigate to="/" replace /> },
     ],
   },
   { path: "/auth", element: <AuthLayout /> },
+  {
+    path: "/dashboard",
+    element: (
+      <AuthGuard>
+        <DashboardLayout />
+      </AuthGuard>
+    ),
+    children: [
+      { index: true, element: <Overview /> },
+      { path: "create", element: <CreateWorkspace /> },
+      { path: "invite", element: <InviteUser /> },
+      { path: "invites", element: <WorkspaceInvites /> },
+      { path: "w/:workspaceId", element: <WorkspaceDetail /> },
+    ],
+  },
 ]);
 
 export function App() {
