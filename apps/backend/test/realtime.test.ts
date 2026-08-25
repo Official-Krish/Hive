@@ -191,7 +191,12 @@ beforeAll(async () => {
     data: { name: "Realtime Test Org", slug: uniqueSlug() },
   });
   const workspace = await prisma.workspace.create({
-    data: { orgId: org.id, name: "Realtime", slug: uniqueSlug() },
+    data: {
+      orgId: org.id,
+      name: "Realtime",
+      slug: uniqueSlug(),
+      webhookSecret: "test-secret-1234",
+    },
   });
   workspaceId = workspace.id;
 });

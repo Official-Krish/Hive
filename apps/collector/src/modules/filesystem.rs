@@ -1,6 +1,6 @@
 use crate::bus::EventSender;
-use crate::config::{first_watch_path, Config};
-use crate::events::{now_rfc3339, TelemetryEvent};
+use crate::config::{Config, first_watch_path};
+use crate::events::{TelemetryEvent, now_rfc3339};
 use anyhow::Context;
 use notify::{Event, EventKind, RecursiveMode, Watcher};
 use std::collections::HashMap;
@@ -64,8 +64,7 @@ pub fn spawn(
             .unwrap_or_else(|| root.to_string_lossy().to_string());
         let mut last_emit: HashMap<String, i64> = HashMap::new();
         for event in std_rx {
-            if let EventKind::Create(_) | EventKind::Modify(_) | EventKind::Remove(_) = event.kind
-            {
+            if let EventKind::Create(_) | EventKind::Modify(_) | EventKind::Remove(_) = event.kind {
                 for path in event.paths {
                     if should_ignore(&path) {
                         continue;

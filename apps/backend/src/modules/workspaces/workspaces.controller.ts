@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import type {
+  AssignRepoInput,
   CreateGithubInviteInput,
   CreateInviteInput,
   CreateWorkspaceInput,
@@ -147,5 +148,33 @@ export class WorkspaceController {
         auth.userId,
       ),
     });
+  };
+
+  getSettings = async (req: Request, res: Response): Promise<void> => {
+    res.json({
+      data: await this.service.getSettings(
+        WorkspaceController.param(req, "workspaceId"),
+      ),
+    });
+  };
+
+  rotateSecret = async (req: Request, res: Response): Promise<void> => {
+    const auth = getAuth(res);
+    const result = await this.service.rotateSecret(
+      WorkspaceController.param(req, "workspaceId"),
+      auth.userId,
+    );
+    res.json({ data: result });
+  };
+
+  assignRepo = async (req: Request, res: Response): Promise<void> => {
+    const auth = getAuth(res);
+    const input = req.body as AssignRepoInput;
+    await this.service.assignRepository(
+      WorkspaceController.param(req, "workspaceId"),
+      auth.userId,
+      input.repositoryId,
+    );
+    res.status(204).end();
   };
 }

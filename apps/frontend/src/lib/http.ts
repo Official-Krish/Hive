@@ -128,6 +128,31 @@ export interface WorkspaceSummary {
   role: string;
   memberCount: number;
   createdAt: string;
+  /** Full webhook secret, only present on create/rotate responses. */
+  webhookSecret?: string;
+}
+
+export interface WorkspaceSettings {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  webhookSecretMasked: string;
+  repository: {
+    id: string;
+    name: string;
+    fullName: string;
+    url: string | null;
+  } | null;
+}
+
+export interface GitHubRepoOption {
+  id: number;
+  name: string;
+  fullName: string;
+  url: string | null;
+  private: boolean;
+  admin: boolean;
 }
 
 export interface WorkspaceMemberPublic {
@@ -380,6 +405,13 @@ export interface RealtimeMember {
   position: { x: number; y: number; z: number } | null;
 }
 
+export interface WorkspaceMapSnapshot {
+  mapId: string;
+  name: string;
+  version: number;
+  members: RealtimeMember[];
+}
+
 export interface MapOverlay {
   developer: {
     id: string;
@@ -434,6 +466,8 @@ export interface ChangePasswordInput {
 export interface CreateWorkspaceInput {
   name: string;
   description?: string;
+  webhookSecret?: string;
+  repositoryId?: string;
 }
 
 export interface UpdateWorkspaceInput {
@@ -575,6 +609,8 @@ export const http = {
       request("/api/v1/github/auth/url"),
     disconnect: (): Promise<{ success: boolean }> =>
       request("/api/v1/github/disconnect", { method: "POST" }),
+    listRepos: (): Promise<{ repos: GitHubRepoOption[] }> =>
+      request("/api/v1/github/repos"),
   },
 
   workspaces: {
@@ -597,6 +633,23 @@ export const http = {
 
     remove: (workspaceId: string): Promise<{ success: boolean }> =>
       request(`/api/v1/workspaces/${workspaceId}`, { method: "DELETE" }),
+
+    getSettings: (workspaceId: string): Promise<WorkspaceSettings> =>
+      request(`/api/v1/workspaces/${workspaceId}/settings`),
+
+    rotateSecret: (workspaceId: string): Promise<{ secret: string }> =>
+      request(`/api/v1/workspaces/${workspaceId}/settings/rotate-secret`, {
+        method: "POST",
+      }),
+
+    assignRepo: (
+      workspaceId: string,
+      repositoryId: string,
+    ): Promise<{ success: boolean }> =>
+      request(`/api/v1/workspaces/${workspaceId}/settings/assign-repo`, {
+        method: "POST",
+        body: { repositoryId },
+      }),
 
     members: {
       list: (workspaceId: string): Promise<WorkspaceMemberPublic[]> =>
@@ -720,7 +773,7 @@ export const http = {
   },
 
   reads: {
-    map: (workspaceId: string): Promise<RealtimeMember[]> =>
+    map: (workspaceId: string): Promise<WorkspaceMapSnapshot> =>
       request(`/api/v1/workspaces/${workspaceId}/map`),
 
     activities: (

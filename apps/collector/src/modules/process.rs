@@ -1,6 +1,6 @@
 use crate::bus::EventSender;
 use crate::config::Config;
-use crate::events::{now_rfc3339, TelemetryEvent};
+use crate::events::{TelemetryEvent, now_rfc3339};
 use std::collections::HashMap;
 use std::time::Duration;
 use tokio::sync::watch;
@@ -20,16 +20,12 @@ impl ProcessTracker {
     }
 
     /// Record a process and emit `process.started`.
-    pub fn started(
-        &mut self,
-        tx: &EventSender,
-        pid: u32,
-        command: String,
-    ) {
+    pub fn started(&mut self, tx: &EventSender, pid: u32, command: String) {
         if self.tracked.contains_key(&pid) {
             return;
         }
-        self.tracked.insert(pid, chrono::Utc::now().timestamp_millis());
+        self.tracked
+            .insert(pid, chrono::Utc::now().timestamp_millis());
         let event = TelemetryEvent::ProcessStarted {
             timestamp: now_rfc3339(),
             pid: pid as u64,
@@ -106,6 +102,8 @@ mod tests {
         tracker.started(&tx, u32::MAX, "ls".into());
         assert_eq!(tracker.len(), 1);
         let event = rx.try_recv().unwrap();
-        assert!(matches!(event, TelemetryEvent::ProcessStarted { pid, .. } if pid == u32::MAX as u64));
+        assert!(
+            matches!(event, TelemetryEvent::ProcessStarted { pid, .. } if pid == u32::MAX as u64)
+        );
     }
 }

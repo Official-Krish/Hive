@@ -26,13 +26,16 @@ mod tests {
     #[tokio::test]
     async fn events_flow_through_channel() {
         let (tx, mut rx) = channel();
-        try_send(&tx, TelemetryEvent::ProcessStarted {
-            timestamp: "2026-01-01T00:00:00.000Z".into(),
-            pid: 1,
-            ppid: None,
-            name: None,
-            command: "ls".into(),
-        });
+        try_send(
+            &tx,
+            TelemetryEvent::ProcessStarted {
+                timestamp: "2026-01-01T00:00:00.000Z".into(),
+                pid: 1,
+                ppid: None,
+                name: None,
+                command: "ls".into(),
+            },
+        );
         let received = rx.recv().await.unwrap();
         assert!(matches!(received, TelemetryEvent::ProcessStarted { .. }));
     }

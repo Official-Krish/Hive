@@ -1,4 +1,4 @@
-use crate::config::{db_path, ensure_state_dir, Config};
+use crate::config::{Config, db_path, ensure_state_dir};
 use crate::control;
 use crate::daemon::{mark_stopped, write_pidfile};
 use crate::flusher;
@@ -6,7 +6,7 @@ use crate::status::{read_status, write_status};
 use crate::storage::Outbox;
 use anyhow::{Context, Result};
 use std::sync::Arc;
-use tokio::signal::unix::{signal, SignalKind};
+use tokio::signal::unix::{SignalKind, signal};
 
 pub async fn run() -> Result<()> {
     let config = Config::load()?;
@@ -34,12 +34,18 @@ pub async fn run() -> Result<()> {
 
     // SIGTERM (hive stop / process manager) and SIGINT (Ctrl-C) both trigger
     // the same graceful shutdown as a control.shutdown command.
-    let mut sigterm = signal(SignalKind::terminate()).context("failed to install SIGTERM handler")?;
+    let mut sigterm =
+        signal(SignalKind::terminate()).context("failed to install SIGTERM handler")?;
     let mut sigint = signal(SignalKind::interrupt()).context("failed to install SIGINT handler")?;
 
     let modules = crate::modules::spawn_all(tx.clone(), config.clone(), shutdown_rx.clone()).await;
 
-    let flusher_task = tokio::spawn(flusher::run(rx, config.clone(), outbox.clone(), shutdown_rx.clone()));
+    let flusher_task = tokio::spawn(flusher::run(
+        rx,
+        config.clone(),
+        outbox.clone(),
+        shutdown_rx.clone(),
+    ));
     let control_task = if config.ws_url.is_empty() || config.device_token.is_empty() {
         None
     } else {

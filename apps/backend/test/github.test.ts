@@ -103,7 +103,12 @@ async function createUserWithWorkspace(
     data: { name: `${name}'s Org`, slug: uniqueSlug() },
   });
   const workspace = await prisma.workspace.create({
-    data: { orgId: org.id, name: "Main", slug: uniqueSlug() },
+    data: {
+      orgId: org.id,
+      name: "Main",
+      slug: uniqueSlug(),
+      webhookSecret: "test-secret-1234",
+    },
   });
   await prisma.workspaceMember.create({
     data: { workspaceId: workspace.id, userId: user.id },
@@ -153,7 +158,7 @@ describe("github oauth", () => {
     ).rejects.toThrow();
   });
 
-  test("creates a user and provisions a workspace on first sign-in", async () => {
+  test("creates a user and personal org without a workspace on first sign-in", async () => {
     const user = ghUser();
     const service = new GitHubService(new StubGitHubClient(user));
     const result = await service.handleCallback({
@@ -165,13 +170,16 @@ describe("github oauth", () => {
     expect(result.session.user.email).toBe(user.email!);
     const account = await prisma.gitHubAccount.findUnique({
       where: { githubId: user.id },
-      include: { user: { include: { memberships: true } } },
+      include: {
+        user: { include: { memberships: true, workspaceMembers: true } },
+      },
     });
     expect(account).not.toBeNull();
     expect(account!.login).toBe(user.login);
     expect(account!.accessToken).not.toContain("gho_test_token");
     expect(account!.user.email).toBe(user.email!);
-    expect(account!.user.memberships.length).toBeGreaterThan(0);
+    expect(account!.user.memberships.length).toBe(1);
+    expect(account!.user.workspaceMembers).toHaveLength(0);
   });
 
   test("links an existing user by email instead of creating a duplicate", async () => {
@@ -262,10 +270,7 @@ describe("github oauth", () => {
       data: { email: user.email! },
     });
     const realFetch = globalThis.fetch;
-    (globalThis as { fetch: typeof fetch }).fetch = async (
-      input,
-      init?: RequestInit,
-    ) => {
+    globalThis.fetch = (async (input: unknown, init?: RequestInit) => {
       const url = String(input);
       if (url.endsWith("/user/emails")) {
         return new Response(
@@ -281,8 +286,8 @@ describe("github oauth", () => {
           headers: { "content-type": "application/json" },
         });
       }
-      return realFetch(input, init);
-    };
+      return realFetch(input as Request | URL | string, init);
+    }) as typeof globalThis.fetch;
 
     try {
       const res = await fetch(`${baseUrl}/api/v1/github/auth/token`, {

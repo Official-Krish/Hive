@@ -40,6 +40,7 @@ type Seeded = {
 
 async function seedWorkspace(): Promise<Seeded> {
   const email = await c.registerUser();
+  await c.createWorkspace("Privacy");
   const { token } = await c.registerDevice();
   const membership = await prisma.workspaceMember.findFirst({
     where: { user: { email } },
@@ -161,6 +162,7 @@ describe("privacy access", () => {
 
   test("any member reads, only admin+ patches", async () => {
     await c.registerUser();
+    await c.createWorkspace("Privacy");
     const workspaceId = await c.primaryWorkspaceId();
 
     const memberEmail = uniqueEmail("member");
@@ -182,6 +184,7 @@ describe("privacy access", () => {
 describe("privacy get + update", () => {
   test("returns defaults before any change", async () => {
     await c.registerUser();
+    await c.createWorkspace("Privacy");
     const workspaceId = await c.primaryWorkspaceId();
 
     const res = await c.api(`/api/v1/workspaces/${workspaceId}/privacy`);
@@ -202,6 +205,7 @@ describe("privacy get + update", () => {
 
   test("patch persists and records the actor", async () => {
     await c.registerUser();
+    await c.createWorkspace("Privacy");
     const workspaceId = await c.primaryWorkspaceId();
     const me = await c.api("/api/v1/auth/me");
     const meBody = await c.asJson<{ data: { user: { id: string } } }>(me);

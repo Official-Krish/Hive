@@ -24,6 +24,7 @@ type Collector = {
 
 async function setupSeeded(): Promise<Collector> {
   const email = await c.registerUser();
+  await c.createWorkspace("Reads");
   const { token } = await c.registerDevice();
   const membership = await prisma.workspaceMember.findFirst({
     where: { user: { email } },

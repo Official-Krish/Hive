@@ -97,6 +97,7 @@ describe("org admin role", () => {
   test("admin can read/rename but not change plan, roles or members", async () => {
     const ownerEmail = await c.registerUser();
     const orgId = await primaryOrgId(ownerEmail);
+    await c.createWorkspace("Orgs");
     const workspaceId = await c.primaryWorkspaceId();
     const ownerId = await userIdFor(ownerEmail);
 
@@ -135,6 +136,7 @@ describe("org member management (owner)", () => {
   test("lists members/workspaces, demotes, removes and blocks self-changes", async () => {
     const ownerEmail = await c.registerUser();
     const orgId = await primaryOrgId(ownerEmail);
+    await c.createWorkspace("Orgs");
     const workspaceId = await c.primaryWorkspaceId();
     const ownerId = await userIdFor(ownerEmail);
 

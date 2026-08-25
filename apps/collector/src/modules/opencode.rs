@@ -1,5 +1,5 @@
 use crate::bus::EventSender;
-use crate::events::{now_rfc3339, TelemetryEvent};
+use crate::events::{TelemetryEvent, now_rfc3339};
 use anyhow::Result;
 use rusqlite::Connection;
 use serde_json::Value;
@@ -76,10 +76,7 @@ impl OpenCodeTracker {
     /// deltas, `agent.summary` (title) + `agent.stopped` when the session goes
     /// idle or is archived.
     fn poll_sqlite(&mut self, tx: &EventSender, db: &Path) -> Result<()> {
-        let conn = Connection::open_with_flags(
-            db,
-            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
-        )?;
+        let conn = Connection::open_with_flags(db, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)?;
         let mut stmt = conn.prepare(
             "SELECT id, title, model, directory, time_updated, \
              tokens_input, tokens_output, time_archived \
@@ -184,7 +181,11 @@ impl OpenCodeTracker {
         let Some(home) = home_dir() else {
             return;
         };
-        let base = home.join(".local").join("share").join("opencode").join("project");
+        let base = home
+            .join(".local")
+            .join("share")
+            .join("opencode")
+            .join("project");
         let Ok(projects) = std::fs::read_dir(&base) else {
             return;
         };
@@ -394,7 +395,9 @@ mod tests {
     #[test]
     fn parse_model_extracts_json_id_and_provider() {
         assert_eq!(
-            parse_model(r#"{"id":"deepseek-v4-flash-free","providerID":"opencode","variant":"default"}"#),
+            parse_model(
+                r#"{"id":"deepseek-v4-flash-free","providerID":"opencode","variant":"default"}"#
+            ),
             ("deepseek-v4-flash-free".into(), "opencode".into())
         );
         assert_eq!(
@@ -471,7 +474,9 @@ mod tests {
         let mut tracker = OpenCodeTracker::new(db.to_str().unwrap());
         tracker.poll(&tx);
         let started = drain(rx);
-        assert!(started.iter().any(|e| matches!(e, TelemetryEvent::AgentStarted { agent, .. } if agent == "opencode")));
+        assert!(started.iter().any(
+            |e| matches!(e, TelemetryEvent::AgentStarted { agent, .. } if agent == "opencode")
+        ));
 
         {
             let conn = Connection::open(&db).unwrap();
@@ -502,10 +507,14 @@ mod tests {
         let (tx, rx) = bus::channel();
         tracker.poll(&tx);
         let stopped = drain(rx);
-        assert!(stopped.iter().any(|e| matches!(e, TelemetryEvent::AgentStopped { .. })));
-        assert!(stopped
-            .iter()
-            .any(|e| matches!(e, TelemetryEvent::AgentSummary { summary, .. } if summary == "Fix auth")));
+        assert!(
+            stopped
+                .iter()
+                .any(|e| matches!(e, TelemetryEvent::AgentStopped { .. }))
+        );
+        assert!(stopped.iter().any(
+            |e| matches!(e, TelemetryEvent::AgentSummary { summary, .. } if summary == "Fix auth")
+        ));
 
         std::fs::remove_dir_all(&dir).ok();
     }

@@ -61,6 +61,23 @@ export class GitHubController {
     res.json({ data: { success: true } });
   };
 
+  listRepos = async (req: Request, res: Response): Promise<void> => {
+    const auth = getAuth(res);
+    const repos = await this.githubService.listUserRepos(auth.userId);
+    res.json({
+      data: {
+        repos: repos.map((r) => ({
+          id: r.id,
+          name: r.name,
+          fullName: r.full_name,
+          url: r.html_url,
+          private: r.private,
+          admin: r.permissions?.admin ?? false,
+        })),
+      },
+    });
+  };
+
   /**
    * CLI device-flow login: the collector presents a GitHub user access token
    * (obtained via the OAuth device flow) and receives a Hive session. Tokens

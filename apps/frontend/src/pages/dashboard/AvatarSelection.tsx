@@ -80,7 +80,7 @@ export function AvatarSelection() {
         onClick={() =>
           navigate(workspaceId ? `/dashboard/w/${workspaceId}` : "/dashboard")
         }
-        className="mb-6 inline-flex items-center gap-1.5 text-[13px] text-slate-400 transition-colors hover:text-white"
+        className="mb-6 inline-flex items-center gap-1.5 text-[13px] text-neutral-500 transition-colors hover:text-neutral-900"
       >
         <FiArrowLeft className="size-4" aria-hidden />
         Back
@@ -95,7 +95,7 @@ export function AvatarSelection() {
       {!hasDevice && !device.isLoading && (
         <Note tone="info">
           Start your Hive collector to join the spatial office. Run{" "}
-          <code className="rounded bg-white/5 px-1.5 py-0.5 font-mono text-[12px] text-white">
+          <code className="rounded bg-neutral-900/[0.06] px-1.5 py-0.5 font-mono text-[12px] text-neutral-800">
             hive start
           </code>{" "}
           on your machine.
@@ -111,13 +111,14 @@ export function AvatarSelection() {
                 key={opt.model}
                 type="button"
                 onClick={() => setSelected(opt.model)}
-                className={`group relative flex flex-col overflow-hidden rounded-2xl border transition-all ${
+                aria-pressed={isSelected}
+                className={`group relative flex flex-col overflow-hidden rounded-2xl border transition-all duration-200 ${
                   isSelected
-                    ? "border-white/40 bg-white/[0.05]"
-                    : "border-white/[0.07] bg-[#0d0f16] hover:border-white/20"
+                    ? "border-neutral-900/40 bg-white shadow-[0_0_0_1px_rgba(28,25,18,0.15),0_16px_40px_-16px_rgba(28,25,18,0.25)]"
+                    : "border-neutral-900/[0.1] bg-white hover:border-neutral-900/25 hover:bg-neutral-50"
                 }`}
               >
-                <div className="aspect-square w-full bg-gradient-to-b from-slate-700/40 to-slate-900/60">
+                <div className="aspect-square w-full bg-gradient-to-b from-neutral-100 to-neutral-300">
                   <Canvas
                     camera={{
                       position: [0, 1, 3.4],
@@ -145,12 +146,12 @@ export function AvatarSelection() {
                   </Canvas>
                 </div>
                 <div className="flex items-center justify-between gap-2 px-3 py-2.5 text-left">
-                  <span className="truncate text-[13px] font-medium text-white">
+                  <span className="truncate text-[13px] font-medium text-neutral-900">
                     {opt.name}
                   </span>
                   {isSelected && (
                     <FiCheck
-                      className="size-4 flex-shrink-0 text-emerald-400"
+                      className="size-4 flex-shrink-0 text-emerald-600"
                       aria-hidden
                     />
                   )}

@@ -47,7 +47,7 @@ Default to using Bun instead of Node.js.
 
 - **Middleware** (src/middleware/workspace.ts): `requireWorkspaceMember()` resolves the caller's membership for `:workspaceId` into `res.locals.membership` (`{ workspaceId, userId, role }`). `requireWorkspaceRole("admin", "owner")` gates routes on the role. Run after `requireAuth()`.
 - **Routes** (src/modules/workspaces/): `workspacesRouter` at `/api/v1/workspaces`, `invitesRouter` at `/api/v1/invites`. CRUD + members + invites; DELETE is owner-only, PATCH/invite/revoke are admin+.
-- Registration auto-provisions a personal org + "Main" workspace, so a fresh user already has one. `WorkspaceService.primaryOrgId` reuses the first `OrganizationMember` (or creates an org if none exists).
+- Registration auto-provisions a personal org only — fresh users start with **zero workspaces** and create or join one explicitly. `WorkspaceService.primaryOrgId` reuses the first `OrganizationMember` (or creates an org if none exists) when the user creates their first workspace.
 - Invites: raw token is hashed (`hashToken`) into `Invite.tokenHash` and shown once in the create response. `POST /api/v1/invites/:token/accept` requires the accepting user's email to match `Invite.email` (403 otherwise), upserts `OrganizationMember` + `WorkspaceMember`, and sets `acceptedAt` in a transaction. Status is derived: revoked → accepted → expired → pending.
 - Slug uniqueness is per-org (`@@unique([orgId, slug])`); a conflicting slug gets a random hex suffix.
 

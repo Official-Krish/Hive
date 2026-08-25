@@ -9,6 +9,7 @@ import type {
   UpdateMemberRoleInput,
   UpdateWorkspaceInput,
   WorkspaceMemberPublic,
+  WorkspaceSettings,
   WorkspaceSummary,
 } from "@hive/types";
 import {
@@ -85,12 +86,16 @@ export class WorkspaceService {
       orgId,
       input.slug ?? slugify(input.name),
     );
+    const webhookSecret =
+      input.webhookSecret ?? generateRandomToken(16).toLowerCase();
+
     const workspace = await prisma.workspace.create({
       data: {
         orgId,
         name: input.name,
         slug,
         description: input.description,
+        webhookSecret,
         members: { create: { userId, role: UserRole.OWNER } },
         privacySetting: { create: {} },
       },
@@ -99,11 +104,117 @@ export class WorkspaceService {
         name: true,
         slug: true,
         description: true,
+        webhookSecret: true,
         createdAt: true,
         _count: { select: { members: true } },
       },
     });
-    return this.summarize(workspace, UserRole.OWNER);
+
+    if (input.repositoryId) {
+      await this.assignRepositoryInternal(
+        userId,
+        workspace.id,
+        input.repositoryId,
+      );
+    }
+
+    const summary = this.summarize(workspace, UserRole.OWNER);
+    summary.webhookSecret = workspace.webhookSecret;
+    return summary;
+  }
+
+  async getSettings(workspaceId: string): Promise<WorkspaceSettings> {
+    const workspace = await prisma.workspace.findUnique({
+      where: { id: workspaceId },
+      include: {
+        repositories: {
+          where: { githubRepoId: { not: null } },
+          take: 1,
+          orderBy: { createdAt: "desc" },
+        },
+      },
+    });
+    if (!workspace) throw new NotFoundError("Workspace not found");
+
+    const repo = workspace.repositories[0];
+    return {
+      id: workspace.id,
+      name: workspace.name,
+      slug: workspace.slug,
+      description: workspace.description,
+      webhookSecretMasked: this.maskSecret(workspace.webhookSecret),
+      repository: repo
+        ? {
+            id: repo.id,
+            name: repo.name,
+            fullName: repo.githubFullName ?? repo.name,
+            url: repo.url,
+          }
+        : null,
+    };
+  }
+
+  async rotateSecret(
+    workspaceId: string,
+    userId: string,
+  ): Promise<{ secret: string }> {
+    await this.assertAdminOrOwner(workspaceId, userId);
+    const newSecret = generateRandomToken(16).toLowerCase();
+    await prisma.workspace.update({
+      where: { id: workspaceId },
+      data: { webhookSecret: newSecret },
+    });
+    return { secret: newSecret };
+  }
+
+  async assignRepository(
+    workspaceId: string,
+    userId: string,
+    repositoryId: string,
+  ): Promise<void> {
+    await this.assertAdminOrOwner(workspaceId, userId);
+    const ws = await prisma.workspace.findUnique({
+      where: { id: workspaceId },
+      select: { id: true },
+    });
+    if (!ws) throw new NotFoundError("Workspace not found");
+    await this.assignRepositoryInternal(userId, workspaceId, repositoryId);
+  }
+
+  private async assignRepositoryInternal(
+    userId: string,
+    workspaceId: string,
+    repositoryId: string,
+  ): Promise<void> {
+    const repo = await prisma.repository.findUnique({
+      where: { id: repositoryId },
+    });
+    if (!repo) throw new NotFoundError("Repository not found");
+
+    await prisma.repository.update({
+      where: { id: repo.id },
+      data: { workspaceId },
+    });
+  }
+
+  private async assertAdminOrOwner(
+    workspaceId: string,
+    userId: string,
+  ): Promise<void> {
+    const member = await prisma.workspaceMember.findUnique({
+      where: { workspaceId_userId: { workspaceId, userId } },
+    });
+    if (
+      !member ||
+      (member.role !== UserRole.OWNER && member.role !== UserRole.ADMIN)
+    ) {
+      throw new ForbiddenError("You don't have permission for this workspace");
+    }
+  }
+
+  private maskSecret(secret: string): string {
+    if (secret.length <= 8) return "****";
+    return `${secret.slice(0, 4)}…${secret.slice(-4)}`;
   }
 
   async update(

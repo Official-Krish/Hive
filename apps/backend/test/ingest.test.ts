@@ -21,6 +21,7 @@ async function setupCollector(): Promise<{
   workspaceId: string;
 }> {
   const email = await c.registerUser();
+  await c.createWorkspace("Ingest");
   const { token } = await c.registerDevice();
   const membership = await prisma.workspaceMember.findFirst({
     where: { user: { email } },
@@ -70,6 +71,7 @@ describe("ingest auth", () => {
   test("rejects a batch for a workspace the device user is not a member of", async () => {
     const { token } = await setupCollector();
     const otherEmail = await c.registerUser();
+    await c.createWorkspace("Other");
     const other = await prisma.workspaceMember.findFirst({
       where: { user: { email: otherEmail } },
       select: { workspaceId: true },

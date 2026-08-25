@@ -1,5 +1,5 @@
-use crate::config::{ensure_state_dir, API_URL, GITHUB_LOGIN_BASE, GITHUB_SCOPE};
-use anyhow::{bail, Context, Result};
+use crate::config::{API_URL, GITHUB_LOGIN_BASE, GITHUB_SCOPE, ensure_state_dir};
+use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io::{BufRead, Write};
@@ -106,10 +106,7 @@ struct DeviceCode {
 }
 
 /// POST the OAuth device-code endpoint and parse the pending authorization.
-async fn request_device_code(
-    client: &reqwest::Client,
-    client_id: &str,
-) -> Result<DeviceCode> {
+async fn request_device_code(client: &reqwest::Client, client_id: &str) -> Result<DeviceCode> {
     let resp = client
         .post(crate::config::github_device_code_url())
         .header("accept", "application/json")
@@ -218,10 +215,7 @@ async fn poll_for_token(
 
 /// POST the GitHub user token to the backend and exchange it for a Hive
 /// session. Tokens come back in the body because the CLI has no cookie jar.
-async fn exchange_github_token(
-    client: &reqwest::Client,
-    github_token: &str,
-) -> Result<Session> {
+async fn exchange_github_token(client: &reqwest::Client, github_token: &str) -> Result<Session> {
     let resp = client
         .post(format!("{API_URL}/api/v1/github/auth/token"))
         .json(&serde_json::json!({ "accessToken": github_token }))
@@ -244,7 +238,10 @@ async fn exchange_github_token(
         .context("login response missing an access token")?
         .to_string();
     let refresh_token = v["data"]["refreshToken"].as_str().unwrap_or("").to_string();
-    let email = v["data"]["user"]["email"].as_str().unwrap_or("").to_string();
+    let email = v["data"]["user"]["email"]
+        .as_str()
+        .unwrap_or("")
+        .to_string();
     Ok(Session {
         email,
         access_token,

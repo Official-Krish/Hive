@@ -41,12 +41,9 @@ impl Outbox {
     /// Returns `(id, batch_json, attempts)` rows oldest first.
     pub fn pending(&self) -> Result<Vec<(i64, String, i64)>> {
         let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare(
-            "SELECT id, batch, attempts FROM outbox ORDER BY created_at ASC",
-        )?;
-        let rows = stmt.query_map([], |row| {
-            Ok((row.get(0)?, row.get(1)?, row.get(2)?))
-        })?;
+        let mut stmt =
+            conn.prepare("SELECT id, batch, attempts FROM outbox ORDER BY created_at ASC")?;
+        let rows = stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?;
         let mut out = Vec::new();
         for row in rows {
             out.push(row?);

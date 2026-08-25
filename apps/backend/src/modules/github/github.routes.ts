@@ -19,5 +19,6 @@ githubRouter.post(
   controller.exchangeToken,
 );
 githubRouter.post("/disconnect", requireAuth(), controller.disconnect);
+githubRouter.get("/repos", requireAuth(), controller.listRepos);
 
 githubWebhookRouter.post("/", controller.webhook);

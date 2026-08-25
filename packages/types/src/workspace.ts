@@ -12,6 +12,12 @@ export const createWorkspaceInputSchema = z.object({
     .regex(/^[a-z0-9-]+$/, "Slug must be lowercase letters, numbers and dashes")
     .optional(),
   description: z.string().trim().max(500).optional(),
+  webhookSecret: z
+    .string()
+    .min(8, "Webhook secret must be at least 8 characters")
+    .max(128)
+    .optional(),
+  repositoryId: z.string().optional(),
 });
 export type CreateWorkspaceInput = z.infer<typeof createWorkspaceInputSchema>;
 
@@ -27,6 +33,12 @@ export const updateWorkspaceInputSchema = z.object({
   description: z.string().trim().max(500).nullable().optional(),
 });
 export type UpdateWorkspaceInput = z.infer<typeof updateWorkspaceInputSchema>;
+
+export const assignRepoInputSchema = z.object({
+  repositoryId: z.string().min(1),
+  webhookUrl: z.url().optional(),
+});
+export type AssignRepoInput = z.infer<typeof assignRepoInputSchema>;
 
 export const createInviteInputSchema = z.object({
   email: z.email("Invalid email").max(255),
@@ -60,6 +72,32 @@ export interface WorkspaceSummary {
   role: z.infer<typeof userRoleSchema>;
   memberCount: number;
   createdAt: string;
+  /** Full webhook secret, only present on create/rotate responses. */
+  webhookSecret?: string;
+}
+
+export interface WorkspaceSettings {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  /** Masked webhook secret for display, e.g. "hive_********...********". */
+  webhookSecretMasked: string;
+  repository: {
+    id: string;
+    name: string;
+    fullName: string;
+    url: string | null;
+  } | null;
+}
+
+export interface GitHubRepo {
+  id: number;
+  name: string;
+  fullName: string;
+  url: string | null;
+  private: boolean;
+  admin: boolean;
 }
 
 export interface WorkspaceMemberPublic {

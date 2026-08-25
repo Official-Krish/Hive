@@ -1,6 +1,6 @@
-use crate::config::{Config, API_URL};
+use crate::config::{API_URL, Config};
 use crate::session::{self, Session};
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 
 /// One-time setup: logs in (reusing a `hive login` session when present),
 /// registers a device, picks a workspace, and writes `~/.config/hive/config.toml`.
@@ -34,13 +34,30 @@ pub async fn run() -> Result<()> {
     if workspaces.is_empty() {
         let discovery = discover(&client, API_URL).await;
         println!("No workspaces found on your account.");
-        println!("Create or join a workspace from the web: {}", discovery.client_url);
+        println!(
+            "Create or join a workspace from the web: {}",
+            discovery.client_url
+        );
         println!("Then run `hive start` again.");
         return Ok(());
     }
     let workspace_id = pick_workspace(&workspaces)?;
 
     let discovery = discover(&client, API_URL).await;
+
+    // Best-effort retirement of the previously registered device so repair
+    // runs don't accumulate duplicate dashboard entries. A 404/403 (device
+    // already gone, or now signed in as a different account) is fine.
+    if let Ok(previous) = Config::load() {
+        let previous_id = previous.device_id.trim().to_string();
+        if !previous_id.is_empty() {
+            let _ = client
+                .delete(format!("{API_URL}/api/v1/devices/{previous_id}"))
+                .header("cookie", session::access_cookie(&session))
+                .send()
+                .await;
+        }
+    }
 
     let device_name = hostname();
     let device = client
@@ -53,7 +70,10 @@ pub async fn run() -> Result<()> {
     let status = device.status();
     let body: serde_json::Value = device.json().await.unwrap_or_default();
     let Some(device_id) = body["data"]["device"]["id"].as_str() else {
-        bail!("device creation failed (HTTP {status}): {}", session::pretty_error(&body.to_string()));
+        bail!(
+            "device creation failed (HTTP {status}): {}",
+            session::pretty_error(&body.to_string())
+        );
     };
     let Some(token) = body["data"]["token"].as_str() else {
         bail!("device token missing from response");
@@ -70,7 +90,10 @@ pub async fn run() -> Result<()> {
         ..Config::default()
     };
     config.save()?;
-    println!("✓ config written to {}", crate::config::config_path().display());
+    println!(
+        "✓ config written to {}",
+        crate::config::config_path().display()
+    );
     Ok(())
 }
 
@@ -113,11 +136,7 @@ async fn discover(client: &reqwest::Client, api_url: &str) -> Discovery {
         ws_url: derive_ws_fallback(api_url),
         client_url: api_url.to_string(),
     };
-    let Ok(resp) = client
-        .get(format!("{api_url}/api/v1/health"))
-        .send()
-        .await
-    else {
+    let Ok(resp) = client.get(format!("{api_url}/api/v1/health")).send().await else {
         return d;
     };
     let Ok(body) = resp.json::<serde_json::Value>().await else {
@@ -167,7 +186,10 @@ fn pick_workspace(items: &[serde_json::Value]) -> Result<String> {
     let Some(ws) = items.get(idx.saturating_sub(1)) else {
         bail!("invalid selection");
     };
-    let id = ws["id"].as_str().context("workspace missing id")?.to_string();
+    let id = ws["id"]
+        .as_str()
+        .context("workspace missing id")?
+        .to_string();
     Ok(id)
 }
 
@@ -183,8 +205,17 @@ mod tests {
 
     #[test]
     fn derives_ws_url() {
-        assert_eq!(derive_ws_fallback("http://localhost:4000"), "ws://localhost:4001/");
-        assert_eq!(derive_ws_fallback("https://hive.example.com"), "wss://hive.example.com/");
-        assert_eq!(ws_url_for("http://localhost:3000", 4001).as_deref(), Some("ws://localhost:4001/"));
+        assert_eq!(
+            derive_ws_fallback("http://localhost:4000"),
+            "ws://localhost:4001/"
+        );
+        assert_eq!(
+            derive_ws_fallback("https://hive.example.com"),
+            "wss://hive.example.com/"
+        );
+        assert_eq!(
+            ws_url_for("http://localhost:3000", 4001).as_deref(),
+            Some("ws://localhost:4001/")
+        );
     }
 }
