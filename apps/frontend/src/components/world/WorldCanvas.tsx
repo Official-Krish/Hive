@@ -1,5 +1,5 @@
-import { useCallback, useState } from "react";
-import { Canvas } from "@react-three/fiber";
+import { useCallback, useRef, useState } from "react";
+import { Canvas, useThree } from "@react-three/fiber";
 import { Preload } from "@react-three/drei";
 import * as THREE from "three";
 import { OfficeBuilding } from "./office/OfficeBuilding";
@@ -10,7 +10,9 @@ import {
   PLAYER_COLLIDERS,
   CAMERA_COLLIDERS,
   SPAWN,
+  STEP_UP,
   roomAt,
+  supportAt,
 } from "./office/layout";
 import { AVATARS } from "./AvatarConfig";
 
@@ -18,22 +20,23 @@ const AVATAR_OPTIONS = [...AVATARS.male, ...AVATARS.female];
 const DEFAULT_AVATAR =
   AVATAR_OPTIONS[0]?.model ?? "/avatars/male/hive_male_01.glb";
 
+/** TEMP dev probe: exposes the renderer + scene for perf measurement. */
+function PerfProbe() {
+  const { gl, scene, camera } = useThree();
+  (window as unknown as Record<string, unknown>).__three = { gl, scene, camera };
+  return null;
+}
+
 export function WorldCanvas() {
   // Camera yaw starts at 0 to match ThirdPersonCamera (south of player, facing -Z).
   const [cameraYaw, setCameraYaw] = useState(0);
-  const [playerPos, setPlayerPos] = useState<[number, number, number]>([
-    ...SPAWN,
-  ]);
   const [currentRoom, setCurrentRoom] = useState("Courtyard");
   const [selectedAvatar, setSelectedAvatar] = useState<string>(DEFAULT_AVATAR);
+  const playerGroupRef = useRef<THREE.Group>(null);
 
-  const handlePositionUpdate = useCallback(
-    (pos: [number, number, number], room: string) => {
-      setPlayerPos(pos);
-      setCurrentRoom((prev) => (prev === room ? prev : room));
-    },
-    [],
-  );
+  const handleRoomChange = useCallback((room: string) => {
+    setCurrentRoom((prev) => (prev === room ? prev : room));
+  }, []);
 
   return (
     <div className="relative w-full h-screen bg-[#0b1017] overflow-hidden font-sans select-none">
@@ -95,7 +98,7 @@ export function WorldCanvas() {
       {/* 3D world */}
       <Canvas
         shadows
-        dpr={[1, 1.75]}
+        dpr={[1, 1.25]}
         camera={{ position: [0, 3, 46], fov: 50, near: 0.1, far: 900 }}
         gl={{
           antialias: true,
@@ -112,6 +115,7 @@ export function WorldCanvas() {
         <OfficeBuilding />
 
         <PlayerController
+          playerRef={playerGroupRef}
           cameraYaw={cameraYaw}
           obstacles={PLAYER_COLLIDERS}
           spawn={SPAWN}
@@ -119,17 +123,20 @@ export function WorldCanvas() {
           name="You"
           status="Online"
           badgeColor="bg-emerald-400"
-          onPositionUpdate={handlePositionUpdate}
+          onRoomChange={handleRoomChange}
           roomAt={roomAt}
+          groundAt={supportAt}
+          stepUp={STEP_UP}
         />
 
         <ThirdPersonCamera
-          targetPosition={playerPos}
+          targetRef={playerGroupRef}
           colliders={CAMERA_COLLIDERS}
           onYawChange={setCameraYaw}
         />
 
         <Preload all />
+        <PerfProbe />
       </Canvas>
     </div>
   );

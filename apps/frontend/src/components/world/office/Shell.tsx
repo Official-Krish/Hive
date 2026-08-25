@@ -1,6 +1,5 @@
 import { useMemo } from "react";
 import * as THREE from "three";
-import { MeshReflectorMaterial } from "@react-three/drei";
 import {
   WALLS,
   ROOMS,
@@ -10,6 +9,10 @@ import {
   ROOF_T,
   PARAPET_H,
   CEILING_Y,
+  CEILING_Y2,
+  L2_Y,
+  SLAB_T,
+  MEZZ,
   SKYLIGHT,
   COLUMNS,
   COLUMN_W,
@@ -30,14 +33,17 @@ const RZ1 = maxZ + OVER;
 const ROOF_Y = EXT_H + ROOF_T / 2;
 const ROOF_TOP = EXT_H + ROOF_T;
 
-/** Lobby is double-height (open to the skylight); the wings have a ceiling. */
-const LOBBY_Z = 12;
+/** Lobby is triple-height (open to the skylight); the wings are two storeys. */
+const LOBBY_Z = MEZZ.z0;
+/** Underside of the upper floor slab. */
+const SOFFIT_Y = L2_Y - SLAB_T;
 
 /**
- * One glazed wall segment: tinted pane, graphite head/sill rails, vertical
- * mullions every ~3m and a spandrel band at the sill. Uses the cheap (non
- * transmissive) glass so the facade stays one draw pass instead of one
- * scene re-render per pane.
+ * One glazed wall segment. Tall segments (the two-storey facade) are drawn as a
+ * stack of curtain-wall bands — one per floor — each with its own spandrel at
+ * the slab line, head and sill rails, and shared vertical mullions running the
+ * full height. Uses the cheap (non-transmissive) glass so the whole facade
+ * stays one draw pass instead of one scene re-render per pane.
  */
 function GlassSeg({ w }: { w: Wall }) {
   const horizontal = Math.abs(w.z1 - w.z0) < 1e-6;
@@ -45,39 +51,73 @@ function GlassSeg({ w }: { w: Wall }) {
   const cx = (w.x0 + w.x1) / 2;
   const cz = (w.z0 + w.z1) / 2;
   const rotY = horizontal ? 0 : Math.PI / 2;
+  const base = w.base ?? 0;
 
   const mullions = useMemo(() => {
     const posts: number[] = [];
-    const count = Math.max(1, Math.round(len / 3));
+    const count = Math.max(1, Math.round(len / 2.7));
     for (let i = 0; i <= count; i++) posts.push(-len / 2 + (len * i) / count);
     return posts;
   }, [len]);
 
+  // Floor lines within this segment, measured from its own base.
+  const bands = useMemo(() => {
+    const cuts = [0];
+    if (base === 0 && w.h > L2_Y + 1.5) cuts.push(L2_Y);
+    cuts.push(w.h);
+    const out: { y0: number; y1: number }[] = [];
+    for (let i = 0; i < cuts.length - 1; i++) {
+      const y0 = cuts[i] ?? 0;
+      const y1 = cuts[i + 1] ?? w.h;
+      out.push({ y0, y1 });
+    }
+    return out;
+  }, [base, w.h]);
+
+  const thin = w.h < 1.4; // balustrade rather than a wall
+
   return (
-    <group position={[cx, w.h / 2, cz]} rotation={[0, rotY, 0]}>
-      <mesh>
-        <boxGeometry args={[len, w.h, 0.06]} />
-        <primitive object={M.glassCheap} attach="material" />
-      </mesh>
-      {/* head + sill rails */}
-      {[w.h / 2 - 0.06, -w.h / 2 + 0.06].map((y, i) => (
-        <mesh key={i} position={[0, y, 0]}>
-          <boxGeometry args={[len, 0.12, 0.14]} />
-          <primitive object={M.mullion} attach="material" />
-        </mesh>
-      ))}
-      {/* opaque spandrel above the sill */}
-      <mesh position={[0, -w.h / 2 + 0.28, 0]}>
-        <boxGeometry args={[len, 0.32, 0.13]} />
-        <primitive object={M.blackAnodized} attach="material" />
-      </mesh>
-      {/* vertical mullions */}
+    <group position={[cx, base, cz]} rotation={[0, rotY, 0]}>
+      {bands.map(({ y0, y1 }, i) => {
+        const bh = y1 - y0;
+        const cy = (y0 + y1) / 2;
+        return (
+          <group key={i} position={[0, cy, 0]}>
+            <mesh>
+              <boxGeometry args={[len, bh, 0.06]} />
+              <primitive object={M.glassCheap} attach="material" />
+            </mesh>
+            {/* head + sill rails */}
+            {[bh / 2 - 0.06, -bh / 2 + 0.06].map((y, k) => (
+              <mesh key={k} position={[0, y, 0]}>
+                <boxGeometry args={[len, 0.12, 0.14]} />
+                <primitive object={M.mullion} attach="material" />
+              </mesh>
+            ))}
+            {/* opaque spandrel hiding the slab edge / sill */}
+            {!thin && (
+              <mesh position={[0, -bh / 2 + 0.34, 0]}>
+                <boxGeometry args={[len, 0.42, 0.13]} />
+                <primitive object={M.blackAnodized} attach="material" />
+              </mesh>
+            )}
+          </group>
+        );
+      })}
+      {/* vertical mullions run the full segment height */}
       {mullions.map((mx, i) => (
-        <mesh key={i} position={[mx, 0, 0]}>
+        <mesh key={i} position={[mx, w.h / 2, 0]}>
           <boxGeometry args={[0.09, w.h, 0.12]} />
           <primitive object={M.mullion} attach="material" />
         </mesh>
       ))}
+      {/* capping rail — reads as a handrail on balustrades */}
+      {thin && (
+        <mesh position={[0, w.h + 0.03, 0]}>
+          <boxGeometry args={[len + 0.1, 0.07, 0.13]} />
+          <primitive object={M.metalBrushed} attach="material" />
+        </mesh>
+      )}
     </group>
   );
 }
@@ -88,6 +128,7 @@ function SolidSeg({ w }: { w: Wall }) {
   const len = Math.hypot(w.x1 - w.x0, w.z1 - w.z0);
   const cx = (w.x0 + w.x1) / 2;
   const cz = (w.z0 + w.z1) / 2;
+  const base = w.base ?? 0;
   const size: [number, number, number] = horizontal
     ? [len, w.h, w.t]
     : [w.t, w.h, len];
@@ -95,7 +136,7 @@ function SolidSeg({ w }: { w: Wall }) {
     horizontal ? [len, h, w.t + pad] : [w.t + pad, h, len];
 
   return (
-    <group position={[cx, 0, cz]}>
+    <group position={[cx, base, cz]}>
       <mesh position={[0, w.h / 2, 0]} castShadow receiveShadow>
         <boxGeometry args={size} />
         <primitive object={M.wall} attach="material" />
@@ -112,9 +153,21 @@ function SolidSeg({ w }: { w: Wall }) {
           <primitive object={M.blackAnodized} attach="material" />
         </mesh>
       )}
+      {/* Floor-line band on the two-storey perimeter, so the facade reads as
+          two storeys from outside rather than one very tall room. */}
+      {w.h > L2_Y + 1.5 && base === 0 && (
+        <mesh position={[0, L2_Y - 0.2, 0]}>
+          <boxGeometry args={trim(0.5, 0.07)} />
+          <primitive object={M.metalBrushed} attach="material" />
+        </mesh>
+      )}
     </group>
   );
 }
+
+/** Export the segment renderers so the level 2 layer draws identical walls. */
+export { GlassSeg, SolidSeg };
+
 
 /** A flat roof panel (used four times to leave the skylight opening). */
 function RoofPanel({
@@ -140,20 +193,24 @@ function RoofPanel({
   );
 }
 
-/** Structural column with a base and a capital collar. */
+/** Structural column, full height through both storeys, with floor collars. */
 function Column({ x, z }: { x: number; z: number }) {
-  const h = z > LOBBY_Z ? EXT_H : CEILING_Y;
   return (
     <group position={[x, 0, z]}>
-      <mesh position={[0, h / 2, 0]} castShadow receiveShadow>
-        <boxGeometry args={[COLUMN_W, h, COLUMN_W]} />
+      <mesh position={[0, EXT_H / 2, 0]} castShadow receiveShadow>
+        <boxGeometry args={[COLUMN_W, EXT_H, COLUMN_W]} />
         <primitive object={M.wallAccent} attach="material" />
       </mesh>
       <mesh position={[0, 0.05, 0]}>
         <boxGeometry args={[COLUMN_W + 0.12, 0.1, COLUMN_W + 0.12]} />
         <primitive object={M.baseboard} attach="material" />
       </mesh>
-      <mesh position={[0, h - 0.08, 0]}>
+      {/* collar at the upper floor line */}
+      <mesh position={[0, L2_Y + 0.05, 0]}>
+        <boxGeometry args={[COLUMN_W + 0.14, 0.18, COLUMN_W + 0.14]} />
+        <primitive object={M.metalBrushed} attach="material" />
+      </mesh>
+      <mesh position={[0, EXT_H - 0.08, 0]}>
         <boxGeometry args={[COLUMN_W + 0.14, 0.16, COLUMN_W + 0.14]} />
         <primitive object={M.metalBrushed} attach="material" />
       </mesh>
@@ -215,21 +272,14 @@ export function Shell() {
           (lobbyRoom.rect[2] + lobbyRoom.rect[3]) / 2,
         ]}
         rotation={[-Math.PI / 2, 0, 0]}
+        receiveShadow
       >
         <planeGeometry args={[lobbyW, lobbyD]} />
-        <MeshReflectorMaterial
+        <meshStandardMaterial
           map={lobbyMap}
           color="#ded9ce"
-          resolution={512}
-          mirror={0.4}
-          mixStrength={1.15}
-          mixBlur={1}
-          blur={[420, 130]}
-          depthScale={1.1}
-          minDepthThreshold={0.4}
-          maxDepthThreshold={1.4}
-          roughness={0.42}
-          metalness={0.32}
+          roughness={0.3}
+          metalness={0.15}
         />
       </mesh>
 
@@ -248,15 +298,30 @@ export function Shell() {
       ))}
 
       {/* --- Entrance ------------------------------------------------------- */}
-      {/* Header over the door gap */}
-      <mesh position={[0, EXT_H - 0.6, maxZ]} castShadow>
-        <boxGeometry args={[DOOR.x1 - DOOR.x0 + 0.8, 1.2, 0.44]} />
+      {/* Header over the door gap (door clear height 3.0 m) */}
+      <mesh position={[0, 3.3, maxZ]} castShadow>
+        <boxGeometry args={[DOOR.x1 - DOOR.x0 + 0.8, 0.6, 0.44]} />
         <primitive object={M.wall} attach="material" />
+      </mesh>
+      {/* Glazed transom filling the facade above the entrance */}
+      <mesh position={[0, (3.6 + EXT_H) / 2, maxZ]}>
+        <boxGeometry args={[DOOR.x1 - DOOR.x0, EXT_H - 3.6, 0.06]} />
+        <primitive object={M.glassCheap} attach="material" />
+      </mesh>
+      {[-2, 0, 2].map((x) => (
+        <mesh key={x} position={[x, (3.6 + EXT_H) / 2, maxZ]}>
+          <boxGeometry args={[0.09, EXT_H - 3.6, 0.12]} />
+          <primitive object={M.mullion} attach="material" />
+        </mesh>
+      ))}
+      <mesh position={[0, L2_Y - 0.1, maxZ]}>
+        <boxGeometry args={[DOOR.x1 - DOOR.x0, 0.36, 0.13]} />
+        <primitive object={M.blackAnodized} attach="material" />
       </mesh>
       {/* Door jambs */}
       {[DOOR.x0 - 0.16, DOOR.x1 + 0.16].map((x, i) => (
-        <mesh key={i} position={[x, (EXT_H - 1.2) / 2, maxZ]} castShadow>
-          <boxGeometry args={[0.32, EXT_H - 1.2, 0.44]} />
+        <mesh key={i} position={[x, 1.5, maxZ]} castShadow>
+          <boxGeometry args={[0.32, 3.0, 0.44]} />
           <primitive object={M.mullion} attach="material" />
         </mesh>
       ))}
@@ -276,16 +341,16 @@ export function Shell() {
             <primitive object={M.stripWarm} attach="material" />
           </mesh>
         ))}
-        {/* struts back to the facade */}
+        {/* tension rods back up to the facade */}
         {[-7.2, 7.2].map((x) => (
-          <mesh key={x} position={[x, 4.3, -1.2]} rotation={[0.5, 0, 0]}>
-            <boxGeometry args={[0.1, 0.1, 3.2]} />
-            <primitive object={M.mullion} attach="material" />
+          <mesh key={x} position={[x, 5.3, -1.2]} rotation={[0.62, 0, 0]}>
+            <boxGeometry args={[0.08, 0.08, 4.6]} />
+            <primitive object={M.metalBrushed} attach="material" />
           </mesh>
         ))}
       </group>
 
-      {/* --- Ceilings ------------------------------------------------------- */}
+      {/* --- Level 1 ceiling + upper floor slab ----------------------------- */}
       {/* Suspended ceiling over the wings + corridor */}
       <mesh
         position={[0, CEILING_Y, (minZ + LOBBY_Z) / 2]}
@@ -295,13 +360,82 @@ export function Shell() {
         <planeGeometry args={[width, LOBBY_Z - minZ]} />
         <primitive object={M.ceiling} attach="material" />
       </mesh>
-      {/* Bulkhead where the low ceiling meets the double-height lobby */}
-      <mesh position={[0, (CEILING_Y + ROOF_TOP) / 2, LOBBY_Z]} castShadow>
-        <boxGeometry args={[width, ROOF_TOP - CEILING_Y, 0.5]} />
+      {/* Plenum between the ceiling and the slab soffit, so looking up the
+          atrium edge you see a real floor thickness rather than a paper plane. */}
+      <mesh
+        position={[0, (CEILING_Y + SOFFIT_Y) / 2, LOBBY_Z]}
+        castShadow
+        receiveShadow
+      >
+        <boxGeometry args={[width, SOFFIT_Y - CEILING_Y, 0.4]} />
+        <primitive object={M.plenum} attach="material" />
+      </mesh>
+      {/* Upper floor slab: wings + corridor, then the mezzanine band, then the
+          stair arrival balcony. The rest of the lobby stays open as an atrium. */}
+      {(
+        [
+          [minX, maxX, minZ, MEZZ.z0],
+          [MEZZ.x0, MEZZ.x1, MEZZ.z0, MEZZ.z1],
+          [-19, -14, 15.6, 20.6],
+        ] as [number, number, number, number][]
+      ).map(([x0, x1, z0, z1], i) => (
+        <group key={i}>
+          <mesh
+            position={[(x0 + x1) / 2, SOFFIT_Y + SLAB_T / 2, (z0 + z1) / 2]}
+            castShadow
+            receiveShadow
+          >
+            <boxGeometry args={[x1 - x0, SLAB_T, z1 - z0]} />
+            <primitive object={M.concrete} attach="material" />
+          </mesh>
+          {/* soffit finish, so the underside reads as a plastered ceiling */}
+          <mesh
+            position={[(x0 + x1) / 2, SOFFIT_Y - 0.01, (z0 + z1) / 2]}
+            rotation={[Math.PI / 2, 0, 0]}
+            receiveShadow
+          >
+            <planeGeometry args={[x1 - x0, z1 - z0]} />
+            <primitive object={M.ceilingPanel} attach="material" />
+          </mesh>
+        </group>
+      ))}
+      {/* Brushed fascia along the atrium slab edge */}
+      <mesh position={[0, SOFFIT_Y + SLAB_T / 2, MEZZ.z1 + 0.03]}>
+        <boxGeometry args={[width, SLAB_T + 0.06, 0.08]} />
+        <primitive object={M.metalBrushed} attach="material" />
+      </mesh>
+      {/* Cove light washing down from the mezzanine edge into the atrium */}
+      <mesh position={[0, SOFFIT_Y - 0.06, MEZZ.z1 - 0.2]}>
+        <boxGeometry args={[width - 2, 0.08, 0.12]} />
+        <primitive object={M.stripWarm} attach="material" />
+      </mesh>
+
+      {/* --- Level 2 ceiling ------------------------------------------------ */}
+      <mesh
+        position={[0, CEILING_Y2, (minZ + LOBBY_Z) / 2]}
+        rotation={[Math.PI / 2, 0, 0]}
+        receiveShadow
+      >
+        <planeGeometry args={[width, LOBBY_Z - minZ]} />
+        <primitive object={M.ceiling} attach="material" />
+      </mesh>
+      <mesh
+        position={[0, CEILING_Y2, (MEZZ.z0 + MEZZ.z1) / 2]}
+        rotation={[Math.PI / 2, 0, 0]}
+        receiveShadow
+      >
+        <planeGeometry args={[width, MEZZ.z1 - MEZZ.z0]} />
+        <primitive object={M.ceiling} attach="material" />
+      </mesh>
+      {/* Bulkhead where the level 2 ceiling meets the open atrium */}
+      <mesh
+        position={[0, (CEILING_Y2 + ROOF_TOP) / 2, MEZZ.z1]}
+        castShadow
+      >
+        <boxGeometry args={[width, ROOF_TOP - CEILING_Y2, 0.5]} />
         <primitive object={M.wall} attach="material" />
       </mesh>
-      {/* Cove light washing the bulkhead face */}
-      <mesh position={[0, CEILING_Y + 0.1, LOBBY_Z - 0.3]}>
+      <mesh position={[0, CEILING_Y2 + 0.1, MEZZ.z1 - 0.3]}>
         <boxGeometry args={[width - 2, 0.08, 0.12]} />
         <primitive object={M.stripWarm} attach="material" />
       </mesh>

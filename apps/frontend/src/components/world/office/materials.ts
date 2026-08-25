@@ -775,6 +775,31 @@ export const M = {
     roughness: 0.35,
     metalness: 0.35,
   }),
+
+  // Neighbouring blocks: precast frame, ground-floor soffit, lit signage.
+  precast: new THREE.MeshStandardMaterial({
+    color: "#b7b2a7",
+    roughness: 0.82,
+    metalness: 0.04,
+    roughnessMap: rmap ?? undefined,
+  }),
+  precastDark: new THREE.MeshStandardMaterial({
+    color: "#6f6a63",
+    roughness: 0.8,
+    metalness: 0.06,
+  }),
+  signBox: new THREE.MeshStandardMaterial({
+    color: "#131820",
+    emissive: "#7dd3fc",
+    emissiveIntensity: 1.5,
+    roughness: 0.4,
+  }),
+  signBoxWarm: new THREE.MeshStandardMaterial({
+    color: "#1a1410",
+    emissive: "#ffc47a",
+    emissiveIntensity: 1.5,
+    roughness: 0.4,
+  }),
 };
 
 // ============================================================================
@@ -917,6 +942,108 @@ export function floorFor(
     roughnessMap: rmap,
   });
   floorCache.set(key, mat);
+  return mat;
+}
+
+/**
+ * Curtain-wall panel for the neighbouring blocks: a 4-bay × 3-storey tile with
+ * real mullions, transoms, a spandrel band per floor and a scatter of lit
+ * offices. Doubles as its own emissiveMap so the lit bays glow.
+ */
+function facadeTex(seed: number, tint: string, lit: number) {
+  const cols = 4;
+  const rows = 3;
+  return tex(
+    512,
+    [1, 1],
+    (ctx, s, rnd) => {
+      ctx.fillStyle = "#232930";
+      ctx.fillRect(0, 0, s, s);
+      const cw = s / cols;
+      const rh = s / rows;
+      for (let c = 0; c < cols; c++) {
+        for (let r = 0; r < rows; r++) {
+          const x = c * cw;
+          const y = r * rh;
+          // Opaque spandrel band under each floor plate.
+          ctx.fillStyle = r % 2 === 0 ? "#3d444d" : "#363d45";
+          ctx.fillRect(x + 2, y + rh * 0.72, cw - 4, rh * 0.26);
+          // Vision glass: lit bays read warm/cool, dark bays reflect the sky.
+          const on = rnd() < lit;
+          const warm = rnd() < 0.55;
+          const g = ctx.createLinearGradient(x, y, x, y + rh * 0.7);
+          if (on) {
+            g.addColorStop(0, warm ? "#ffe9c4" : "#dbeaf8");
+            g.addColorStop(1, warm ? "#c9a878" : "#9db4c8");
+          } else {
+            g.addColorStop(0, tint);
+            g.addColorStop(1, "#1b222a");
+          }
+          ctx.fillStyle = g;
+          ctx.fillRect(x + 2, y + 2, cw - 4, rh * 0.68);
+          // Centre mullion + frame.
+          ctx.fillStyle = "rgba(20,24,29,0.85)";
+          ctx.fillRect(x + cw * 0.49, y + 2, 3, rh * 0.68);
+          ctx.strokeStyle = "#15191e";
+          ctx.lineWidth = 3;
+          ctx.strokeRect(x + 1.5, y + 1.5, cw - 3, rh - 3);
+          // Faint sky streak so the glass isn't dead flat.
+          ctx.fillStyle = "rgba(255,255,255,0.07)";
+          ctx.fillRect(x + 4, y + 4 + rh * 0.1 * rnd(), cw - 8, rh * 0.06);
+        }
+      }
+    },
+    { srgb: true, seed },
+  );
+}
+
+const facadeMaps = [
+  facadeTex(211, "#5c7690", 0.3),
+  facadeTex(307, "#48607a", 0.2),
+  facadeTex(419, "#6b8399", 0.38),
+];
+
+const facadeCache = new Map<string, THREE.MeshStandardMaterial>();
+
+/** One curtain-wall bay is 2.7 m wide by 3.6 m tall, everywhere. */
+const BAY_W = 2.7 * 4;
+const BAY_H = 3.6 * 3;
+
+/**
+ * Facade material for one neighbouring elevation, with the repeat derived from
+ * the elevation size so bay width and floor height stay constant across the
+ * whole neighbourhood.
+ */
+export function facadeFor(
+  style: 0 | 1 | 2,
+  width: number,
+  height: number,
+): THREE.MeshStandardMaterial {
+  const key = `${style}|${width.toFixed(1)}|${height.toFixed(1)}`;
+  const hit = facadeCache.get(key);
+  if (hit) return hit;
+
+  const src = facadeMaps[style] ?? facadeMaps[0];
+  let map: THREE.Texture | undefined;
+  if (src) {
+    map = src.clone();
+    map.needsUpdate = true;
+    map.wrapS = map.wrapT = THREE.RepeatWrapping;
+    map.repeat.set(
+      Math.max(1, Math.round(width / BAY_W)),
+      Math.max(1, Math.round(height / BAY_H)),
+    );
+  }
+  const mat = new THREE.MeshStandardMaterial({
+    color: "#9aa5b1",
+    map,
+    emissive: "#ffffff",
+    emissiveMap: map,
+    emissiveIntensity: 0.28,
+    roughness: 0.34,
+    metalness: 0.36,
+  });
+  facadeCache.set(key, mat);
   return mat;
 }
 

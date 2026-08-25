@@ -70,7 +70,8 @@ export default function Avatar({
       if (m.isMesh) {
         m.castShadow = true;
         m.receiveShadow = false;
-        m.frustumCulled = false; // skinned bounds go stale while animating
+        if (m.geometry) m.geometry.computeBoundingSphere();
+        m.frustumCulled = true;
       }
     });
     if (!skinnedMesh) return;

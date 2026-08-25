@@ -4,7 +4,8 @@ import * as THREE from "three";
 import type { Box3Spec } from "./office/layout";
 
 interface ThirdPersonCameraProps {
-  targetPosition: [number, number, number];
+  targetPosition?: [number, number, number];
+  targetRef?: React.RefObject<THREE.Object3D | null>;
   colliders?: Box3Spec[];
   onYawChange?: (yaw: number) => void;
 }
@@ -22,6 +23,7 @@ const CAM_MARGIN = 0.35; // keep the lens off the wall
  */
 export function ThirdPersonCamera({
   targetPosition,
+  targetRef,
   colliders = [],
   onYawChange,
 }: ThirdPersonCameraProps) {
@@ -33,7 +35,9 @@ export function ThirdPersonCamera({
   const draggingRef = useRef(false);
   const prevMouse = useRef({ x: 0, y: 0 });
 
-  const currentTarget = useRef(new THREE.Vector3(...targetPosition));
+  const currentTarget = useRef(
+    new THREE.Vector3(...(targetPosition ?? [0, 0, 0])),
+  );
   const smoothDist = useRef(DEFAULT_DIST);
 
   useEffect(() => {
@@ -122,11 +126,19 @@ export function ThirdPersonCamera({
   };
 
   useFrame((_, delta) => {
-    const desiredTarget = new THREE.Vector3(
-      targetPosition[0],
-      targetPosition[1] + TARGET_HEIGHT,
-      targetPosition[2],
-    );
+    let tx = 0;
+    let ty = 0;
+    let tz = 0;
+    if (targetRef?.current) {
+      tx = targetRef.current.position.x;
+      ty = targetRef.current.position.y;
+      tz = targetRef.current.position.z;
+    } else if (targetPosition) {
+      tx = targetPosition[0];
+      ty = targetPosition[1];
+      tz = targetPosition[2];
+    }
+    const desiredTarget = new THREE.Vector3(tx, ty + TARGET_HEIGHT, tz);
     currentTarget.current.lerp(desiredTarget, Math.min(1, delta * 10));
     const target = currentTarget.current;
 

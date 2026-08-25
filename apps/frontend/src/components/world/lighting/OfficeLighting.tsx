@@ -1,5 +1,5 @@
 import { Environment, Lightformer, ContactShadows } from "@react-three/drei";
-import { INTERIOR, ACCENT_LIGHTS } from "../office/layout";
+import { INTERIOR, ACCENT_LIGHTS, ACCENT_LIGHTS_L2 } from "../office/layout";
 
 const SUN: [number, number, number] = [60, 80, -40];
 
@@ -77,7 +77,7 @@ export function OfficeLighting() {
         intensity={2.6}
         color="#fff4e2"
         castShadow
-        shadow-mapSize={[2048, 2048]}
+        shadow-mapSize={[1024, 1024]}
         shadow-bias={-0.0004}
         shadow-normalBias={0.02}
       >
@@ -87,8 +87,8 @@ export function OfficeLighting() {
         />
       </directionalLight>
 
-      {/* Room accent pools (no shadows — kept cheap) */}
-      {ACCENT_LIGHTS.map((l, i) => (
+      {/* Room accent pools (no shadows — kept cheap), both storeys */}
+      {[...ACCENT_LIGHTS, ...ACCENT_LIGHTS_L2].map((l, i) => (
         <pointLight
           key={i}
           position={l.position}
@@ -99,14 +99,15 @@ export function OfficeLighting() {
         />
       ))}
 
-      {/* Soft contact grounding across the interior floor */}
+      {/* Soft contact grounding across the interior floor (baked once for performance) */}
       <ContactShadows
         position={[cx, 0.02, cz]}
         scale={Math.max(maxX - minX, maxZ - minZ) + 6}
-        resolution={1024}
+        resolution={512}
+        frames={1}
         far={3.2}
-        blur={2.6}
-        opacity={0.5}
+        blur={2.0}
+        opacity={0.4}
         color="#1a1712"
       />
     </>

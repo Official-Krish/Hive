@@ -2,6 +2,8 @@ import { useMemo } from "react";
 import { Instances, Instance } from "@react-three/drei";
 import {
   CEILING_RUNS,
+  CEILING_RUNS_L2,
+  POD_LIGHTS,
   LOBBY_PENDANTS,
   CAFE_PENDANTS,
   BAFFLES,
@@ -229,8 +231,8 @@ export function Fittings() {
 
   return (
     <group name="fittings">
-      {/* Recessed ceiling runs (wings + corridor) */}
-      {CEILING_RUNS.map((r, i) => (
+      {/* Recessed ceiling runs — level 1 wings + corridor, then level 2 */}
+      {[...CEILING_RUNS, ...CEILING_RUNS_L2].map((r, i) => (
         <CeilingRun
           key={i}
           position={r.position}
@@ -240,14 +242,25 @@ export function Fittings() {
         />
       ))}
 
-      {/* Lobby pendants dropped from the roof soffit */}
+      {/* One recessed strip inside each glazed pod */}
+      {POD_LIGHTS.map((p, i) => (
+        <CeilingRun
+          key={`pod${i}`}
+          position={p.position}
+          length={p.length}
+          axis="x"
+          warm={p.warm}
+        />
+      ))}
+
+      {/* Lobby pendants dropped into the triple-height atrium */}
       {LOBBY_PENDANTS.map((p, i) => (
         <Pendant
           key={`lp${i}`}
           position={p}
           top={roofUnder - 0.05}
-          drop={1.9}
-          radius={0.34}
+          drop={3.4}
+          radius={0.42}
           warm
         />
       ))}

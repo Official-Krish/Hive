@@ -10,18 +10,141 @@ import {
   DOOR,
   INTERIOR,
   HEDGE_H,
+  NEIGHBORS,
+  STREETS,
+  type Neighbor,
   type Wall,
 } from "./layout";
-import { M, floorFor } from "./materials";
+import { M, floorFor, facadeFor } from "./materials";
 
 const SUN: [number, number, number] = [60, 40, -30];
 
-// The paved plaza sits inside a ring of grass, a service road and a sidewalk,
-// so the world reads as a real city block instead of a floating platform.
-const GRASS_PAD = 26; // grass beyond the courtyard edge
-const ROAD_Z0 = COURTYARD.maxZ + 14; // service road, south of the plaza
-const ROAD_W = 9;
+// The paved plaza sits inside a trimmed planting band, then the streets and the
+// neighbouring city block, so the world reads as a real block, not a platform.
+const GRASS_PAD = 9; // planting band hugging the plaza edge
+const ROAD_Z0 = STREETS.frontZ; // service road, south of the plaza
+const ROAD_W = STREETS.width;
+const SIDE_X = STREETS.sideX; // north–south side streets
 const FAR = 900; // far ground extent
+
+/** Ground-floor storey height shared by every neighbouring block. */
+const PLINTH_H = 4.6;
+
+/**
+ * One facade-only neighbour: precast plinth, curtain-walled mass with an
+ * optional upper setback, coping, a canopied entrance with a lit sign and a
+ * little rooftop plant. Sealed — there is no interior and no collider, the
+ * blocks all sit beyond the courtyard barriers.
+ */
+function Block({ n }: { n: Neighbor }) {
+  const upperY = n.setback > 0 ? n.h * n.setbackAt : n.h;
+  const bodyH = upperY - PLINTH_H;
+  const facade = facadeFor(n.style, (n.w + n.d) / 2, bodyH);
+  const topH = n.h - upperY;
+  const topFacade =
+    n.setback > 0
+      ? facadeFor(n.style, (n.w + n.d) / 2 - n.setback * 2, topH)
+      : facade;
+
+  // Outward direction of the entrance face.
+  const ex = n.entrance === "e" ? 1 : n.entrance === "w" ? -1 : 0;
+  const ez = n.entrance === "s" ? 1 : n.entrance === "n" ? -1 : 0;
+  const faceW = ex !== 0 ? n.d : n.w;
+  const half = ex !== 0 ? n.w / 2 : n.d / 2;
+
+  return (
+    <group position={[n.x, 0, n.z]} rotation={[0, n.ry, 0]}>
+      {/* Precast ground floor, slightly proud of the tower above */}
+      <mesh position={[0, PLINTH_H / 2, 0]} castShadow receiveShadow>
+        <boxGeometry args={[n.w + 0.5, PLINTH_H, n.d + 0.5]} />
+        <primitive object={M.precast} attach="material" />
+      </mesh>
+      <mesh position={[0, PLINTH_H + 0.16, 0]} castShadow>
+        <boxGeometry args={[n.w + 0.9, 0.32, n.d + 0.9]} />
+        <primitive object={M.precastDark} attach="material" />
+      </mesh>
+
+      {/* Curtain-walled body */}
+      <mesh
+        position={[0, PLINTH_H + bodyH / 2, 0]}
+        castShadow
+        receiveShadow
+      >
+        <boxGeometry args={[n.w, bodyH, n.d]} />
+        <primitive object={facade} attach="material" />
+      </mesh>
+
+      {/* Setback volume + the terrace it leaves behind */}
+      {n.setback > 0 && (
+        <>
+          <mesh position={[0, upperY + 0.1, 0]} receiveShadow>
+            <boxGeometry args={[n.w + 0.3, 0.2, n.d + 0.3]} />
+            <primitive object={M.precastDark} attach="material" />
+          </mesh>
+          <mesh
+            position={[0, upperY + topH / 2, 0]}
+            castShadow
+            receiveShadow
+          >
+            <boxGeometry
+              args={[n.w - n.setback * 2, topH, n.d - n.setback * 2]}
+            />
+            <primitive object={topFacade} attach="material" />
+          </mesh>
+        </>
+      )}
+
+      {/* Coping around the top */}
+      <mesh position={[0, n.h + 0.22, 0]} castShadow>
+        <boxGeometry
+          args={[
+            (n.setback > 0 ? n.w - n.setback * 2 : n.w) + 0.6,
+            0.44,
+            (n.setback > 0 ? n.d - n.setback * 2 : n.d) + 0.6,
+          ]}
+        />
+        <primitive object={M.precastDark} attach="material" />
+      </mesh>
+
+      {/* Rooftop plant */}
+      <mesh position={[0, n.h + 1.2, 0]} castShadow>
+        <boxGeometry args={[6, 1.6, 4]} />
+        <primitive object={M.metalBrushed} attach="material" />
+      </mesh>
+
+      {/* Entrance: recessed glazing, canopy, lit sign band */}
+      <group
+        position={[ex * (half + 0.28), 0, ez * (half + 0.28)]}
+        rotation={[0, ex !== 0 ? Math.PI / 2 : 0, 0]}
+      >
+        <mesh position={[0, 1.9, 0]}>
+          <boxGeometry args={[Math.min(faceW * 0.5, 11), 3.6, 0.12]} />
+          <primitive object={M.glassCheap} attach="material" />
+        </mesh>
+        {/* mullions */}
+        {[-3, -1, 1, 3].map((d) => (
+          <mesh key={d} position={[d * 1.3, 1.9, 0.02]}>
+            <boxGeometry args={[0.12, 3.6, 0.16]} />
+            <primitive object={M.mullion} attach="material" />
+          </mesh>
+        ))}
+        {/* canopy */}
+        <mesh position={[0, 3.95, 1.1]} castShadow>
+          <boxGeometry args={[Math.min(faceW * 0.62, 14), 0.3, 2.4]} />
+          <primitive object={M.precastDark} attach="material" />
+        </mesh>
+        {/* lit sign band above the canopy */}
+        <mesh position={[0, 4.5, 0.12]}>
+          <boxGeometry args={[Math.min(faceW * 0.4, 8), 0.5, 0.1]} />
+          <primitive
+            object={n.style === 1 ? M.signBoxWarm : M.signBox}
+            attach="material"
+          />
+        </mesh>
+      </group>
+    </group>
+  );
+}
 
 /** Foliage clusters making up one tree crown (offset, radius, dark). */
 const CROWN: [number, number, number, number, 0 | 1][] = [
@@ -78,18 +201,18 @@ export function Courtyard() {
       mat: 0 | 1 | 2;
     }[] = [];
     const bands: { r: number; count: number; base: number; span: number }[] = [
-      { r: 105, count: 22, base: 16, span: 30 },
-      { r: 165, count: 26, base: 30, span: 62 },
+      { r: 215, count: 24, base: 22, span: 40 },
+      { r: 300, count: 28, base: 34, span: 70 },
     ];
     let n = 0;
     bands.forEach((band, bi) => {
       for (let i = 0; i < band.count; i++) {
         n++;
         const a = (i / band.count) * Math.PI * 2 + bi * 0.4;
-        const jitter = ((n * 53) % 31) - 15;
+        const jitter = ((n * 53) % 47) - 23;
         const r = band.r + jitter;
         const h = band.base + ((n * 37) % band.span);
-        const w = 11 + ((n * 17) % 18);
+        const w = 20 + ((n * 17) % 26);
         boxes.push({
           x: Math.sin(a) * r,
           z: Math.cos(a) * r,
@@ -176,6 +299,58 @@ export function Courtyard() {
         <boxGeometry args={[420, 0.24, 0.34]} />
         <primitive object={M.curb} attach="material" />
       </mesh>
+
+      {/* North–south side streets, so the block is bounded on all four sides */}
+      {([-1, 1] as const).map((s) => (
+        <group key={s}>
+          <mesh
+            position={[s * SIDE_X, -0.03, 0]}
+            rotation={[-Math.PI / 2, 0, 0]}
+            receiveShadow
+          >
+            <planeGeometry args={[ROAD_W, 300]} />
+            <primitive
+              object={floorFor("asphalt", ROAD_W, 300)}
+              attach="material"
+            />
+          </mesh>
+          {/* sidewalk on the block side + kerbs */}
+          <mesh
+            position={[s * (SIDE_X - ROAD_W / 2 - 2.6), -0.02, 0]}
+            rotation={[-Math.PI / 2, 0, 0]}
+            receiveShadow
+          >
+            <planeGeometry args={[5, 300]} />
+            <primitive object={floorFor("walkway", 5, 300)} attach="material" />
+          </mesh>
+          {([-1, 1] as const).map((k) => (
+            <mesh
+              key={k}
+              position={[s * SIDE_X + k * (ROAD_W / 2 + 0.1), 0.06, 0]}
+              receiveShadow
+            >
+              <boxGeometry args={[0.34, 0.24, 300]} />
+              <primitive object={M.curb} attach="material" />
+            </mesh>
+          ))}
+          {/* lane markings */}
+          {Array.from({ length: 30 }, (_, i) => -145 + i * 10).map((z) => (
+            <mesh
+              key={z}
+              position={[s * SIDE_X, -0.02, z]}
+              rotation={[-Math.PI / 2, 0, 0]}
+            >
+              <planeGeometry args={[0.22, 4.2]} />
+              <primitive object={M.curb} attach="material" />
+            </mesh>
+          ))}
+        </group>
+      ))}
+
+      {/* Neighbouring city block — sealed facade-only mid-rises */}
+      {NEIGHBORS.map((n, i) => (
+        <Block key={i} n={n} />
+      ))}
 
       {/* Plaza paving */}
       <mesh
