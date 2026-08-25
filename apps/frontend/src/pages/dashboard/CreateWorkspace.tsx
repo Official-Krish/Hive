@@ -7,7 +7,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "motion/react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError, http, type WorkspaceSummary } from "@/lib/http";
 import { fade } from "@/components/dashboard/primitives";
 import {
@@ -26,6 +26,22 @@ export function CreateWorkspace() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
 
+  const device = useQuery({
+    queryKey: ["devices", "me", "status"],
+    queryFn: http.devices.status,
+    retry: false,
+    staleTime: 30_000,
+  });
+  const hasDevice = device.data?.hasOnlineDevice ?? true;
+
+  const me = useQuery({
+    queryKey: ["me"],
+    queryFn: http.auth.me,
+    retry: false,
+    staleTime: 60_000,
+  });
+  const hasAvatar = !!me.data?.user?.mapAvatarModel;
+
   const mutation = useMutation({
     mutationFn: (): Promise<WorkspaceSummary> =>
       http.workspaces.create({
@@ -34,7 +50,11 @@ export function CreateWorkspace() {
       }),
     onSuccess: (ws) => {
       queryClient.invalidateQueries({ queryKey: ["workspaces"] });
-      navigate(`/dashboard/w/${ws.id}`);
+      if (hasAvatar) {
+        navigate(`/world?workspaceId=${ws.id}`);
+      } else {
+        navigate(`/dashboard/avatar?workspaceId=${ws.id}`);
+      }
     },
   });
 
@@ -89,6 +109,17 @@ export function CreateWorkspace() {
               {mutation.error instanceof ApiError
                 ? mutation.error.message
                 : "Something went wrong creating the workspace."}
+            </Note>
+          )}
+
+          {!hasDevice && !device.isLoading && (
+            <Note tone="info">
+              Start your Hive collector to enter the spatial office. Run{" "}
+              <code className="rounded bg-white/5 px-1.5 py-0.5 font-mono text-[12px] text-white">
+                hive start
+              </code>{" "}
+              on your machine. Workspace creation still works — you'll just need
+              the collector before you can move your avatar around.
             </Note>
           )}
 

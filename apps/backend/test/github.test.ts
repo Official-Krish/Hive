@@ -262,7 +262,10 @@ describe("github oauth", () => {
       data: { email: user.email! },
     });
     const realFetch = globalThis.fetch;
-    (globalThis as any).fetch = async (input: any, init?: any) => {
+    (globalThis as { fetch: typeof fetch }).fetch = async (
+      input,
+      init?: RequestInit,
+    ) => {
       const url = String(input);
       if (url.endsWith("/user/emails")) {
         return new Response(

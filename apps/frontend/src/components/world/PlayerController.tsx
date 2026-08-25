@@ -20,6 +20,8 @@ interface PlayerControllerProps {
   groundAt?: (x: number, z: number, feetY: number) => number;
   /** Largest step the player can walk up without jumping. */
   stepUp?: number;
+  /** Called every frame with the player's current XZ position (for realtime). */
+  onRealtimeMove?: (x: number, z: number, roomId: string | null) => void;
 }
 
 // --- Movement tuning --------------------------------------------------------
@@ -53,6 +55,7 @@ export function PlayerController({
   roomAt,
   groundAt,
   stepUp = 0.6,
+  onRealtimeMove,
 }: PlayerControllerProps) {
   const internalGroupRef = useRef<THREE.Group>(null);
   const groupRef = playerRef || internalGroupRef;
@@ -258,6 +261,9 @@ export function PlayerController({
       }
       if (onPositionUpdate) {
         onPositionUpdate([nextX, nextY, nextZ], room);
+      }
+      if (onRealtimeMove) {
+        onRealtimeMove(nextX, nextZ, room || null);
       }
     }
   });

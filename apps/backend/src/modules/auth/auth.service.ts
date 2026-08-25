@@ -306,6 +306,9 @@ export class AuthService {
         ...(input.avatarUrl !== undefined
           ? { avatarUrl: input.avatarUrl }
           : {}),
+        ...(input.mapAvatarModel !== undefined
+          ? { mapAvatarModel: input.mapAvatarModel }
+          : {}),
       },
     });
     return toPublicUser(user);

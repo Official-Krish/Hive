@@ -3,10 +3,10 @@
    Its name, description and role, plus the people in it. No live
    map here — this is the plain, functional view.
    ───────────────────────────────────────────────────────────── */
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { motion } from "motion/react";
 import { useQuery } from "@tanstack/react-query";
-import { FiArrowLeft, FiUsers } from "react-icons/fi";
+import { FiArrowLeft, FiMap, FiUsers } from "react-icons/fi";
 import { ApiError, http } from "@/lib/http";
 import { fade } from "@/components/dashboard/primitives";
 import {
@@ -15,10 +15,12 @@ import {
   Panel,
   RoleTag,
   Spinner,
+  primaryBtnClass,
 } from "@/components/dashboard/ui";
 
 export function WorkspaceDetail() {
   const { workspaceId = "" } = useParams();
+  const navigate = useNavigate();
 
   const workspace = useQuery({
     queryKey: ["workspace", workspaceId],
@@ -32,6 +34,22 @@ export function WorkspaceDetail() {
     queryFn: () => http.workspaces.members.list(workspaceId),
     enabled: workspace.isSuccess,
   });
+
+  const me = useQuery({
+    queryKey: ["me"],
+    queryFn: http.auth.me,
+    retry: false,
+    staleTime: 60_000,
+  });
+
+  const device = useQuery({
+    queryKey: ["devices", "me", "status"],
+    queryFn: http.devices.status,
+    retry: false,
+    staleTime: 30_000,
+  });
+  const hasAvatar = !!me.data?.user?.mapAvatarModel;
+  const hasDevice = device.data?.hasOnlineDevice ?? true;
 
   const backLink = (
     <Link
@@ -96,6 +114,28 @@ export function WorkspaceDetail() {
           {ws.memberCount} member{ws.memberCount === 1 ? "" : "s"} · Created{" "}
           {created}
         </p>
+        <div className="mt-5 flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            className={primaryBtnClass}
+            onClick={() => {
+              if (hasAvatar) {
+                navigate(`/world?workspaceId=${workspaceId}`);
+              } else {
+                navigate(`/dashboard/avatar?workspaceId=${workspaceId}`);
+              }
+            }}
+          >
+            <FiMap className="size-4" aria-hidden />
+            {hasAvatar ? "Enter spatial office" : "Pick avatar & enter"}
+          </button>
+          {!hasDevice && !device.isLoading && (
+            <span className="text-[12.5px] text-amber-300/90">
+              Collector offline — start <code className="font-mono">hive</code>{" "}
+              on your machine before entering.
+            </span>
+          )}
+        </div>
       </motion.header>
 
       <motion.section {...fade(0.08)}>

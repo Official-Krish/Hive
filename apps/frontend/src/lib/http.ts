@@ -97,6 +97,7 @@ export interface PublicUser {
   email: string;
   name: string;
   avatarUrl: string | null;
+  mapAvatarModel: string | null;
   emailVerified: boolean;
   createdAt: string;
 }
@@ -422,6 +423,7 @@ export interface LoginInput {
 export interface UpdateProfileInput {
   name?: string;
   avatarUrl?: string | null;
+  mapAvatarModel?: string | null;
 }
 
 export interface ChangePasswordInput {
@@ -554,6 +556,9 @@ export const http = {
       request("/api/v1/devices", { method: "POST", body: input }),
 
     list: (): Promise<DeviceSummary[]> => request("/api/v1/devices"),
+
+    status: (): Promise<{ hasOnlineDevice: boolean }> =>
+      request("/api/v1/devices/me/status"),
 
     heartbeat: (id: string): Promise<DeviceSummary> =>
       request(`/api/v1/devices/${id}/heartbeat`, { method: "POST" }),

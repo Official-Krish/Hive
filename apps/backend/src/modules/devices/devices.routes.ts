@@ -17,6 +17,7 @@ devicesRouter.post(
   controller.register,
 );
 devicesRouter.get("/", requireAuth(), controller.list);
+devicesRouter.get("/me/status", requireAuth(), controller.status);
 devicesRouter.post("/:id/heartbeat", requireAuth(), controller.heartbeat);
 devicesRouter.post("/:id/stop", requireAuth(), controller.stop);
 devicesRouter.delete("/:id", requireAuth(), controller.revoke);

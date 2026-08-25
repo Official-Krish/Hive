@@ -17,6 +17,7 @@ import { CreateWorkspace } from "./pages/dashboard/CreateWorkspace";
 import { InviteUser } from "./pages/dashboard/InviteUser";
 import { WorkspaceInvites } from "./pages/dashboard/WorkspaceInvites";
 import { WorkspaceDetail } from "./pages/dashboard/WorkspaceDetail";
+import { AvatarSelection } from "./pages/dashboard/AvatarSelection";
 import { AuthGuard } from "./lib/ProtectedRoute";
 
 const queryClient = new QueryClient({
@@ -74,6 +75,7 @@ const router = createBrowserRouter([
       { path: "create", element: <CreateWorkspace /> },
       { path: "invite", element: <InviteUser /> },
       { path: "invites", element: <WorkspaceInvites /> },
+      { path: "avatar", element: <AvatarSelection /> },
       { path: "w/:workspaceId", element: <WorkspaceDetail /> },
     ],
   },

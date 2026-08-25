@@ -42,13 +42,25 @@ export function WorkspaceInvites() {
     queryFn: http.invites.listReceived,
   });
 
+  const me = useQuery({
+    queryKey: ["me"],
+    queryFn: http.auth.me,
+    retry: false,
+    staleTime: 60_000,
+  });
+  const hasAvatar = !!me.data?.user?.mapAvatarModel;
+
   const mutation = useMutation({
     mutationFn: (inviteId: string): Promise<WorkspaceSummary> =>
       http.invites.acceptById(inviteId),
     onSuccess: (ws) => {
       queryClient.invalidateQueries({ queryKey: ["workspaces"] });
       queryClient.invalidateQueries({ queryKey: ["invites", "received"] });
-      navigate(`/dashboard/w/${ws.id}`);
+      if (hasAvatar) {
+        navigate(`/world?workspaceId=${ws.id}`);
+      } else {
+        navigate(`/dashboard/avatar?workspaceId=${ws.id}`);
+      }
     },
   });
 
