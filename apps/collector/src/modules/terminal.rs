@@ -1,7 +1,7 @@
 use crate::bus::EventSender;
 use crate::config::Config;
-use crate::events::{now_rfc3339, TelemetryEvent};
-use anyhow::{bail, Context, Result};
+use crate::events::{TelemetryEvent, now_rfc3339};
+use anyhow::{Context, Result, bail};
 use serde::Deserialize;
 use std::path::PathBuf;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -29,7 +29,11 @@ struct TerminalMessage {
 }
 
 /// Serves the loopback listener that shell hooks post terminal commands to.
-pub async fn serve(tx: EventSender, _config: Config, mut shutdown: watch::Receiver<bool>) -> Result<()> {
+pub async fn serve(
+    tx: EventSender,
+    _config: Config,
+    mut shutdown: watch::Receiver<bool>,
+) -> Result<()> {
     let listener = TcpListener::bind(("127.0.0.1", LISTENER_PORT))
         .await
         .with_context(|| format!("failed to bind 127.0.0.1:{LISTENER_PORT}"))?;
@@ -135,7 +139,10 @@ pub fn install_hook() -> Result<()> {
     std::fs::write(&path, updated)
         .with_context(|| format!("failed to write hook into {}", path.display()))?;
     println!("Installed collector hook into {}", path.display());
-    println!("Open a new terminal (or run `source {}`) to activate.", path.display());
+    println!(
+        "Open a new terminal (or run `source {}`) to activate.",
+        path.display()
+    );
     Ok(())
 }
 
@@ -145,7 +152,9 @@ pub fn uninstall_hook() -> Result<()> {
     if !existing.contains(HOOK_MARKER_START) {
         bail!("no collector hook found in {}", path.display());
     }
-    let start = existing.find(HOOK_MARKER_START).ok_or_else(|| anyhow::anyhow!("hook marker missing"))?;
+    let start = existing
+        .find(HOOK_MARKER_START)
+        .ok_or_else(|| anyhow::anyhow!("hook marker missing"))?;
     let end = existing
         .find(HOOK_MARKER_END)
         .map(|i| i + HOOK_MARKER_END.len())

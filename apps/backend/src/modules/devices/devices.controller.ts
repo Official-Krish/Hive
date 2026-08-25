@@ -21,6 +21,14 @@ export class DevicesController {
     res.json({ data: { devices } });
   };
 
+  status = async (req: Request, res: Response): Promise<void> => {
+    const auth = getAuth(res);
+    const hasOnlineDevice = await this.deviceService.hasOnlineDevice(
+      auth.userId,
+    );
+    res.json({ data: { hasOnlineDevice } });
+  };
+
   heartbeat = async (req: Request, res: Response): Promise<void> => {
     const auth = getAuth(res);
     const device = await this.deviceService.heartbeat(

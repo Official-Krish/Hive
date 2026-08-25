@@ -34,7 +34,7 @@ describe("health", () => {
 });
 
 describe("register", () => {
-  test("creates a user, org, workspace and sets both cookies", async () => {
+  test("creates a user and personal org and sets both cookies", async () => {
     const email = uniqueEmail("user");
     const res = await c.api("/api/v1/auth/register", {
       method: "POST",

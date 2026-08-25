@@ -157,7 +157,10 @@ While running, the collector keeps a persistent WebSocket open to
 - On network failure / 5xx the batch is persisted to the SQLite outbox
   (`~/.local/state/hive/outbox.db`) and drained with backoff when
   connectivity returns.
-- A rejected token stops the agent and is surfaced in `hive status`.
+- A rejected token stops the agent and is surfaced in `hive status` with a
+  hint to re-register. `hive start` probes the stored token first: if the
+  backend rejects it, the machine is re-registered automatically (the stale
+  device row is removed from the dashboard).
 
 ## Configuration
 

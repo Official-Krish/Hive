@@ -277,6 +277,7 @@ describe("issues webhook", () => {
 describe("ingest issue linking", () => {
   async function setup(): Promise<{ token: string; workspaceId: string }> {
     const email = await c.registerUser();
+    await c.createWorkspace("Issues");
     const { token } = await c.registerDevice();
     const membership = await prisma.workspaceMember.findFirst({
       where: { user: { email } },
@@ -358,6 +359,7 @@ describe("ingest issue linking", () => {
 
   test("GET issues lists rollups and GET issues/:id returns sessions + commits", async () => {
     const email = await c.registerUser();
+    await c.createWorkspace("Rollup");
     const workspaceId = (await prisma.workspaceMember.findFirst({
       where: { user: { email } },
     }))!.workspaceId;

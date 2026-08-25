@@ -35,7 +35,8 @@ pub async fn run(
             SessionEnd::Unauthorized => {
                 let mut status = read_status();
                 status.connected = false;
-                status.error = Some("device token rejected by control channel".into());
+                status.error =
+                    Some("device token rejected — run `hive install` to re-register".into());
                 let _ = write_status(&status);
                 tracing::error!("control channel rejected device token");
                 return Err(anyhow::anyhow!("device token rejected"));
@@ -56,11 +57,7 @@ async fn connect_once(
     device_token: &str,
     shutdown_tx: &watch::Sender<bool>,
 ) -> SessionEnd {
-    let url = format!(
-        "{}/ws/device?token={}",
-        ws_url.trim_end_matches('/'),
-        urlencoding(device_token)
-    );
+    let url = device_ws_url(ws_url, device_token);
 
     let (mut ws, _) = match connect_async(&url).await {
         Ok(conn) => conn,
@@ -152,6 +149,29 @@ fn urlencoding(input: &str) -> String {
     out
 }
 
+fn device_ws_url(ws_url: &str, device_token: &str) -> String {
+    format!(
+        "{}/ws/device?token={}",
+        ws_url.trim_end_matches('/'),
+        urlencoding(device_token)
+    )
+}
+
+/// One-shot check for `hive start`: true only when the backend explicitly
+/// answers the `/ws/device` upgrade with 401 (stale/revoked token). Network
+/// failures return false so startup proceeds as usual and the daemon's own
+/// reconnect logic surfaces the problem.
+pub async fn token_rejected(ws_url: &str, device_token: &str) -> bool {
+    if ws_url.is_empty() || device_token.is_empty() {
+        return false;
+    }
+    let url = device_ws_url(ws_url, device_token);
+    matches!(
+        connect_async(&url).await,
+        Err(WsError::Http(response)) if response.status().as_u16() == 401
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -164,10 +184,24 @@ mod tests {
     }
 
     #[test]
+    fn builds_device_ws_url() {
+        assert_eq!(
+            device_ws_url("ws://localhost:4001", "hive_dev_x"),
+            "ws://localhost:4001/ws/device?token=hive_dev_x"
+        );
+        assert_eq!(
+            device_ws_url("wss://hive.example.com/", "a b"),
+            "wss://hive.example.com/ws/device?token=a%20b"
+        );
+    }
+
+    #[test]
     fn parses_shutdown_command() {
         let result = tokio::runtime::Runtime::new()
             .unwrap()
-            .block_on(handle_message("{\"type\":\"control\",\"cmd\":\"shutdown\",\"timestamp\":1}"));
+            .block_on(handle_message(
+                "{\"type\":\"control\",\"cmd\":\"shutdown\",\"timestamp\":1}",
+            ));
         assert_eq!(result, Some(SessionEnd::CommandShutdown));
     }
 

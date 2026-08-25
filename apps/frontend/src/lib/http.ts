@@ -36,6 +36,27 @@ interface RequestOptions {
   headers?: Record<string, string>;
 }
 
+/* Silent session renewal: the access cookie is short-lived, so any 401 from
+   a protected endpoint triggers one single-flight POST /auth/refresh (which
+   rotates both cookies) and retries the original request exactly once.
+   Without this, a backend restart or 15 idle minutes would log the user out. */
+let refreshInFlight: Promise<boolean> | null = null;
+
+function refreshSession(): Promise<boolean> {
+  if (!refreshInFlight) {
+    refreshInFlight = fetch(`${API_BASE_URL}/api/v1/auth/refresh`, {
+      method: "POST",
+      credentials: "include",
+    })
+      .then((res) => res.ok)
+      .catch(() => false)
+      .finally(() => {
+        refreshInFlight = null;
+      });
+  }
+  return refreshInFlight;
+}
+
 async function request<T>(
   path: string,
   options: RequestOptions = {},
@@ -50,15 +71,24 @@ async function request<T>(
     }
   }
 
-  const res = await fetch(url.toString(), {
-    method,
-    credentials: "include",
-    headers: {
-      ...(body !== undefined ? { "content-type": "application/json" } : {}),
-      ...headers,
-    },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
+  const doFetch = () =>
+    fetch(url.toString(), {
+      method,
+      credentials: "include",
+      headers: {
+        ...(body !== undefined ? { "content-type": "application/json" } : {}),
+        ...headers,
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+
+  let res = await doFetch();
+
+  // Auth endpoints manage their own cookies; refreshing there would loop.
+  const isAuthPath = path.startsWith("/api/v1/auth/");
+  if (res.status === 401 && !isAuthPath && (await refreshSession())) {
+    res = await doFetch();
+  }
 
   const json = (await res.json().catch(() => null)) as
     (ApiErrorBody & { data?: T }) | null;
@@ -97,6 +127,7 @@ export interface PublicUser {
   email: string;
   name: string;
   avatarUrl: string | null;
+  mapAvatarModel: string | null;
   emailVerified: boolean;
   createdAt: string;
 }
@@ -127,6 +158,31 @@ export interface WorkspaceSummary {
   role: string;
   memberCount: number;
   createdAt: string;
+  /** Full webhook secret, only present on create/rotate responses. */
+  webhookSecret?: string;
+}
+
+export interface WorkspaceSettings {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  webhookSecretMasked: string;
+  repository: {
+    id: string;
+    name: string;
+    fullName: string;
+    url: string | null;
+  } | null;
+}
+
+export interface GitHubRepoOption {
+  id: number;
+  name: string;
+  fullName: string;
+  url: string | null;
+  private: boolean;
+  admin: boolean;
 }
 
 export interface WorkspaceMemberPublic {
@@ -379,6 +435,13 @@ export interface RealtimeMember {
   position: { x: number; y: number; z: number } | null;
 }
 
+export interface WorkspaceMapSnapshot {
+  mapId: string;
+  name: string;
+  version: number;
+  members: RealtimeMember[];
+}
+
 export interface MapOverlay {
   developer: {
     id: string;
@@ -422,6 +485,7 @@ export interface LoginInput {
 export interface UpdateProfileInput {
   name?: string;
   avatarUrl?: string | null;
+  mapAvatarModel?: string | null;
 }
 
 export interface ChangePasswordInput {
@@ -432,6 +496,8 @@ export interface ChangePasswordInput {
 export interface CreateWorkspaceInput {
   name: string;
   description?: string;
+  webhookSecret?: string;
+  repositoryId?: string;
 }
 
 export interface UpdateWorkspaceInput {
@@ -555,6 +621,9 @@ export const http = {
 
     list: (): Promise<DeviceSummary[]> => request("/api/v1/devices"),
 
+    status: (): Promise<{ hasOnlineDevice: boolean }> =>
+      request("/api/v1/devices/me/status"),
+
     heartbeat: (id: string): Promise<DeviceSummary> =>
       request(`/api/v1/devices/${id}/heartbeat`, { method: "POST" }),
 
@@ -570,6 +639,8 @@ export const http = {
       request("/api/v1/github/auth/url"),
     disconnect: (): Promise<{ success: boolean }> =>
       request("/api/v1/github/disconnect", { method: "POST" }),
+    listRepos: (): Promise<{ repos: GitHubRepoOption[] }> =>
+      request("/api/v1/github/repos"),
   },
 
   workspaces: {
@@ -592,6 +663,23 @@ export const http = {
 
     remove: (workspaceId: string): Promise<{ success: boolean }> =>
       request(`/api/v1/workspaces/${workspaceId}`, { method: "DELETE" }),
+
+    getSettings: (workspaceId: string): Promise<WorkspaceSettings> =>
+      request(`/api/v1/workspaces/${workspaceId}/settings`),
+
+    rotateSecret: (workspaceId: string): Promise<{ secret: string }> =>
+      request(`/api/v1/workspaces/${workspaceId}/settings/rotate-secret`, {
+        method: "POST",
+      }),
+
+    assignRepo: (
+      workspaceId: string,
+      repositoryId: string,
+    ): Promise<{ success: boolean }> =>
+      request(`/api/v1/workspaces/${workspaceId}/settings/assign-repo`, {
+        method: "POST",
+        body: { repositoryId },
+      }),
 
     members: {
       list: (workspaceId: string): Promise<WorkspaceMemberPublic[]> =>
@@ -715,7 +803,7 @@ export const http = {
   },
 
   reads: {
-    map: (workspaceId: string): Promise<RealtimeMember[]> =>
+    map: (workspaceId: string): Promise<WorkspaceMapSnapshot> =>
       request(`/api/v1/workspaces/${workspaceId}/map`),
 
     activities: (

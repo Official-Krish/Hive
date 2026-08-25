@@ -8,11 +8,12 @@ import {
 import type { RealtimeEvent } from "@hive/types";
 import { createHmac } from "node:crypto";
 import { env } from "../../config/env";
-import { encryptSecret } from "../../lib/encryption";
+import { encryptSecret, decryptSecret } from "../../lib/encryption";
 import {
   GitHubClient,
   OAUTH_SCOPES,
   type GitHubEmail,
+  type GitHubRepo,
   type GitHubUser,
 } from "../../lib/github";
 import { signOAuthState, verifyOAuthState } from "../../lib/jwt";
@@ -229,23 +230,42 @@ export class GitHubService {
     await prisma.gitHubAccount.deleteMany({ where: { userId } });
   }
 
+  /**
+   * List the user's GitHub repos where they have admin access. Requires the
+   * user to have connected GitHub. Returns an empty array if not connected.
+   */
+  async listUserRepos(userId: string): Promise<GitHubRepo[]> {
+    const account = await prisma.gitHubAccount.findFirst({
+      where: { userId },
+    });
+    if (!account) return [];
+    const accessToken = decryptSecret(account.accessToken);
+    return this.client.listAdminRepos(accessToken);
+  }
+
   async handleWebhook(input: {
     event?: string;
     deliveryId?: string;
     signature?: string;
     rawBody: Buffer;
   }): Promise<GitHubWebhookResult> {
-    if (!this.verifyWebhookSignature(input.rawBody, input.signature)) {
-      await this.recordDelivery(input, "REJECTED", "Invalid signature", null);
-      return { statusCode: 401 };
-    }
-
     let payload: unknown;
     try {
       payload = JSON.parse(input.rawBody.toString("utf8"));
     } catch {
       await this.recordDelivery(input, "ERROR", "Malformed JSON body", null);
       return { statusCode: 400 };
+    }
+
+    const verified = await this.verifyAndResolve(payload, input);
+    if (!verified) {
+      await this.recordDelivery(
+        input,
+        "REJECTED",
+        "Invalid signature",
+        payload,
+      );
+      return { statusCode: 401 };
     }
 
     try {
@@ -260,16 +280,81 @@ export class GitHubService {
     }
   }
 
-  private verifyWebhookSignature(
-    rawBody: Buffer,
-    signatureHeader?: string,
+  /**
+   * Verify the webhook signature against the per-workspace secret. Falls
+   * back to the deprecated global `GITHUB_WEBHOOK_SECRET` env var for
+   * backward compatibility.
+   */
+  private async verifyAndResolve(
+    payload: unknown,
+    input: { signature?: string; rawBody: Buffer },
+  ): Promise<boolean> {
+    if (!input.signature) return false;
+
+    const repoPayload = (payload as { repository?: GitHubRepoPayload })
+      ?.repository;
+    if (repoPayload) {
+      const secret = await this.findSecretForRepo(repoPayload);
+      if (
+        secret &&
+        this.verifyWithSecret(input.rawBody, input.signature, secret)
+      ) {
+        return true;
+      }
+    }
+
+    return this.verifyWithSecret(
+      input.rawBody,
+      input.signature,
+      env.GITHUB_WEBHOOK_SECRET,
+    );
+  }
+
+  private async findSecretForRepo(
+    repoPayload: GitHubRepoPayload,
+  ): Promise<string | null> {
+    const githubRepoId = repoPayload.id;
+    const githubFullName = repoPayload.full_name ?? "";
+    if (!githubRepoId && !githubFullName) return null;
+
+    const existing = await prisma.repository.findFirst({
+      where: {
+        OR: [
+          ...(githubRepoId ? [{ githubRepoId }] : []),
+          ...(githubFullName ? [{ githubFullName }] : []),
+        ],
+      },
+      select: { workspaceId: true },
+    });
+
+    if (existing?.workspaceId) {
+      const ws = await prisma.workspace.findUnique({
+        where: { id: existing.workspaceId },
+        select: { webhookSecret: true },
+      });
+      if (ws) return ws.webhookSecret;
+    }
+
+    const account = await this.resolveAccount(repoPayload);
+    if (!account) return null;
+    const workspaceId = await this.primaryWorkspaceFor(account.userId);
+    if (!workspaceId) return null;
+    const ws = await prisma.workspace.findUnique({
+      where: { id: workspaceId },
+      select: { webhookSecret: true },
+    });
+    return ws?.webhookSecret ?? null;
+  }
+
+  private verifyWithSecret(
+    body: Buffer,
+    signatureHeader: string,
+    secret: string,
   ): boolean {
-    if (!signatureHeader) return false;
+    if (!secret) return false;
     const expected =
       "sha256=" +
-      createHmac("sha256", env.GITHUB_WEBHOOK_SECRET)
-        .update(new Uint8Array(rawBody))
-        .digest("hex");
+      createHmac("sha256", secret).update(new Uint8Array(body)).digest("hex");
     return safeEqual(expected, signatureHeader);
   }
 

@@ -1,4 +1,4 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -81,9 +81,7 @@ pub fn github_oauth_token_url() -> String {
 
 impl Config {
     pub fn is_configured(&self) -> bool {
-        !self.device_id.is_empty()
-            && !self.device_token.is_empty()
-            && !self.workspace_id.is_empty()
+        !self.device_id.is_empty() && !self.device_token.is_empty() && !self.workspace_id.is_empty()
     }
 
     pub fn load() -> Result<Self> {
@@ -94,11 +92,10 @@ impl Config {
                 ..Self::default()
             });
         }
-        let raw = fs::read_to_string(&path).with_context(|| {
-            format!("failed to read config at {}", path.display())
-        })?;
-        let mut config: Config = toml::from_str(&raw)
-            .with_context(|| format!("invalid TOML in {}", path.display()))?;
+        let raw = fs::read_to_string(&path)
+            .with_context(|| format!("failed to read config at {}", path.display()))?;
+        let mut config: Config =
+            toml::from_str(&raw).with_context(|| format!("invalid TOML in {}", path.display()))?;
         config.path = path;
         Ok(config)
     }
@@ -109,10 +106,8 @@ impl Config {
             fs::create_dir_all(parent)
                 .with_context(|| format!("failed to create {}", parent.display()))?;
         }
-        let toml = toml::to_string_pretty(self)
-            .context("failed to serialize config")?;
-        fs::write(&path, toml)
-            .with_context(|| format!("failed to write {}", path.display()))
+        let toml = toml::to_string_pretty(self).context("failed to serialize config")?;
+        fs::write(&path, toml).with_context(|| format!("failed to write {}", path.display()))
     }
 
     pub fn set(&mut self, key: &str, value: &str) -> Result<()> {
@@ -131,8 +126,8 @@ impl Config {
     }
 
     pub fn add_watch(&mut self, path: &str) -> Result<()> {
-        let canonical = fs::canonicalize(path)
-            .with_context(|| format!("path does not exist: {path}"))?;
+        let canonical =
+            fs::canonicalize(path).with_context(|| format!("path does not exist: {path}"))?;
         if !canonical.is_dir() {
             bail!("not a directory: {path}");
         }
@@ -150,7 +145,10 @@ impl Config {
 /// `~/.config/hive/config.toml`
 pub fn config_path() -> PathBuf {
     if let Ok(home) = std::env::var("HOME") {
-        return PathBuf::from(home).join(".config").join("hive").join("config.toml");
+        return PathBuf::from(home)
+            .join(".config")
+            .join("hive")
+            .join("config.toml");
     }
     PathBuf::from("hive.toml")
 }
@@ -163,7 +161,10 @@ pub fn state_dir() -> PathBuf {
 
 fn dirs_state() -> PathBuf {
     if let Ok(home) = std::env::var("HOME") {
-        return PathBuf::from(home).join(".local").join("state").join("hive");
+        return PathBuf::from(home)
+            .join(".local")
+            .join("state")
+            .join("hive");
     }
     PathBuf::from(".hive")
 }

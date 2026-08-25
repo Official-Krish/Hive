@@ -13,6 +13,7 @@ const nextId = (): number => ++counter;
 
 async function setup(): Promise<{ token: string; workspaceId: string }> {
   const email = await c.registerUser();
+  await c.createWorkspace("Matcher");
   const { token } = await c.registerDevice();
   const membership = await prisma.workspaceMember.findFirst({
     where: { user: { email } },

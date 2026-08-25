@@ -1,6 +1,6 @@
 use crate::bus::EventSender;
 use crate::config::Config;
-use crate::events::{now_rfc3339, TelemetryEvent};
+use crate::events::{TelemetryEvent, now_rfc3339};
 use git2::Repository;
 use std::collections::HashMap;
 use std::path::Path;
@@ -91,10 +91,7 @@ fn emit_commits(
             branch: Some(branch.to_string()),
             sha: oid.to_string(),
             message: commit.message().unwrap_or_default().to_string(),
-            author_email: commit
-                .author()
-                .email()
-                .map(|e| e.to_string()),
+            author_email: commit.author().email().map(|e| e.to_string()),
             authored_at: Some(authored_at),
             insertions: None,
             deletions: None,
@@ -132,10 +129,7 @@ fn remote_slug(url: &str) -> Option<String> {
     let trimmed = url.trim_end_matches(".git");
     let path = if let Some(idx) = trimmed.find("://") {
         let after = &trimmed[idx + 3..];
-        after
-            .split_once('/')
-            .map(|(_, p)| p)
-            .unwrap_or(after)
+        after.split_once('/').map(|(_, p)| p).unwrap_or(after)
     } else {
         trimmed.split(':').last().unwrap_or(trimmed)
     };

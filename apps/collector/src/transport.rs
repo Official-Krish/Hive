@@ -1,5 +1,5 @@
 use crate::events::IngestBatch;
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use reqwest::StatusCode;
 use std::time::Duration;
 
@@ -44,7 +44,10 @@ impl IngestClient {
     }
 
     pub async fn send(&self, batch: &IngestBatch, idempotency_key: &str) -> Result<(), SendError> {
-        let url = format!("{}/api/v1/ingest/events", self.api_url.trim_end_matches('/'));
+        let url = format!(
+            "{}/api/v1/ingest/events",
+            self.api_url.trim_end_matches('/')
+        );
         let res = self
             .http
             .post(&url)

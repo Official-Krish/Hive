@@ -61,10 +61,10 @@ export class AuthService {
   }
 
   /**
-   * Create a user with a default organization and "Main" workspace, mirroring
-   * the structure created by {@link register}. Used by OAuth flows where there
-   * is no password (passwordHash omitted) — those accounts sign in via GitHub
-   * until a password is set.
+   * Create a user with a personal organization. Used by OAuth flows where
+   * there is no password (passwordHash omitted) — those accounts sign in via
+   * GitHub until a password is set. No workspace is created: users start with
+   * zero workspaces and create or join one explicitly.
    */
   async provisionUser(data: {
     email: string;
@@ -95,10 +95,6 @@ export class AuthService {
         },
       });
 
-      const workspace = await tx.workspace.create({
-        data: { orgId: org.id, name: "Main", slug: "main" },
-      });
-
       await tx.organizationMember.create({
         data: {
           orgId: org.id,
@@ -107,10 +103,6 @@ export class AuthService {
           status: "ACTIVE",
         },
       });
-      await tx.workspaceMember.create({
-        data: { workspaceId: workspace.id, userId: user.id, role: "OWNER" },
-      });
-      await tx.privacySetting.create({ data: { workspaceId: workspace.id } });
 
       return user.id;
     });
@@ -305,6 +297,9 @@ export class AuthService {
         ...(input.name !== undefined ? { name: input.name } : {}),
         ...(input.avatarUrl !== undefined
           ? { avatarUrl: input.avatarUrl }
+          : {}),
+        ...(input.mapAvatarModel !== undefined
+          ? { mapAvatarModel: input.mapAvatarModel }
           : {}),
       },
     });

@@ -1,8 +1,10 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import type { Server } from "node:http";
-import { prisma } from "@hive/db";
+import { randomInt } from "node:crypto";
+import { prisma, RepositoryProvider } from "@hive/db";
 import { makeClient, startServer, stopServer, uniqueEmail } from "./helpers";
 import type { TestClient } from "./helpers";
+import { encryptSecret } from "../src/lib/encryption";
 
 let server: Server;
 let c: TestClient;
@@ -222,27 +224,159 @@ describe("invites", () => {
     expect(accept.status).toBe(403);
   });
 
-  test("accepting requires an online collector device", async () => {
+  test("accepting an invite works without a collector device", async () => {
     c.clearJar();
     await c.registerUser();
-    const workspaceId = await c.createWorkspace("Gated");
-    const gatedEmail = uniqueEmail("gated");
+    const workspaceId = await c.createWorkspace("No Gate");
+    const joinerEmail = uniqueEmail("joiner");
 
-    const token = await c.inviteAndGetToken(workspaceId, gatedEmail);
+    const token = await c.inviteAndGetToken(workspaceId, joinerEmail);
 
-    await c.registerUserWith(gatedEmail);
+    await c.registerUserWith(joinerEmail);
     const accept = await c.api(`/api/v1/invites/${token}/accept`, {
       method: "POST",
     });
-    expect(accept.status).toBe(409);
-    const body = await c.asJson<{ error: { code: string } }>(accept);
-    expect(body.error.code).toBe("DEVICE_REQUIRED");
+    expect(accept.status).toBe(200);
+    const body = await c.asJson<{ data: { id: string } }>(accept);
+    expect(body.data.id).toBe(workspaceId);
+  });
+});
 
-    await c.registerDevice();
-    const retry = await c.api(`/api/v1/invites/${token}/accept`, {
-      method: "POST",
+describe("repository assignment", () => {
+  const originalFetch = globalThis.fetch;
+  // Random start: rows persist in the shared dev DB across runs and both
+  // githubId / githubRepoId are unique — mirror github.test.ts.
+  let githubIdCounter = randomInt(100_000, 2_000_000_000);
+
+  function stubGithubRepo(payload: Record<string, unknown> | null): void {
+    globalThis.fetch = (async (
+      input: Parameters<typeof fetch>[0],
+      init?: Parameters<typeof fetch>[1],
+    ) => {
+      const url = String(input);
+      if (url.startsWith("https://api.github.com")) {
+        return new Response(JSON.stringify(payload ?? {}), {
+          status: payload ? 200 : 404,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      return originalFetch(input, init);
+    }) as typeof fetch;
+  }
+
+  async function linkGithubAccount(userId: string): Promise<void> {
+    await prisma.gitHubAccount.create({
+      data: {
+        userId,
+        githubId: ++githubIdCounter,
+        login: `octo-${githubIdCounter}`,
+        accessToken: encryptSecret("tok-test"),
+      },
     });
-    expect(retry.status).toBe(200);
+  }
+
+  async function userIdOfWorkspaceOwner(workspaceId: string): Promise<string> {
+    return (
+      await prisma.workspaceMember.findFirstOrThrow({
+        where: { workspaceId, role: "OWNER" },
+        select: { userId: true },
+      })
+    ).userId;
+  }
+
+  test("creating a workspace with a GitHub repo id imports and links it", async () => {
+    c.clearJar();
+    const email = await c.registerUser();
+    await linkGithubAccount(
+      (await prisma.user.findUniqueOrThrow({ where: { email } })).id,
+    );
+
+    const ghId = String(++githubIdCounter);
+    const fullName = `acme-${ghId}/app`;
+    stubGithubRepo({
+      id: Number(ghId),
+      name: "app",
+      full_name: fullName,
+      html_url: `https://github.com/${fullName}`,
+      private: false,
+      default_branch: "main",
+      permissions: { admin: true },
+    });
+    try {
+      // This is the exact flow that used to fail with
+      // 404 "Repository not found": the picker sends GitHub's numeric id.
+      const res = await c.api("/api/v1/workspaces", {
+        method: "POST",
+        body: { name: "Hooked", repositoryId: ghId },
+      });
+      expect(res.status, await res.clone().text()).toBe(201);
+
+      const row = await prisma.repository.findFirstOrThrow({
+        where: { githubRepoId: Number(ghId) },
+      });
+      expect(row.githubFullName).toBe(fullName);
+      expect(row.provider).toBe(RepositoryProvider.GITHUB);
+      expect(row.workspaceId).toBeTruthy();
+
+      const list = await c.api("/api/v1/workspaces");
+      const listBody = await c.asJson<{
+        data: Array<{ id: string }>;
+      }>(list);
+      const ws = listBody.data[0]!.id;
+      expect(row.workspaceId).toBe(ws);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test("assigning a repo the caller cannot administer is rejected", async () => {
+    c.clearJar();
+    await c.registerUser();
+    const workspaceId = await c.createWorkspace("Forbidden Repo");
+    await linkGithubAccount(await userIdOfWorkspaceOwner(workspaceId));
+
+    stubGithubRepo({
+      id: 1,
+      name: "app",
+      full_name: "someone/app",
+      html_url: null,
+      private: true,
+      default_branch: "main",
+      permissions: { admin: false },
+    });
+    try {
+      const res = await c.api(
+        `/api/v1/workspaces/${workspaceId}/settings/assign-repo`,
+        { method: "POST", body: { repositoryId: String(++githubIdCounter) } },
+      );
+      expect(res.status).toBe(403);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test("existing Repository rows still assign by their own id", async () => {
+    c.clearJar();
+    await c.registerUser();
+    const workspaceId = await c.createWorkspace("Legacy Link");
+
+    const repo = await prisma.repository.create({
+      data: {
+        name: `local-repo-${++githubIdCounter}`,
+        provider: RepositoryProvider.OTHER,
+      },
+    });
+
+    const res = await c.api(
+      `/api/v1/workspaces/${workspaceId}/settings/assign-repo`,
+      { method: "POST", body: { repositoryId: repo.id } },
+    );
+    expect(res.status).toBe(204);
+
+    const updated = await prisma.repository.findUniqueOrThrow({
+      where: { id: repo.id },
+    });
+    expect(updated.workspaceId).toBe(workspaceId);
   });
 });
 

@@ -33,8 +33,9 @@ export const changePasswordInputSchema = z.object({
 export type ChangePasswordInput = z.infer<typeof changePasswordInputSchema>;
 
 export const updateProfileInputSchema = z.object({
-  name: z.string().trim().min(1).max(100).optional(),
+  name: z.string().trim().min(1, "Name is required").max(100).optional(),
   avatarUrl: z.url("Invalid URL").max(2048).nullable().optional(),
+  mapAvatarModel: z.string().min(1).max(2048).nullable().optional(),
 });
 export type UpdateProfileInput = z.infer<typeof updateProfileInputSchema>;
 
@@ -52,6 +53,7 @@ export interface PublicUser {
   email: string;
   name: string;
   avatarUrl: string | null;
+  mapAvatarModel: string | null;
   emailVerified: boolean;
   createdAt: string;
 }

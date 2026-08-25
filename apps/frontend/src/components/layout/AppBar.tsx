@@ -3,14 +3,7 @@ import { useState, useRef, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
-import {
-  FiArrowUpRight,
-  FiMenu,
-  FiX,
-  FiLogOut,
-  FiSettings,
-  FiGrid,
-} from "react-icons/fi";
+import { FiArrowUpRight, FiMenu, FiX, FiLogOut, FiGrid } from "react-icons/fi";
 import { http } from "@/lib/http";
 
 const navLinks = [
@@ -20,12 +13,7 @@ const navLinks = [
   { label: "Blog", href: "#blog" },
 ];
 
-const authNavLinks = [
-  { label: "Dashboard", href: "/dashboard" },
-  { label: "Repositories", href: "/repositories" },
-  { label: "Insights", href: "/insights" },
-  { label: "Settings", href: "/settings" },
-];
+const authNavLinks = [{ label: "Dashboard", href: "/dashboard" }];
 
 export function AppBar() {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -172,14 +160,6 @@ export function AppBar() {
                   >
                     <FiGrid className="size-4" />
                     <span>Dashboard</span>
-                  </Link>
-                  <Link
-                    to="/settings"
-                    onClick={() => setProfileOpen(false)}
-                    className="flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-slate-200 hover:bg-white/5 hover:text-white transition-colors"
-                  >
-                    <FiSettings className="size-4" />
-                    <span>Settings</span>
                   </Link>
                   <div className="border-t border-white/10 my-2" />
                   <button

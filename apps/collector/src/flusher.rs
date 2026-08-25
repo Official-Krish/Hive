@@ -1,8 +1,8 @@
 use crate::config::Config;
-use crate::events::{now_rfc3339, IngestBatch, TelemetryEvent};
+use crate::events::{IngestBatch, TelemetryEvent, now_rfc3339};
 use crate::status::{read_status, write_status};
 use crate::storage::Outbox;
-use crate::transport::{new_idempotency_key, IngestClient, SendError};
+use crate::transport::{IngestClient, SendError, new_idempotency_key};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc;
@@ -62,7 +62,8 @@ pub async fn run(
                 Err(SendError::Unauthorized(_)) => {
                     let mut status = read_status();
                     status.connected = false;
-                    status.error = Some("device token rejected".into());
+                    status.error =
+                        Some("device token rejected — run `hive install` to re-register".into());
                     let _ = write_status(&status);
                     tracing::error!("ingest rejected as unauthorized; stopping");
                     return Ok(());

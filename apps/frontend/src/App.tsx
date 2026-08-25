@@ -1,5 +1,7 @@
 import "./index.css";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 import {
   createBrowserRouter,
   Navigate,
@@ -16,6 +18,9 @@ import { CreateWorkspace } from "./pages/dashboard/CreateWorkspace";
 import { InviteUser } from "./pages/dashboard/InviteUser";
 import { WorkspaceInvites } from "./pages/dashboard/WorkspaceInvites";
 import { WorkspaceDetail } from "./pages/dashboard/WorkspaceDetail";
+import { WorkspaceSettings } from "./pages/dashboard/WorkspaceSettings";
+import { AvatarSelection } from "./pages/dashboard/AvatarSelection";
+import WorldPage from "./pages/WorldPage";
 import { AuthGuard } from "./lib/ProtectedRoute";
 
 const queryClient = new QueryClient({
@@ -61,6 +66,14 @@ const router = createBrowserRouter([
   },
   { path: "/auth", element: <AuthLayout /> },
   {
+    path: "/world",
+    element: (
+      <AuthGuard>
+        <WorldPage />
+      </AuthGuard>
+    ),
+  },
+  {
     path: "/dashboard",
     element: (
       <AuthGuard>
@@ -72,7 +85,9 @@ const router = createBrowserRouter([
       { path: "create", element: <CreateWorkspace /> },
       { path: "invite", element: <InviteUser /> },
       { path: "invites", element: <WorkspaceInvites /> },
+      { path: "avatar", element: <AvatarSelection /> },
       { path: "w/:workspaceId", element: <WorkspaceDetail /> },
+      { path: "w/:workspaceId/settings", element: <WorkspaceSettings /> },
     ],
   },
 ]);
@@ -81,6 +96,17 @@ export function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <RouterProvider router={router} />
+      <ToastContainer
+        position="top-right"
+        autoClose={3500}
+        hideProgressBar={false}
+        newestOnTop={false}
+        closeOnClick
+        pauseOnFocusLoss={false}
+        draggable
+        pauseOnHover
+        theme="light"
+      />
     </QueryClientProvider>
   );
 }

@@ -1,6 +1,6 @@
 use crate::config::{ensure_state_dir, log_path, pidfile_path};
-use crate::status::{read_status, write_status, Status};
-use anyhow::{bail, Context, Result};
+use crate::status::{Status, read_status, write_status};
+use anyhow::{Context, Result, bail};
 use std::fs;
 use std::os::unix::process::CommandExt;
 use std::process::Command;
@@ -33,7 +33,10 @@ pub fn pid_alive(pid: u32) -> bool {
 pub fn signal(pid: u32, sig: i32) -> Result<()> {
     let ret = unsafe { libc::kill(pid as i32, sig) };
     if ret != 0 {
-        bail!("failed to signal pid {pid}: {}", std::io::Error::last_os_error());
+        bail!(
+            "failed to signal pid {pid}: {}",
+            std::io::Error::last_os_error()
+        );
     }
     Ok(())
 }
@@ -71,9 +74,7 @@ pub fn spawn_detached() -> Result<u32> {
 pub fn start() -> Result<u32> {
     let config = crate::config::Config::load()?;
     if !config.is_configured() {
-        bail!(
-            "collector is not configured. Run `hive install` for one-time setup first."
-        );
+        bail!("collector is not configured. Run `hive install` for one-time setup first.");
     }
     if let Some(pid) = read_pid()? {
         if pid_alive(pid) {
@@ -95,7 +96,10 @@ pub fn start() -> Result<u32> {
         }
         std::thread::sleep(Duration::from_millis(50));
     }
-    bail!("collector failed to start (pid {pid}); see {}", log_path().display());
+    bail!(
+        "collector failed to start (pid {pid}); see {}",
+        log_path().display()
+    );
 }
 
 /// `hive stop`: SIGTERM the collector, escalate to SIGKILL if it lingers.

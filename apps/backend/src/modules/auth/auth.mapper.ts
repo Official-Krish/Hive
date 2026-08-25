@@ -7,6 +7,7 @@ export function toPublicUser(user: User): PublicUser {
     email: user.email,
     name: user.name,
     avatarUrl: user.avatarUrl,
+    mapAvatarModel: user.mapAvatarModel,
     emailVerified: user.emailVerifiedAt !== null,
     createdAt: user.createdAt.toISOString(),
   };

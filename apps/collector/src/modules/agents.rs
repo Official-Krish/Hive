@@ -1,6 +1,6 @@
 use crate::bus::EventSender;
 use crate::config::Config;
-use crate::events::{now_rfc3339, TelemetryEvent};
+use crate::events::{TelemetryEvent, now_rfc3339};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::fs::File;
@@ -106,8 +106,10 @@ impl JsonlAgent {
     }
 
     fn note_activity(&mut self, session_id: &str) {
-        self.sessions
-            .insert(session_id.to_string(), chrono::Utc::now().timestamp_millis());
+        self.sessions.insert(
+            session_id.to_string(),
+            chrono::Utc::now().timestamp_millis(),
+        );
     }
 
     fn emit_started(&mut self, tx: &EventSender, session_id: &str) {
@@ -201,7 +203,11 @@ fn parse_claude(line: &str, session_id: &str, _agent: &str) -> Vec<TelemetryEven
                 let cached = usage
                     .get("cache_read_input_tokens")
                     .and_then(|v| v.as_u64())
-                    .or_else(|| usage.get("cache_creation_input_tokens").and_then(|v| v.as_u64()));
+                    .or_else(|| {
+                        usage
+                            .get("cache_creation_input_tokens")
+                            .and_then(|v| v.as_u64())
+                    });
                 let model = value
                     .get("model")
                     .and_then(|v| v.as_str())
@@ -313,7 +319,9 @@ mod tests {
             "s1",
             "claude",
         );
-        assert!(matches!(&events[0], TelemetryEvent::AgentSummary { summary, .. } if summary == "refactored auth"));
+        assert!(
+            matches!(&events[0], TelemetryEvent::AgentSummary { summary, .. } if summary == "refactored auth")
+        );
     }
 
     #[test]
@@ -349,7 +357,10 @@ mod tests {
         );
         match &events[0] {
             TelemetryEvent::AgentTokenUsage {
-                input_tokens, output_tokens, model, ..
+                input_tokens,
+                output_tokens,
+                model,
+                ..
             } => {
                 assert_eq!(*input_tokens, 2);
                 assert_eq!(*output_tokens, 7);

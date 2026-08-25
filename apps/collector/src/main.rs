@@ -53,13 +53,9 @@ enum ConfigAction {
 }
 
 fn init_logging() {
-    let filter = std::env::var("RUST_LOG")
-        .unwrap_or_else(|_| "info".to_string());
+    let filter = std::env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string());
     tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::builder()
-                .parse_lossy(&filter),
-        )
+        .with_env_filter(tracing_subscriber::EnvFilter::builder().parse_lossy(&filter))
         .init();
 }
 
@@ -92,11 +88,21 @@ async fn run_cli(cli: Cli) -> anyhow::Result<()> {
         }
         Command::Start => {
             init_logging();
-            if !collector::config::Config::load()?.is_configured() {
+            let mut config = collector::config::Config::load()?;
+            if !config.is_configured() {
                 println!("→ not registered yet; registering this machine…");
                 collector::install::run().await?;
+                config = collector::config::Config::load()?;
+            } else if collector::control::token_rejected(&config.ws_url, &config.device_token).await
+            {
+                // The stored device token no longer resolves server-side
+                // (revoked or the backend DB was reset); re-register instead of
+                // spawning a daemon that can neither ingest nor go online.
+                println!("→ device token rejected by the backend; re-registering this machine…");
+                collector::install::run().await?;
+                config = collector::config::Config::load()?;
             }
-            if !collector::config::Config::load()?.is_configured() {
+            if !config.is_configured() {
                 // install printed guidance (e.g. "create or join a workspace
                 // from the web") but did not register; nothing to start.
                 return Ok(());

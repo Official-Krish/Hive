@@ -20,18 +20,36 @@ pub async fn spawn_all(
 ) -> Result<()> {
     let mut process_tracker = process::ProcessTracker::new();
     process_tracker.started(&tx, std::process::id(), "collector".to_string());
-    tokio::spawn(process::spawn_tracker(process_tracker, tx.clone(), config.clone(), shutdown.clone()));
+    tokio::spawn(process::spawn_tracker(
+        process_tracker,
+        tx.clone(),
+        config.clone(),
+        shutdown.clone(),
+    ));
 
     if let Err(err) = filesystem::spawn(tx.clone(), config.clone(), shutdown.clone()) {
         tracing::warn!(%err, "filesystem watcher not started");
     }
 
     let git_watcher = git::GitWatcher::new();
-    tokio::spawn(git::spawn_tracker(git_watcher, tx.clone(), config.clone(), shutdown.clone()));
+    tokio::spawn(git::spawn_tracker(
+        git_watcher,
+        tx.clone(),
+        config.clone(),
+        shutdown.clone(),
+    ));
 
-    tokio::spawn(terminal::serve(tx.clone(), config.clone(), shutdown.clone()));
+    tokio::spawn(terminal::serve(
+        tx.clone(),
+        config.clone(),
+        shutdown.clone(),
+    ));
 
-    tokio::spawn(agents::spawn_agents(tx.clone(), config.clone(), shutdown.clone()));
+    tokio::spawn(agents::spawn_agents(
+        tx.clone(),
+        config.clone(),
+        shutdown.clone(),
+    ));
 
     Ok(())
 }

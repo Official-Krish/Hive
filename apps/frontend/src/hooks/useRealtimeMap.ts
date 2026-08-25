@@ -8,6 +8,8 @@ export interface MapAvatar {
   developerId: string;
   name: string;
   avatarUrl: string | null;
+  /** GLB chosen on the dashboard; null until the member picks one. */
+  mapAvatarModel: string | null;
   status: RealtimeMember["status"];
   x: number;
   y: number;
@@ -125,6 +127,7 @@ export function useRealtimeMap(
             developerId: member.userId,
             name: member.name,
             avatarUrl: member.avatarUrl,
+            mapAvatarModel: member.mapAvatarModel,
             status: member.status,
             x: member.position?.x ?? 0,
             y: member.position?.y ?? 0,
@@ -150,6 +153,7 @@ export function useRealtimeMap(
           developerId: event.developerId,
           name: current?.name ?? "",
           avatarUrl: current?.avatarUrl ?? null,
+          mapAvatarModel: current?.mapAvatarModel ?? null,
           status: current?.status ?? "online",
           x: event.x,
           y: event.y,

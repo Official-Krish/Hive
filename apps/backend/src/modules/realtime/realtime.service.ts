@@ -65,7 +65,9 @@ export class RealtimeService {
         where: { workspaceId },
         select: {
           userId: true,
-          user: { select: { name: true, avatarUrl: true } },
+          user: {
+            select: { name: true, avatarUrl: true, mapAvatarModel: true },
+          },
         },
       }),
       prisma.avatar.findMany({
@@ -84,16 +86,21 @@ export class RealtimeService {
     return members.map((membership) => {
       const avatar = avatarByUser.get(membership.userId);
       const presence = presenceByUser.get(membership.userId);
+      // No Presence row means the developer has never joined the map —
+      // report offline rather than assuming online.
+      const status = !presence
+        ? "offline"
+        : presence.status === PresenceStatus.AWAY
+          ? "away"
+          : presence.status === PresenceStatus.OFFLINE
+            ? "offline"
+            : "online";
       return {
         userId: membership.userId,
         name: membership.user.name,
         avatarUrl: membership.user.avatarUrl,
-        status:
-          presence?.status === PresenceStatus.AWAY
-            ? "away"
-            : presence?.status === PresenceStatus.OFFLINE
-              ? "offline"
-              : "online",
+        mapAvatarModel: membership.user.mapAvatarModel,
+        status,
         position: avatar
           ? { x: avatar.x, y: avatar.y, roomId: avatar.roomId }
           : null,

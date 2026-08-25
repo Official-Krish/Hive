@@ -18,6 +18,20 @@ export interface GitHubAccessTokenResponse {
   scope: string;
 }
 
+export interface GitHubRepo {
+  id: number;
+  name: string;
+  full_name: string;
+  html_url: string | null;
+  private: boolean;
+  permissions?: { admin?: boolean; push?: boolean; pull?: boolean };
+}
+
+/** Shape of `GET /repositories/{id}` — the fields assignment needs on top. */
+export interface GitHubRepoDetail extends GitHubRepo {
+  default_branch?: string | null;
+}
+
 export interface GitHubClientOptions {
   clientId: string;
   clientSecret: string;
@@ -26,7 +40,7 @@ export interface GitHubClientOptions {
   loginBaseUrl?: string;
 }
 
-export const OAUTH_SCOPES = ["read:user", "user:email"];
+export const OAUTH_SCOPES = ["read:user", "user:email", "repo"];
 
 /** Minimal GitHub OAuth App client. Base URLs are overridable for tests. */
 export class GitHubClient {
@@ -80,6 +94,52 @@ export class GitHubClient {
     return this.get<GitHubEmail[]>("/user/emails", accessToken);
   }
 
+  /** Fetch a single repo by its GitHub id, including permission info. */
+  async getRepo(accessToken: string, id: number): Promise<GitHubRepoDetail> {
+    return this.get<GitHubRepoDetail>(`/repositories/${id}`, accessToken);
+  }
+
+  /**
+   * List repositories the user has admin access to. Paginates through up to
+   * `maxPages` pages of 100 repos each. Only repos with `permissions.admin`
+   * are returned (needed to create webhooks).
+   */
+  async listAdminRepos(
+    accessToken: string,
+    maxPages = 5,
+  ): Promise<GitHubRepo[]> {
+    const all: GitHubRepo[] = [];
+    for (let page = 1; page <= maxPages; page++) {
+      const batch = await this.get<GitHubRepo[]>(
+        `/user/repos?per_page=100&page=${page}&affiliation=owner,collaborator,organization_member`,
+        accessToken,
+      );
+      all.push(...batch);
+      if (batch.length < 100) break;
+    }
+    return all.filter((r) => r.permissions?.admin === true);
+  }
+
+  /**
+   * Create a webhook on the given repository. Returns the created hook id.
+   */
+  async createRepoHook(
+    accessToken: string,
+    fullName: string,
+    url: string,
+    secret: string,
+  ): Promise<{ id: number }> {
+    return this.postJson<{ id: number }>(
+      `/repos/${fullName}/hooks`,
+      accessToken,
+      {
+        config: { url, secret, content_type: "json" },
+        events: ["push", "pull_request", "issues", "issue_comment"],
+        active: true,
+      },
+    );
+  }
+
   private async get<T>(path: string, accessToken: string): Promise<T> {
     const response = await fetch(`${this.apiBaseUrl}${path}`, {
       headers: {
@@ -90,6 +150,30 @@ export class GitHubClient {
     });
     if (!response.ok) {
       throw new Error(`GitHub API ${path} failed: ${response.status}`);
+    }
+    return (await response.json()) as T;
+  }
+
+  private async postJson<T>(
+    path: string,
+    accessToken: string,
+    body: unknown,
+  ): Promise<T> {
+    const response = await fetch(`${this.apiBaseUrl}${path}`, {
+      method: "POST",
+      headers: {
+        Accept: "application/vnd.github+json",
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+        "X-GitHub-Api-Version": "2022-11-28",
+      },
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) {
+      const text = await response.text().catch(() => "");
+      throw new Error(
+        `GitHub API ${path} failed: ${response.status} ${text}`.trim(),
+      );
     }
     return (await response.json()) as T;
   }
