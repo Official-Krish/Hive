@@ -24,6 +24,7 @@ import {
   paperLabelClass,
 } from "@/components/dashboard/Paper";
 import { Field, Note, PageHeader, Spinner } from "@/components/dashboard/ui";
+import { notifyError, notifyInfo, notifySuccess } from "@/lib/toast";
 
 export function WorkspaceSettings() {
   const { workspaceId = "" } = useParams();
@@ -80,7 +81,12 @@ export function WorkspaceSettings() {
       queryClient.invalidateQueries({
         queryKey: ["workspace", workspaceId, "settings"],
       });
+      notifySuccess("Changes saved");
     },
+    onError: (err) =>
+      notifyError(
+        err instanceof ApiError ? err.message : "Couldn't save changes.",
+      ),
   });
 
   const rotateMutation = useMutation({
@@ -90,7 +96,12 @@ export function WorkspaceSettings() {
       queryClient.invalidateQueries({
         queryKey: ["workspace", workspaceId, "settings"],
       });
+      notifySuccess("New webhook secret generated");
     },
+    onError: (err) =>
+      notifyError(
+        err instanceof ApiError ? err.message : "Couldn't rotate the secret.",
+      ),
   });
 
   const assignRepoMutation = useMutation({
@@ -100,7 +111,14 @@ export function WorkspaceSettings() {
       queryClient.invalidateQueries({
         queryKey: ["workspace", workspaceId, "settings"],
       });
+      notifySuccess("Repository assigned");
     },
+    onError: (err) =>
+      notifyError(
+        err instanceof ApiError
+          ? err.message
+          : "Couldn't assign the repository.",
+      ),
   });
 
   const deleteMutation = useMutation({
@@ -108,7 +126,14 @@ export function WorkspaceSettings() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["workspaces"] });
       navigate("/dashboard", { replace: true });
+      notifySuccess("Workspace deleted");
     },
+    onError: (err) =>
+      notifyError(
+        err instanceof ApiError
+          ? err.message
+          : "Couldn't delete the workspace.",
+      ),
   });
 
   if (settings.isLoading) {
@@ -197,18 +222,6 @@ export function WorkspaceSettings() {
                 maxLength={500}
               />
             </Field>
-            {renameMutation.isError && (
-              <Note tone="error" onPaper>
-                {renameMutation.error instanceof ApiError
-                  ? renameMutation.error.message
-                  : "Couldn't save changes."}
-              </Note>
-            )}
-            {renameMutation.isSuccess && !renameMutation.isPending && (
-              <Note tone="success" onPaper>
-                Saved.
-              </Note>
-            )}
             <div className="flex justify-end">
               <button
                 type="submit"
@@ -249,6 +262,7 @@ export function WorkspaceSettings() {
                 onClick={() => {
                   const value = revealedSecret ?? data.webhookSecretMasked;
                   void navigator.clipboard.writeText(value);
+                  notifyInfo("Webhook secret copied to clipboard");
                 }}
               >
                 <FiCopy className="size-4" aria-hidden />
@@ -272,15 +286,6 @@ export function WorkspaceSettings() {
               <div className="mt-3">
                 <Note tone="info" onPaper>
                   New secret generated. Copy it now — it won't be shown again.
-                </Note>
-              </div>
-            )}
-            {rotateMutation.isError && (
-              <div className="mt-3">
-                <Note tone="error" onPaper>
-                  {rotateMutation.error instanceof ApiError
-                    ? rotateMutation.error.message
-                    : "Couldn't rotate the secret."}
                 </Note>
               </div>
             )}
@@ -337,15 +342,6 @@ export function WorkspaceSettings() {
                 Assign
               </button>
             </div>
-            {assignRepoMutation.isError && (
-              <div className="mt-3">
-                <Note tone="error" onPaper>
-                  {assignRepoMutation.error instanceof ApiError
-                    ? assignRepoMutation.error.message
-                    : "Couldn't assign the repository."}
-                </Note>
-              </div>
-            )}
           </div>
         </PaperInset>
 
@@ -390,15 +386,6 @@ export function WorkspaceSettings() {
                 Delete workspace
               </button>
             </div>
-            {deleteMutation.isError && (
-              <div className="mt-3">
-                <Note tone="error" onPaper>
-                  {deleteMutation.error instanceof ApiError
-                    ? deleteMutation.error.message
-                    : "Couldn't delete the workspace."}
-                </Note>
-              </div>
-            )}
           </div>
         </PaperInset>
       </motion.section>

@@ -1,9 +1,8 @@
 /* ─────────────────────────────────────────────────────────────
    WORKSPACE INVITES — your inbox.
    Invites addressed to you, delivered as paper mail on the bezel.
-   Accepting joins the workspace — which requires an online
-   collector, so a device-gated invite explains what to do rather
-   than just failing.
+   Accepting just joins the workspace — no collector needed until
+   you actually step into the spatial office.
    ───────────────────────────────────────────────────────────── */
 import { useNavigate } from "react-router-dom";
 import { motion } from "motion/react";
@@ -15,9 +14,9 @@ import {
   type ReceivedInvite,
   type WorkspaceSummary,
 } from "@/lib/http";
+import { notifyError, notifySuccess } from "@/lib/toast";
 import { EASE } from "@/components/dashboard/primitives";
 import {
-  InkNote,
   PaperInset,
   StripMeta,
   inkBtnClass,
@@ -47,25 +46,21 @@ export function WorkspaceInvites() {
     queryFn: http.invites.listReceived,
   });
 
-  const me = useQuery({
-    queryKey: ["me"],
-    queryFn: http.auth.me,
-    retry: false,
-    staleTime: 60_000,
-  });
-  const hasAvatar = !!me.data?.user?.mapAvatarModel;
-
   const mutation = useMutation({
     mutationFn: (inviteId: string): Promise<WorkspaceSummary> =>
       http.invites.acceptById(inviteId),
     onSuccess: (ws) => {
       queryClient.invalidateQueries({ queryKey: ["workspaces"] });
       queryClient.invalidateQueries({ queryKey: ["invites", "received"] });
-      if (hasAvatar) {
-        navigate(`/world?workspaceId=${ws.id}`);
-      } else {
-        navigate(`/dashboard/avatar?workspaceId=${ws.id}`);
-      }
+      notifySuccess(`Invite accepted — find "${ws.name}" on your dashboard.`);
+      navigate("/dashboard");
+    },
+    onError: (err) => {
+      notifyError(
+        err instanceof ApiError
+          ? err.message
+          : "Something went wrong accepting this invite.",
+      );
     },
   });
 
@@ -153,8 +148,6 @@ function InviteRow({
   onAccept: () => void;
 }) {
   const expired = invite.status !== "pending";
-  const deviceRequired =
-    error instanceof ApiError && error.code === "DEVICE_REQUIRED";
 
   return (
     <motion.div
@@ -224,7 +217,7 @@ function InviteRow({
             ) : (
               <>
                 {pending && <Spinner ink />}
-                {pending ? "Joining…" : "Accept & join"}
+                {pending ? "Accepting…" : "Accept"}
               </>
             )}
           </button>
@@ -232,21 +225,11 @@ function InviteRow({
 
         {error != null && (
           <div className="border-t border-neutral-900/10 px-5 py-3.5 sm:px-7">
-            {deviceRequired ? (
-              <InkNote className="border-transparent bg-transparent px-0 py-0">
-                Joining needs an online collector on your machine — run{" "}
-                <code className="rounded bg-neutral-900/[0.06] px-1.5 py-0.5 font-mono text-[11.5px]">
-                  hive start
-                </code>{" "}
-                , then accept again.
-              </InkNote>
-            ) : (
-              <Note tone="error" onPaper>
-                {error instanceof ApiError
-                  ? error.message
-                  : "Something went wrong joining this workspace."}
-              </Note>
-            )}
+            <Note tone="error" onPaper>
+              {error instanceof ApiError
+                ? error.message
+                : "Something went wrong accepting this invite."}
+            </Note>
           </div>
         )}
       </PaperInset>

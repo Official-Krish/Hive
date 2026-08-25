@@ -1,4 +1,4 @@
-import { prisma, UserRole } from "@hive/db";
+import { prisma, RepositoryProvider, UserRole } from "@hive/db";
 import type {
   CreateGithubInviteInput,
   CreateInviteInput,
@@ -14,14 +14,15 @@ import type {
 } from "@hive/types";
 import {
   ConflictError,
-  DeviceRequiredError,
   ForbiddenError,
   NotFoundError,
 } from "../../core/errors";
+import { env } from "../../config/env";
 import { generateRandomToken, hashToken } from "../../lib/crypto";
+import { decryptSecret } from "../../lib/encryption";
+import { GitHubClient, type GitHubRepoDetail } from "../../lib/github";
 import { slugify, uniqueSlug } from "../../lib/slug";
 import { roleFromString, roleToString } from "../../middleware/workspace";
-import { DeviceService } from "../devices/devices.service";
 
 const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -35,7 +36,7 @@ type WorkspaceWithCount = {
 };
 
 export class WorkspaceService {
-  constructor(private readonly devices = new DeviceService()) {}
+  constructor() {}
 
   async listMy(userId: string): Promise<WorkspaceSummary[]> {
     const memberships = await prisma.workspaceMember.findMany({
@@ -186,14 +187,73 @@ export class WorkspaceService {
     workspaceId: string,
     repositoryId: string,
   ): Promise<void> {
-    const repo = await prisma.repository.findUnique({
-      where: { id: repositoryId },
-    });
-    if (!repo) throw new NotFoundError("Repository not found");
+    // The repo pickers expose GitHub's numeric ids, while Repository rows
+    // (with cuid PKs) only come into existence via webhook pushes — so a
+    // numeric id that matches no row must be imported on demand.
+    const githubRepoId = Number(repositoryId);
+    const isGithubId =
+      repositoryId !== "" && Number.isInteger(githubRepoId) && githubRepoId > 0;
 
-    await prisma.repository.update({
-      where: { id: repo.id },
-      data: { workspaceId },
+    const repo = await prisma.repository.findFirst({
+      where: {
+        OR: [{ id: repositoryId }, ...(isGithubId ? [{ githubRepoId }] : [])],
+      },
+    });
+    if (repo) {
+      await prisma.repository.update({
+        where: { id: repo.id },
+        data: { workspaceId },
+      });
+      return;
+    }
+
+    if (!isGithubId) throw new NotFoundError("Repository not found");
+    const remote = await this.fetchAdminRepo(userId, githubRepoId);
+    await prisma.repository.create({
+      data: {
+        workspaceId,
+        name: remote.name || remote.full_name.split("/").pop() || "repo",
+        url: remote.html_url,
+        provider: RepositoryProvider.GITHUB,
+        defaultBranch: remote.default_branch ?? null,
+        githubRepoId: remote.id,
+        githubFullName: remote.full_name || null,
+      },
+    });
+  }
+
+  /** Fetch the repo from GitHub with the caller's stored token and verify
+   * they administer it before importing it into the workspace. */
+  private async fetchAdminRepo(
+    userId: string,
+    githubRepoId: number,
+  ): Promise<GitHubRepoDetail> {
+    const account = await prisma.gitHubAccount.findFirst({ where: { userId } });
+    if (!account) {
+      throw new NotFoundError("Connect your GitHub account first");
+    }
+    let remote: GitHubRepoDetail;
+    try {
+      remote = await this.githubClient().getRepo(
+        decryptSecret(account.accessToken),
+        githubRepoId,
+      );
+    } catch {
+      throw new NotFoundError(
+        "Repository not found on your connected GitHub account",
+      );
+    }
+    if (!remote.permissions?.admin) {
+      throw new ForbiddenError("You need admin access to that repository");
+    }
+    return remote;
+  }
+
+  private githubClient(): GitHubClient {
+    return new GitHubClient({
+      clientId: env.GITHUB_CLIENT_ID,
+      clientSecret: env.GITHUB_CLIENT_SECRET,
+      redirectUri: env.GITHUB_OAUTH_REDIRECT_URI,
     });
   }
 
@@ -491,11 +551,6 @@ export class WorkspaceService {
     });
     if (!user || user.email.toLowerCase() !== invite.email) {
       throw new ForbiddenError("This invite was issued to a different email");
-    }
-
-    const hasDevice = await this.devices.hasOnlineDevice(userId);
-    if (!hasDevice) {
-      throw new DeviceRequiredError();
     }
 
     const role = invite.role;

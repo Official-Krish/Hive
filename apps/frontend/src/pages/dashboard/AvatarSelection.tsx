@@ -1,11 +1,10 @@
 /* ─────────────────────────────────────────────────────────────
    AVATAR SELECTION — pick a map avatar once.
-   Renders a 3D preview of each GLB option, calls
-   http.auth.updateProfile with the chosen model path, and
-   navigates to the WorldPage. Skips if the user already picked
-   one and only redirects to the map.
+   Renders a 3D preview of each GLB option and saves it via
+   http.auth.updateProfile, then returns to the dashboard. Entry
+   into the spatial office always happens from the dashboard.
    ───────────────────────────────────────────────────────────── */
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { motion } from "motion/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -13,6 +12,7 @@ import { Canvas } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import { FiArrowLeft, FiCheck } from "react-icons/fi";
 import { ApiError, http } from "@/lib/http";
+import { notifyError, notifySuccess } from "@/lib/toast";
 import { fade } from "@/components/dashboard/primitives";
 import {
   Note,
@@ -32,13 +32,6 @@ export function AvatarSelection() {
   const workspaceId = searchParams.get("workspaceId") ?? "";
   const [selected, setSelected] = useState<string | null>(null);
 
-  const { data: me, isLoading: meLoading } = useQuery({
-    queryKey: ["me"],
-    queryFn: http.auth.me,
-    retry: false,
-    staleTime: 60_000,
-  });
-
   const device = useQuery({
     queryKey: ["devices", "me", "status"],
     queryFn: http.devices.status,
@@ -46,21 +39,20 @@ export function AvatarSelection() {
     staleTime: 30_000,
   });
 
-  useEffect(() => {
-    if (!meLoading && me?.user?.mapAvatarModel) {
-      navigate(workspaceId ? `/world?workspaceId=${workspaceId}` : "/world", {
-        replace: true,
-      });
-    }
-  }, [meLoading, me, workspaceId, navigate]);
-
   const mutation = useMutation({
     mutationFn: (modelUrl: string) =>
       http.auth.updateProfile({ mapAvatarModel: modelUrl }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["me"] });
-      navigate(workspaceId ? `/world?workspaceId=${workspaceId}` : "/world");
+      notifySuccess("Avatar saved");
+      navigate("/dashboard");
     },
+    onError: (err) =>
+      notifyError(
+        err instanceof ApiError
+          ? err.message
+          : "Couldn't save your avatar. Try again.",
+      ),
   });
 
   const hasDevice = device.data?.hasOnlineDevice ?? true;
@@ -170,19 +162,9 @@ export function AvatarSelection() {
           onClick={() => selected && mutation.mutate(selected)}
         >
           {mutation.isPending && <Spinner />}
-          {mutation.isPending ? "Saving…" : "Enter spatial office"}
+          {mutation.isPending ? "Saving…" : "Save avatar"}
         </button>
       </div>
-
-      {mutation.isError && (
-        <div className="mt-4">
-          <Note tone="error">
-            {mutation.error instanceof ApiError
-              ? mutation.error.message
-              : "Couldn't save your avatar. Try again."}
-          </Note>
-        </div>
-      )}
     </div>
   );
 }

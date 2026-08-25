@@ -2,8 +2,8 @@
    CREATE WORKSPACE — a short instrument, not a form dump.
    Identity first (name + description), then integrations
    (GitHub repo, webhook secret) below the hairline. The whole
-   thing sits on the bone-paper bezel; on success you walk into
-   the office.
+   thing sits on the bone-paper bezel; on success you land back
+   on the dashboard.
    ───────────────────────────────────────────────────────────── */
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -17,6 +17,7 @@ import {
   type GitHubRepoOption,
   type WorkspaceSummary,
 } from "@/lib/http";
+import { notifyError, notifyInfo, notifySuccess } from "@/lib/toast";
 import { fade } from "@/components/dashboard/primitives";
 import {
   InkNote,
@@ -28,7 +29,7 @@ import {
   paperInputClass,
   paperLabelClass,
 } from "@/components/dashboard/Paper";
-import { Field, Note, PageHeader, Spinner } from "@/components/dashboard/ui";
+import { Field, PageHeader, Spinner } from "@/components/dashboard/ui";
 
 function generateSecret(): string {
   const bytes = new Uint8Array(12);
@@ -54,14 +55,6 @@ export function CreateWorkspace() {
   });
   const hasDevice = device.data?.hasOnlineDevice ?? true;
 
-  const me = useQuery({
-    queryKey: ["me"],
-    queryFn: http.auth.me,
-    retry: false,
-    staleTime: 60_000,
-  });
-  const hasAvatar = !!me.data?.user?.mapAvatarModel;
-
   const repos = useQuery({
     queryKey: ["github", "repos"],
     queryFn: http.github.listRepos,
@@ -80,12 +73,15 @@ export function CreateWorkspace() {
       } satisfies CreateWorkspaceInput),
     onSuccess: (ws) => {
       queryClient.invalidateQueries({ queryKey: ["workspaces"] });
-      if (hasAvatar) {
-        navigate(`/world?workspaceId=${ws.id}`);
-      } else {
-        navigate(`/dashboard/avatar?workspaceId=${ws.id}`);
-      }
+      notifySuccess(`Workspace "${ws.name}" created`);
+      navigate("/dashboard");
     },
+    onError: (err) =>
+      notifyError(
+        err instanceof ApiError
+          ? err.message
+          : "Something went wrong creating the workspace.",
+      ),
   });
 
   const canSubmit =
@@ -234,25 +230,16 @@ export function CreateWorkspace() {
                     aria-label="Copy secret"
                     title="Copy"
                     className={paperGhostBtnClass}
-                    onClick={() =>
-                      void navigator.clipboard.writeText(webhookSecret)
-                    }
+                    onClick={() => {
+                      void navigator.clipboard.writeText(webhookSecret);
+                      notifyInfo("Webhook secret copied to clipboard");
+                    }}
                   >
                     <FiCopy className="size-4" aria-hidden />
                   </button>
                 </div>
               </Field>
             </div>
-
-            {mutation.isError && (
-              <div className="mt-5">
-                <Note tone="error" onPaper>
-                  {mutation.error instanceof ApiError
-                    ? mutation.error.message
-                    : "Something went wrong creating the workspace."}
-                </Note>
-              </div>
-            )}
 
             {/* action row */}
             <div className="mt-7 flex flex-wrap items-center justify-between gap-3">

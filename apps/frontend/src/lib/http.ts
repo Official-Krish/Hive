@@ -36,6 +36,27 @@ interface RequestOptions {
   headers?: Record<string, string>;
 }
 
+/* Silent session renewal: the access cookie is short-lived, so any 401 from
+   a protected endpoint triggers one single-flight POST /auth/refresh (which
+   rotates both cookies) and retries the original request exactly once.
+   Without this, a backend restart or 15 idle minutes would log the user out. */
+let refreshInFlight: Promise<boolean> | null = null;
+
+function refreshSession(): Promise<boolean> {
+  if (!refreshInFlight) {
+    refreshInFlight = fetch(`${API_BASE_URL}/api/v1/auth/refresh`, {
+      method: "POST",
+      credentials: "include",
+    })
+      .then((res) => res.ok)
+      .catch(() => false)
+      .finally(() => {
+        refreshInFlight = null;
+      });
+  }
+  return refreshInFlight;
+}
+
 async function request<T>(
   path: string,
   options: RequestOptions = {},
@@ -50,15 +71,24 @@ async function request<T>(
     }
   }
 
-  const res = await fetch(url.toString(), {
-    method,
-    credentials: "include",
-    headers: {
-      ...(body !== undefined ? { "content-type": "application/json" } : {}),
-      ...headers,
-    },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
+  const doFetch = () =>
+    fetch(url.toString(), {
+      method,
+      credentials: "include",
+      headers: {
+        ...(body !== undefined ? { "content-type": "application/json" } : {}),
+        ...headers,
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+
+  let res = await doFetch();
+
+  // Auth endpoints manage their own cookies; refreshing there would loop.
+  const isAuthPath = path.startsWith("/api/v1/auth/");
+  if (res.status === 401 && !isAuthPath && (await refreshSession())) {
+    res = await doFetch();
+  }
 
   const json = (await res.json().catch(() => null)) as
     (ApiErrorBody & { data?: T }) | null;

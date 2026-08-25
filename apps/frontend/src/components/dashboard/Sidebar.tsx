@@ -17,6 +17,7 @@ import {
 } from "react-icons/fi";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { http } from "@/lib/http";
+import { notifyError } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import { Avatar } from "./ui";
 
@@ -69,7 +70,8 @@ export function Sidebar() {
     try {
       await http.auth.logout();
     } catch {
-      /* clear local state regardless */
+      notifyError("Couldn't sign out. Please try again.");
+      return;
     }
     queryClient.clear();
     navigate("/auth", { replace: true });

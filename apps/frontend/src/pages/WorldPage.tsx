@@ -1,4 +1,4 @@
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams, Navigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { ApiError, http } from "@/lib/http";
 import { WorldCanvas } from "@/components/world/WorldCanvas";
@@ -10,9 +10,9 @@ import {
 } from "@/components/dashboard/ui";
 
 /**
- * Workspace-aware spatial office. Loads the current user + workspace, then
- * mounts the 3D world. Redirects unauthenticated users to /auth and shows a
- * friendly message when the workspace can't be loaded.
+ * Workspace-aware spatial office. Entry is deliberate: a workspaceId must be
+ * present and the backend must confirm membership (GET /workspaces/:id 404s
+ * for non-members) before the 3D world mounts.
  */
 export function WorldPage() {
   const [searchParams] = useSearchParams();
@@ -33,7 +33,13 @@ export function WorldPage() {
     retry: false,
   });
 
-  if (me.isLoading || (workspaceId && workspace.isLoading)) {
+  // No workspace in the URL — the office is only reachable from the
+  // dashboard's per-workspace entries.
+  if (!workspaceId) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  if (me.isLoading || workspace.isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#0b1017] text-slate-300">
         <Spinner /> Loading spatial office…
@@ -58,7 +64,7 @@ export function WorldPage() {
     );
   }
 
-  if (workspaceId && workspace.isError) {
+  if (workspace.isError) {
     const notMember =
       workspace.error instanceof ApiError && workspace.error.status === 404;
     return (

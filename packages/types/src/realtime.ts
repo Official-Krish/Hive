@@ -20,6 +20,8 @@ export const realtimeMemberSchema = z.object({
   userId: z.string(),
   name: z.string(),
   avatarUrl: z.string().nullable(),
+  /** The GLB the member picked on the dashboard — null until they choose one. */
+  mapAvatarModel: z.string().nullable(),
   status: presenceStatusSchema,
   position: avatarPositionSchema.nullable(),
 });

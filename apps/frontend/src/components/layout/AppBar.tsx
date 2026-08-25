@@ -13,10 +13,7 @@ const navLinks = [
   { label: "Blog", href: "#blog" },
 ];
 
-const authNavLinks = [
-  { label: "Dashboard", href: "/dashboard" },
-  { label: "Spatial office", href: "/world" },
-];
+const authNavLinks = [{ label: "Dashboard", href: "/dashboard" }];
 
 export function AppBar() {
   const [menuOpen, setMenuOpen] = useState(false);

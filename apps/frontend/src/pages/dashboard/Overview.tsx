@@ -13,6 +13,8 @@ import {
   FiArrowRight,
   FiArrowUpRight,
   FiCheck,
+  FiCopy,
+  FiDownload,
   FiGithub,
   FiInbox,
   FiMap,
@@ -22,7 +24,14 @@ import {
   FiUserPlus,
 } from "react-icons/fi";
 import { http } from "@/lib/http";
-import { EASE, fade, useTick } from "@/components/dashboard/primitives";
+import { notifyInfo } from "@/lib/toast";
+import {
+  COLLECTOR_INSTALL_CMD,
+  COLLECTOR_INSTALL_SCRIPT,
+  EASE,
+  fade,
+  useTick,
+} from "@/components/dashboard/primitives";
 import {
   Hairline,
   InkNote,
@@ -539,6 +548,49 @@ function SetupRail() {
           </ul>
         </Panel>
       </div>
+
+      {!device.isLoading && !hasDevice && (
+        <div>
+          <SectionLabel icon={<FiDownload className="size-3.5" aria-hidden />}>
+            Install the collector
+          </SectionLabel>
+          <Panel className="space-y-3 p-4">
+            <p className="text-[12.5px] leading-relaxed text-neutral-600">
+              One line in your terminal — it installs{" "}
+              <code className="rounded bg-neutral-900/[0.06] px-1 py-px font-mono text-[11px] text-neutral-800">
+                hive
+              </code>{" "}
+              and walks you through login &amp; start.
+            </p>
+            <div className="flex items-center gap-2">
+              <code className="min-w-0 flex-1 truncate rounded-lg border border-neutral-900/[0.08] bg-neutral-900/[0.03] px-2.5 py-1.5 font-mono text-[11px] text-neutral-800">
+                {COLLECTOR_INSTALL_CMD}
+              </code>
+              <button
+                type="button"
+                aria-label="Copy install command"
+                title="Copy"
+                className="flex size-8 flex-shrink-0 items-center justify-center rounded-lg border border-neutral-900/15 text-neutral-500 transition-colors hover:border-neutral-900/30 hover:text-neutral-900"
+                onClick={() => {
+                  void navigator.clipboard.writeText(COLLECTOR_INSTALL_CMD);
+                  notifyInfo("Install command copied");
+                }}
+              >
+                <FiCopy className="size-3.5" aria-hidden />
+              </button>
+            </div>
+            <a
+              href={COLLECTOR_INSTALL_SCRIPT}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1.5 text-[11.5px] font-medium text-neutral-500 transition-colors hover:text-neutral-900"
+            >
+              <FiDownload className="size-3.5" aria-hidden />
+              Download the install script
+            </a>
+          </Panel>
+        </div>
+      )}
 
       {pending.length > 0 && (
         <div>

@@ -65,7 +65,9 @@ export class RealtimeService {
         where: { workspaceId },
         select: {
           userId: true,
-          user: { select: { name: true, avatarUrl: true } },
+          user: {
+            select: { name: true, avatarUrl: true, mapAvatarModel: true },
+          },
         },
       }),
       prisma.avatar.findMany({
@@ -97,6 +99,7 @@ export class RealtimeService {
         userId: membership.userId,
         name: membership.user.name,
         avatarUrl: membership.user.avatarUrl,
+        mapAvatarModel: membership.user.mapAvatarModel,
         status,
         position: avatar
           ? { x: avatar.x, y: avatar.y, roomId: avatar.roomId }

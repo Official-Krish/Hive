@@ -16,6 +16,11 @@ export const PANEL = "#ffffff"; // raised surface on the shell
 export const BONE = "#f0efec"; // landing section paper
 export const PAPER = "#f4f2ed"; // console instrument inset
 
+/* collector distribution */
+export const COLLECTOR_INSTALL_SCRIPT =
+  "https://cdn.krishlabs.tech/hive/script/install.sh";
+export const COLLECTOR_INSTALL_CMD = `curl -fsSL ${COLLECTOR_INSTALL_SCRIPT} | bash`;
+
 /* the product's signature ease (spring-ish, never linear) */
 export const EASE = [0.22, 1, 0.36, 1] as const;
 

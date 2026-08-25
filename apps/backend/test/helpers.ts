@@ -139,7 +139,6 @@ export function makeClient(baseUrl: string) {
 
     acceptInviteAs: async (token: string, email: string): Promise<void> => {
       await client.registerUserWith(email);
-      await client.registerDevice();
       const res = await client.api(`/api/v1/invites/${token}/accept`, {
         method: "POST",
       });

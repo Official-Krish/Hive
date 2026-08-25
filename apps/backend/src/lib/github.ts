@@ -27,6 +27,11 @@ export interface GitHubRepo {
   permissions?: { admin?: boolean; push?: boolean; pull?: boolean };
 }
 
+/** Shape of `GET /repositories/{id}` — the fields assignment needs on top. */
+export interface GitHubRepoDetail extends GitHubRepo {
+  default_branch?: string | null;
+}
+
 export interface GitHubClientOptions {
   clientId: string;
   clientSecret: string;
@@ -87,6 +92,11 @@ export class GitHubClient {
 
   async getUserEmails(accessToken: string): Promise<GitHubEmail[]> {
     return this.get<GitHubEmail[]>("/user/emails", accessToken);
+  }
+
+  /** Fetch a single repo by its GitHub id, including permission info. */
+  async getRepo(accessToken: string, id: number): Promise<GitHubRepoDetail> {
+    return this.get<GitHubRepoDetail>(`/repositories/${id}`, accessToken);
   }
 
   /**

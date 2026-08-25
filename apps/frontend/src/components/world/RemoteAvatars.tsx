@@ -2,9 +2,16 @@ import { useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import Avatar from "./Avatar";
+import { AvatarErrorBoundary } from "./AvatarErrorBoundary";
 import type { MapAvatar } from "@/hooks/useRealtimeMap";
 
 const DEFAULT_AVATAR = "/avatars/male/hive_male_01.glb";
+
+/** Only genuine model files reach useGLTF — anything else gets the default. */
+function safeModelUrl(url: string | null | undefined): string {
+  if (url && /\.(glb|gltf)$/i.test(url.trim())) return url.trim();
+  return DEFAULT_AVATAR;
+}
 
 const STATUS_COLOR: Record<string, string> = {
   online: "bg-emerald-400",
@@ -47,28 +54,48 @@ export function RemoteAvatars({
 
   return (
     <>
-      {entries.map(([id, avatar]) => (
-        <group
-          key={id}
-          ref={(node) => {
-            if (node) groupRefs.current.set(id, node);
-            else groupRefs.current.delete(id);
-          }}
-          position={[avatar.x, 0, avatar.y]}
-          onClick={(e) => {
-            e.stopPropagation();
-            onAvatarClick?.(id);
-          }}
-        >
-          <Avatar
-            modelUrl={avatar.avatarUrl ?? DEFAULT_AVATAR}
-            name={avatar.name || "Member"}
-            status={avatar.status ?? "online"}
-            badgeColor={STATUS_COLOR[avatar.status ?? "online"] ?? "bg-sky-500"}
-            position={[0, 0, 0]}
-          />
-        </group>
-      ))}
+      {entries.map(([id, avatar]) => {
+        const modelUrl = safeModelUrl(avatar.mapAvatarModel);
+        return (
+          <group
+            key={id}
+            ref={(node) => {
+              if (node) groupRefs.current.set(id, node);
+              else groupRefs.current.delete(id);
+            }}
+            position={[avatar.x, 0, avatar.y]}
+            onClick={(e) => {
+              e.stopPropagation();
+              onAvatarClick?.(id);
+            }}
+          >
+            <AvatarErrorBoundary
+              key={modelUrl}
+              fallback={
+                <Avatar
+                  modelUrl={DEFAULT_AVATAR}
+                  name={avatar.name || "Member"}
+                  status={avatar.status ?? "online"}
+                  badgeColor={
+                    STATUS_COLOR[avatar.status ?? "online"] ?? "bg-sky-500"
+                  }
+                  position={[0, 0, 0]}
+                />
+              }
+            >
+              <Avatar
+                modelUrl={modelUrl}
+                name={avatar.name || "Member"}
+                status={avatar.status ?? "online"}
+                badgeColor={
+                  STATUS_COLOR[avatar.status ?? "online"] ?? "bg-sky-500"
+                }
+                position={[0, 0, 0]}
+              />
+            </AvatarErrorBoundary>
+          </group>
+        );
+      })}
     </>
   );
 }

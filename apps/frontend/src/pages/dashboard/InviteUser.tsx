@@ -11,6 +11,7 @@ import { motion } from "motion/react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { FiGithub } from "react-icons/fi";
 import { ApiError, http, type InviteCreatedResult } from "@/lib/http";
+import { notifyError, notifySuccess } from "@/lib/toast";
 import { fade } from "@/components/dashboard/primitives";
 import {
   PaperInset,
@@ -22,11 +23,21 @@ import {
 import {
   EmptyState,
   Field,
-  Note,
   PageHeader,
   Spinner,
   primaryBtnClass,
 } from "@/components/dashboard/ui";
+
+function inviteErrorMessage(err: unknown): string {
+  if (err instanceof ApiError) {
+    if (err.code === "NOT_FOUND")
+      return "No Hive user is linked to that GitHub username. They need to connect with GitHub on Hive first.";
+    if (err.code === "CONFLICT")
+      return "That person is already a member of this workspace.";
+    return err.message;
+  }
+  return "Something went wrong sending the invite.";
+}
 
 export function InviteUser() {
   const [searchParams] = useSearchParams();
@@ -60,26 +71,17 @@ export function InviteUser() {
         githubLogin: githubLogin.trim(),
         role,
       }),
-    onSuccess: () => setGithubLogin(""),
+    onSuccess: () => {
+      setGithubLogin("");
+      notifySuccess("Invite sent — they'll find it under Invites.");
+    },
+    onError: (err) => notifyError(inviteErrorMessage(err)),
   });
 
   const canSubmit =
     workspaceId.length > 0 &&
     githubLogin.trim().length > 0 &&
     !mutation.isPending;
-
-  const errorMessage = (() => {
-    if (!mutation.isError) return null;
-    const err = mutation.error;
-    if (err instanceof ApiError) {
-      if (err.code === "NOT_FOUND")
-        return "No Hive user is linked to that GitHub username. They need to connect with GitHub on Hive first.";
-      if (err.code === "CONFLICT")
-        return "That person is already a member of this workspace.";
-      return err.message;
-    }
-    return "Something went wrong sending the invite.";
-  })();
 
   const selected = manageable.find((w) => w.id === workspaceId);
 
@@ -222,17 +224,6 @@ export function InviteUser() {
                   ))}
                 </div>
               </Field>
-
-              {mutation.isSuccess && (
-                <Note tone="success" onPaper>
-                  Invite sent. They'll find it under Invites.
-                </Note>
-              )}
-              {errorMessage && (
-                <Note tone="error" onPaper>
-                  {errorMessage}
-                </Note>
-              )}
 
               <div className="pt-1">
                 <button
