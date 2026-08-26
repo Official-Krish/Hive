@@ -19,13 +19,22 @@ import {
 } from "./office/layout";
 import { AVATARS } from "./AvatarConfig";
 import { useRealtimeMap } from "@/hooks/useRealtimeMap";
+import { useNearbyTokens } from "@/hooks/useNearbyTokens";
 import { http } from "@/lib/http";
 import RemoteAvatars from "./RemoteAvatars";
-import { NearbyPanel, MemberDetailPopup } from "./MapHud";
+import { MemberDetailPopup } from "./MapHud";
 
-const AVATAR_OPTIONS = [...AVATARS.male, ...AVATARS.female];
 const DEFAULT_AVATAR =
-  AVATAR_OPTIONS[0]?.model ?? "/avatars/male/hive_male_01.glb";
+  AVATARS.male[0]?.model ?? "/avatars/male/hive_male_01.glb";
+
+/* HUD material — the console's bone-paper instruments, tuned for the pale
+   sky. Shared by every floating control so the frame reads as one system. */
+const CHIP =
+  "inline-flex items-center gap-2.5 rounded-full bg-[#f4f2ed]/95 ring-1 ring-black/[0.09] " +
+  "shadow-[inset_0_1px_0_rgba(255,255,255,0.7),0_12px_28px_-16px_rgba(28,25,18,0.5)] " +
+  "backdrop-blur-sm";
+const EYEBROW =
+  "text-[9px] font-semibold uppercase tracking-[0.16em] text-neutral-400 leading-none";
 
 /** TEMP dev probe: exposes the renderer + scene for perf measurement. */
 function PerfProbe() {
@@ -55,14 +64,15 @@ export function WorldCanvas({
   const [searchParams] = useSearchParams();
   const [cameraYaw, setCameraYaw] = useState(0);
   const [currentRoom, setCurrentRoom] = useState("Courtyard");
-  const [selectedAvatar, setSelectedAvatar] = useState<string>(
-    myAvatarModel ?? DEFAULT_AVATAR,
-  );
   const [openMemberId, setOpenMemberId] = useState<string | null>(null);
   const playerGroupRef = useRef<THREE.Group>(null);
 
+  // The avatar is chosen once on /dashboard/avatar — no switching in-world.
+  const playerModel = myAvatarModel ?? DEFAULT_AVATAR;
+
   const { client, avatars, nearIds, connectionStatus, setMyPosition } =
     useRealtimeMap(workspaceId, myUserId);
+  const nearbyTokens = useNearbyTokens(workspaceId, client, nearIds);
 
   const handleRoomChange = useCallback((room: string) => {
     setCurrentRoom((prev) => (prev === room ? prev : room));
@@ -84,91 +94,85 @@ export function WorldCanvas({
 
   const meName = me.data?.user.name ?? "You";
 
-  const connTone =
-    connectionStatus === "open"
-      ? "bg-emerald-400"
-      : connectionStatus === "connecting" || connectionStatus === "reconnecting"
-        ? "bg-amber-400"
-        : "bg-rose-400";
-
   return (
-    <div className="relative w-full h-screen bg-[#0b1017] overflow-hidden font-sans select-none">
-      {/* Top bar: back + workspace + location + status + avatar picker */}
-      <div className="absolute top-4 left-4 right-4 z-10 flex flex-wrap items-start justify-between gap-3 pointer-events-none">
-        <div className="flex flex-wrap items-center gap-2 pointer-events-auto">
-          <button
-            type="button"
-            onClick={() => {
-              const back = searchParams.get("from") ?? "/dashboard";
-              navigate(back);
-            }}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-slate-900/85 px-3 py-2.5 text-[12.5px] font-medium text-slate-200 shadow-2xl backdrop-blur-md transition-colors hover:text-white"
-          >
-            <FiArrowLeft className="size-4" aria-hidden />
-            Dashboard
-          </button>
-          <div className="rounded-xl border border-white/10 bg-slate-900/85 px-4 py-2.5 shadow-2xl backdrop-blur-md">
-            <div className="text-[10px] uppercase tracking-widest text-slate-400 font-medium">
-              Workspace
-            </div>
-            <div className="text-sm font-bold text-slate-50">
-              {workspaceName}
-            </div>
-          </div>
-          <div className="rounded-xl border border-white/10 bg-slate-900/85 px-4 py-2.5 text-white shadow-2xl backdrop-blur-md flex items-center gap-3">
-            <div
-              className={`w-2.5 h-2.5 rounded-full ${connTone} animate-pulse`}
-            />
-            <div>
-              <div className="text-[10px] uppercase tracking-widest text-slate-400 font-medium">
-                Location
-              </div>
-              <div className="text-sm font-bold text-slate-50">
-                {currentRoom}
-              </div>
-            </div>
-          </div>
+    <div className="relative w-full h-screen overflow-hidden font-sans select-none">
+      {/* Top bar: back · workspace · location · you */}
+      <div className="absolute top-4 left-4 right-4 z-10 flex flex-wrap items-center gap-2 pointer-events-none">
+        <button
+          type="button"
+          onClick={() => {
+            const back = searchParams.get("from") ?? "/dashboard";
+            navigate(back);
+          }}
+          className={`${CHIP} pointer-events-auto px-3.5 py-2 text-[12px] font-medium text-neutral-700 transition-colors hover:text-neutral-950 hover:bg-white/70`}
+        >
+          <FiArrowLeft className="size-3.5" aria-hidden />
+          Dashboard
+        </button>
+
+        <div className={`${CHIP} px-4 py-1.5`}>
+          <span className={EYEBROW}>Workspace</span>
+          <span className="font-serif text-[13.5px] leading-none text-neutral-900">
+            {workspaceName}
+          </span>
         </div>
 
-        <select
-          value={selectedAvatar}
-          onChange={(e) => setSelectedAvatar(e.target.value)}
-          className="pointer-events-auto bg-slate-900/85 backdrop-blur-md border border-white/10 text-slate-200 text-xs rounded-xl px-3 py-2.5 font-medium outline-none focus:ring-2 focus:ring-sky-500 shadow-2xl cursor-pointer"
+        <div className={`${CHIP} px-4 py-1.5`}>
+          <span
+            className={`h-1.5 w-1.5 rounded-full ${
+              connectionStatus === "open"
+                ? "bg-emerald-500"
+                : connectionStatus === "connecting" ||
+                    connectionStatus === "reconnecting"
+                  ? "bg-amber-500"
+                  : "bg-rose-500"
+            }`}
+          />
+          <span className={EYEBROW}>Location</span>
+          <span className="font-serif text-[13.5px] leading-none text-neutral-900">
+            {currentRoom}
+          </span>
+        </div>
+
+        {/* Your own activity/tokens — remote members get this via their avatar */}
+        <button
+          type="button"
+          onClick={() => setOpenMemberId(myUserId)}
+          title="Your session & AI token usage"
+          className={`${CHIP} pointer-events-auto ml-auto py-1.5 transition-colors hover:bg-white/70`}
         >
-          {AVATAR_OPTIONS.map((a) => (
-            <option key={a.model} value={a.model}>
-              {a.name}
-            </option>
-          ))}
-        </select>
+          <span className="font-serif text-[13.5px] leading-none text-neutral-900 px-2">
+            {meName}
+          </span>
+        </button>
       </div>
 
       {/* Controls legend */}
       <div className="absolute bottom-4 left-4 z-10 pointer-events-none">
-        <div className="bg-slate-900/85 backdrop-blur-md border border-white/10 text-slate-300 px-4 py-3 rounded-2xl shadow-xl flex items-center gap-4 text-xs">
-          <div className="flex items-center gap-1">
-            {["W", "A", "S", "D"].map((k) => (
-              <kbd
-                key={k}
-                className="px-2 py-1 bg-slate-800 border border-slate-700 rounded text-[11px] font-mono font-bold text-white"
-              >
-                {k}
-              </kbd>
-            ))}
-            <span className="ml-1 text-slate-400 font-medium">Move</span>
-          </div>
-          <div className="h-4 w-px bg-white/10" />
+        <div
+          className={`${CHIP} rounded-full px-4 py-2.5 text-[11px] font-medium text-neutral-500`}
+        >
+          {["W", "A", "S", "D"].map((k) => (
+            <kbd
+              key={k}
+              className="-ml-0.5 rounded-md bg-white px-1.5 py-0.5 font-mono text-[10px] font-semibold text-neutral-800 ring-1 ring-black/[0.09] shadow-[0_1px_0_rgba(28,25,18,0.18)]"
+            >
+              {k}
+            </kbd>
+          ))}
+          <span className="ml-0.5">Move</span>
+          <span className="h-3.5 w-px bg-black/[0.09]" />
           <span>
-            <span className="text-slate-100 font-semibold">Shift</span> Run
+            <span className="font-semibold text-neutral-900">Shift</span> Run
           </span>
-          <div className="h-4 w-px bg-white/10" />
+          <span className="h-3.5 w-px bg-black/[0.09]" />
           <span>
-            <span className="text-slate-100 font-semibold">Space</span> Jump
+            <span className="font-semibold text-neutral-900">Space</span> Jump
           </span>
-          <div className="h-4 w-px bg-white/10" />
+          <span className="h-3.5 w-px bg-black/[0.09]" />
           <span>
-            <span className="text-slate-100 font-semibold">Drag</span> Look ·{" "}
-            <span className="text-slate-100 font-semibold">Scroll</span> Zoom
+            <span className="font-semibold text-neutral-900">Drag</span> Look ·{" "}
+            <span className="font-semibold text-neutral-900">Scroll</span> Zoom
           </span>
         </div>
       </div>
@@ -197,7 +201,7 @@ export function WorldCanvas({
           cameraYaw={cameraYaw}
           obstacles={PLAYER_COLLIDERS}
           spawn={SPAWN}
-          modelUrl={selectedAvatar}
+          modelUrl={playerModel}
           name={meName}
           status="Online"
           badgeColor="bg-emerald-400"
@@ -211,6 +215,7 @@ export function WorldCanvas({
         <RemoteAvatars
           avatars={avatars}
           myUserId={myUserId}
+          pills={nearbyTokens}
           onAvatarClick={(id) => setOpenMemberId(id)}
         />
 
@@ -224,14 +229,7 @@ export function WorldCanvas({
         <PerfProbe />
       </Canvas>
 
-      {/* HUD overlays */}
-      <NearbyPanel
-        myUserId={myUserId}
-        avatars={avatars}
-        nearIds={nearIds}
-        onPickMember={(id) => setOpenMemberId(id)}
-      />
-
+      {/* Member modal */}
       <MemberDetailPopup
         workspaceId={workspaceId}
         myUserId={myUserId}

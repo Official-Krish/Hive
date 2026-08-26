@@ -1,76 +1,16 @@
-import { useMapOverlay, type MapAvatar } from "@/hooks/useRealtimeMap";
+import { useEffect } from "react";
+import { useMapOverlay } from "@/hooks/useRealtimeMap";
 import { type MapOverlay } from "@/lib/http";
-import { cn } from "@/lib/utils";
+import { timeAgo } from "@/components/dashboard/primitives";
 
-const STATUS_COLOR: Record<string, string> = {
-  online: "bg-emerald-400",
-  away: "bg-amber-400",
-  offline: "bg-slate-500",
-};
+/* Paper material shared by world overlays — matches the console's bone
+   instruments (PaperInset language) so the world frame feels native. */
+const PANEL =
+  "overflow-hidden rounded-2xl bg-[#f4f2ed]/97 ring-1 ring-black/[0.09] " +
+  "shadow-[inset_0_1px_0_rgba(255,255,255,0.7),0_24px_48px_-20px_rgba(28,25,18,0.4)] backdrop-blur-sm";
 
-interface NearbyPanelProps {
-  myUserId: string;
-  avatars: ReadonlyMap<string, MapAvatar>;
-  nearIds: ReadonlySet<string>;
-  onPickMember: (developerId: string) => void;
-}
-
-/**
- * Floating HUD list of teammates within proximity radius. Each row shows the
- * cached avatar state; clicking opens the detail popup.
- */
-export function NearbyPanel({
-  myUserId,
-  avatars,
-  nearIds,
-  onPickMember,
-}: NearbyPanelProps) {
-  const nearby: Array<[string, MapAvatar]> = [];
-  for (const id of nearIds) {
-    const a = avatars.get(id);
-    if (a && id !== myUserId) nearby.push([id, a]);
-  }
-
-  if (nearby.length === 0) return null;
-
-  return (
-    <div className="pointer-events-auto absolute bottom-20 right-4 z-10 w-72 max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border border-white/10 bg-slate-900/90 shadow-2xl backdrop-blur-md">
-      <div className="border-b border-white/10 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
-        Nearby
-      </div>
-      <ul className="divide-y divide-white/[0.05]">
-        {nearby.map(([id, a]) => (
-          <li key={id}>
-            <button
-              type="button"
-              onClick={() => onPickMember(id)}
-              className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-white/[0.05]"
-            >
-              <span
-                className={cn(
-                  "h-2 w-2 flex-shrink-0 rounded-full",
-                  STATUS_COLOR[a.status ?? "online"] ?? "bg-sky-500",
-                )}
-              />
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-[13px] font-medium text-white">
-                  {a.name || "Member"}
-                </div>
-                <div className="truncate text-[11.5px] text-slate-500">
-                  {a.status === "away"
-                    ? "Away"
-                    : a.status === "offline"
-                      ? "Offline"
-                      : "Online"}
-                </div>
-              </div>
-            </button>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
+const LABEL =
+  "text-[9px] font-semibold uppercase tracking-[0.16em] text-neutral-400";
 
 interface MemberDetailPopupProps {
   workspaceId: string;
@@ -80,6 +20,10 @@ interface MemberDetailPopupProps {
   onClose: () => void;
 }
 
+/**
+ * Centered member modal — everything the backend knows about a teammate's
+ * current work: live session, linked issue, and AI token spend.
+ */
 export function MemberDetailPopup({
   workspaceId,
   myUserId,
@@ -87,19 +31,39 @@ export function MemberDetailPopup({
   developerId,
   onClose,
 }: MemberDetailPopupProps) {
+  // Esc to dismiss.
+  useEffect(() => {
+    if (!developerId) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [developerId, onClose]);
+
   if (!developerId) return null;
+
   return (
-    <MemberDetailPopupInner
-      workspaceId={workspaceId}
-      myUserId={myUserId}
-      client={client}
-      developerId={developerId}
-      onClose={onClose}
-    />
+    <div
+      className="pointer-events-auto fixed inset-0 z-30 grid place-items-center bg-black/25 p-4 backdrop-blur-[2px]"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+    >
+      <div onClick={(e) => e.stopPropagation()} className="w-full max-w-md">
+        <MemberModalInner
+          workspaceId={workspaceId}
+          myUserId={myUserId}
+          client={client}
+          developerId={developerId}
+          onClose={onClose}
+        />
+      </div>
+    </div>
   );
 }
 
-function MemberDetailPopupInner({
+function MemberModalInner({
   workspaceId,
   myUserId,
   client,
@@ -116,76 +80,117 @@ function MemberDetailPopupInner({
 
   const data: MapOverlay | undefined = overlay.data;
   const isMe = developerId === myUserId;
+  const title = isMe ? "You" : (data?.developer.name ?? "Member");
 
   return (
-    <div className="pointer-events-auto absolute bottom-4 right-4 z-20 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border border-white/10 bg-slate-900/95 shadow-2xl backdrop-blur-md">
-      <div className="flex items-center justify-between border-b border-white/10 px-4 py-2.5">
-        <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
-          {isMe ? "You" : (data?.developer.name ?? "Member")}
+    <div className={PANEL}>
+      {/* header */}
+      <div className="flex items-center gap-3 border-b border-black/[0.07] px-5 py-3.5">
+        {data?.developer.avatarUrl ? (
+          <img
+            src={data.developer.avatarUrl}
+            alt=""
+            className="size-9 flex-shrink-0 rounded-full object-cover ring-1 ring-black/[0.08]"
+          />
+        ) : (
+          <span className="flex size-9 flex-shrink-0 items-center justify-center rounded-full bg-neutral-900/[0.06] font-serif text-[15px] text-neutral-700 ring-1 ring-black/[0.06]">
+            {(data?.developer.name ?? title).charAt(0).toUpperCase()}
+          </span>
+        )}
+        <div className="min-w-0 flex-1">
+          <div className="truncate font-serif text-[17px] leading-tight text-neutral-900">
+            {title}
+          </div>
+          {!isMe && data?.developer.email && (
+            <div className="truncate text-[11.5px] text-neutral-500">
+              {data.developer.email}
+            </div>
+          )}
         </div>
         <button
           type="button"
           onClick={onClose}
-          className="text-[12px] text-slate-400 transition-colors hover:text-white"
+          aria-label="Close"
+          className="flex size-8 items-center justify-center rounded-full text-neutral-400 transition-colors hover:bg-black/[0.05] hover:text-neutral-900"
         >
-          Close
+          ✕
         </button>
       </div>
-      <div className="space-y-3 px-4 py-3 text-[13px] text-slate-200">
+
+      {/* body */}
+      <div className="space-y-5 px-5 py-4 text-[13px] text-neutral-800">
         {overlay.isLoading && !data && (
-          <div className="text-slate-400">Loading activity…</div>
+          <div className="py-2 text-neutral-500">Loading activity…</div>
         )}
-        {data?.currentSession && (
-          <div>
-            <div className="text-[10.5px] uppercase tracking-widest text-slate-500">
-              Current session
-            </div>
-            <div className="mt-0.5 font-medium text-white">
+
+        {data?.currentSession ? (
+          <section>
+            <div className={LABEL}>Current session</div>
+            <div className="mt-1.5 font-medium leading-snug text-neutral-900">
               {data.currentSession.title ?? "Untitled session"}
             </div>
-            <div className="text-[12px] text-slate-400">
-              {data.currentSession.agent.name} ·{" "}
-              {data.currentSession.status ?? "running"}
+            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11.5px] capitalize text-neutral-500">
+              <span className="rounded-full bg-black/[0.05] px-2 py-0.5 font-medium text-neutral-700 ring-1 ring-black/[0.06]">
+                {data.currentSession.agent.name}
+              </span>
+              {data.currentSession.agent.model && (
+                <span className="font-mono text-[10.5px] lowercase">
+                  {data.currentSession.agent.model}
+                </span>
+              )}
+              <span>·</span>
+              <span>{data.currentSession.status ?? "running"}</span>
+              <span>·</span>
+              <span>started {timeAgo(data.currentSession.startedAt)}</span>
             </div>
-          </div>
+          </section>
+        ) : (
+          data && (
+            <div className="text-[12.5px] italic text-neutral-500">
+              No active session right now.
+            </div>
+          )
         )}
+
         {data?.issue && (
-          <div>
-            <div className="text-[10.5px] uppercase tracking-widest text-slate-500">
-              Linked issue
-            </div>
-            <div className="mt-0.5 text-white">
+          <section>
+            <div className={LABEL}>Linked issue</div>
+            <div className="mt-1.5 font-medium text-neutral-900">
               #{data.issue.number} · {data.issue.title}
             </div>
-            <div className="text-[12px] text-slate-400">{data.issue.state}</div>
-          </div>
-        )}
-        {data && (data.inputTokens > 0 || data.outputTokens > 0) && (
-          <div>
-            <div className="text-[10.5px] uppercase tracking-widest text-slate-500">
-              Tokens
+            <div className="mt-0.5 text-[11.5px] capitalize text-neutral-500">
+              {data.issue.state}
             </div>
-            <div className="mt-0.5 text-white">
-              {formatTokens(data.inputTokens)} in ·{" "}
-              {formatTokens(data.outputTokens)} out
+          </section>
+        )}
+
+        {data && (
+          <section>
+            <div className={LABEL}>AI tokens</div>
+            <div className="mt-1.5 flex items-baseline gap-2 font-serif text-[22px] leading-none tabular-nums text-neutral-900">
+              {formatTokens(data.inputTokens)}
+              <span className="font-sans text-[10px] uppercase tracking-wider text-neutral-500">
+                in
+              </span>
+              <span className="text-neutral-300">/</span>
+              {formatTokens(data.outputTokens)}
+              <span className="font-sans text-[10px] uppercase tracking-wider text-neutral-500">
+                out
+              </span>
               {data.costCents != null && (
-                <span className="text-slate-400">
-                  {" "}
-                  · ${(data.costCents / 100).toFixed(2)}
+                <span className="ml-auto rounded-full bg-black/[0.05] px-2.5 py-1 font-sans text-[12px] font-semibold text-neutral-800 ring-1 ring-black/[0.06]">
+                  ${(data.costCents / 100).toFixed(2)}
                 </span>
               )}
             </div>
-          </div>
-        )}
-        {!data?.currentSession && !data?.issue && data && (
-          <div className="text-slate-400">No active activity right now.</div>
+          </section>
         )}
       </div>
     </div>
   );
 }
 
-function formatTokens(n: number): string {
+export function formatTokens(n: number): string {
   if (n < 1000) return String(n);
   if (n < 1_000_000) return `${(n / 1000).toFixed(1)}k`;
   return `${(n / 1_000_000).toFixed(2)}M`;
