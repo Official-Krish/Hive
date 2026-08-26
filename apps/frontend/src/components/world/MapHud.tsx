@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useMapOverlay } from "@/hooks/useRealtimeMap";
 import { type MapOverlay } from "@/lib/http";
 import { timeAgo } from "@/components/dashboard/primitives";
@@ -80,6 +80,16 @@ function MemberModalInner({
   const isMe = developerId === myUserId;
   const title = isMe ? "You" : (data?.developer.name ?? "Member");
 
+  // Live session-duration ticker.
+  const [, setNow] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setNow((n) => n + 1), 30_000);
+    return () => clearInterval(t);
+  }, []);
+
+  const session = data?.currentSession ?? null;
+  const stats = data?.stats ?? null;
+
   return (
     <div className={PANEL}>
       {/* header */}
@@ -130,25 +140,35 @@ function MemberModalInner({
           </section>
         )}
 
-        {data?.currentSession ? (
+        {session ? (
           <section>
             <div className={LABEL}>Current session</div>
             <div className="mt-1.5 font-medium leading-snug text-neutral-900">
-              {data.currentSession.title ?? "Untitled session"}
+              {session.title ?? "Untitled session"}
             </div>
             <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11.5px] capitalize text-neutral-500">
               <span className="rounded-full bg-black/[0.05] px-2 py-0.5 font-medium text-neutral-700 ring-1 ring-black/[0.06]">
-                {data.currentSession.agent.name}
+                {session.agent.name}
               </span>
-              {data.currentSession.agent.model && (
+              {session.agent.model && (
                 <span className="font-mono text-[10.5px] lowercase">
-                  {data.currentSession.agent.model}
+                  {session.agent.model}
+                </span>
+              )}
+              {session.branch && (
+                <span className="rounded-full bg-neutral-900/[0.05] px-2 py-0.5 font-mono text-[10.5px] lowercase text-neutral-600 ring-1 ring-black/[0.06]">
+                  {session.branch}
                 </span>
               )}
               <span>·</span>
-              <span>{data.currentSession.status ?? "running"}</span>
+              <span>{session.status ?? "running"}</span>
               <span>·</span>
-              <span>started {timeAgo(data.currentSession.startedAt)}</span>
+              <span className="tabular-nums">
+                running{" "}
+                {formatDuration(
+                  Date.now() - new Date(session.startedAt).getTime(),
+                )}
+              </span>
             </div>
           </section>
         ) : (
@@ -190,6 +210,104 @@ function MemberModalInner({
                 </span>
               )}
             </div>
+
+            {/* model mix — stacked share bar + legend */}
+            {stats?.modelMix && stats.modelMix.length > 0 && (
+              <div className="mt-3">
+                <div className="flex h-1.5 w-full overflow-hidden rounded-full bg-black/[0.06]">
+                  {stats.modelMix.map((m, i) => (
+                    <div
+                      key={m.model}
+                      className={MIX_COLORS[i % MIX_COLORS.length]}
+                      style={{ width: `${Math.max(4, m.share * 100)}%` }}
+                    />
+                  ))}
+                </div>
+                <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5">
+                  {stats.modelMix.map((m, i) => (
+                    <span
+                      key={m.model}
+                      className="flex items-center gap-1 font-mono text-[10px] lowercase text-neutral-500"
+                    >
+                      <span
+                        className={`h-1.5 w-1.5 rounded-full ${MIX_DOTS[i % MIX_DOTS.length]}`}
+                      />
+                      {m.model} · {Math.round(m.share * 100)}%
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* today strip */}
+        {stats &&
+          (stats.sessionsToday > 0 ||
+            stats.testsPassedToday > 0 ||
+            stats.testsFailedToday > 0) && (
+            <section>
+              <div className={LABEL}>Today</div>
+              <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] tabular-nums text-neutral-700">
+                <span>
+                  <span className="font-semibold text-neutral-900">
+                    {stats.sessionsToday}
+                  </span>{" "}
+                  session{stats.sessionsToday === 1 ? "" : "s"}
+                </span>
+                <span className="h-3 w-px bg-black/[0.09]" />
+                <span>
+                  <span className="font-semibold text-neutral-900">
+                    {formatDuration(stats.activeMinutesToday * 60_000)}
+                  </span>{" "}
+                  active
+                </span>
+                {(stats.testsPassedToday > 0 || stats.testsFailedToday > 0) && (
+                  <>
+                    <span className="h-3 w-px bg-black/[0.09]" />
+                    <span className="text-emerald-700">
+                      {stats.testsPassedToday}✓
+                    </span>
+                    {stats.testsFailedToday > 0 && (
+                      <span className="text-rose-600">
+                        {stats.testsFailedToday}✗
+                      </span>
+                    )}
+                    <span className="text-neutral-500">tests</span>
+                  </>
+                )}
+                {stats.costCentsToday != null && stats.costCentsToday > 0 && (
+                  <>
+                    <span className="h-3 w-px bg-black/[0.09]" />
+                    <span className="font-semibold text-neutral-900">
+                      ${(stats.costCentsToday / 100).toFixed(2)}
+                    </span>
+                    <span className="text-neutral-500">today</span>
+                  </>
+                )}
+              </div>
+            </section>
+          )}
+
+        {/* live feed from their running session */}
+        {stats?.recentEvents && stats.recentEvents.length > 0 && (
+          <section>
+            <div className={LABEL}>Live</div>
+            <ul className="mt-1.5 space-y-1">
+              {stats.recentEvents.map((e, i) => (
+                <li
+                  key={`${e.at}-${i}`}
+                  className="flex items-center justify-between gap-3 text-[11.5px]"
+                >
+                  <span className="truncate font-mono text-neutral-700">
+                    {e.label}
+                  </span>
+                  <span className="flex-shrink-0 text-[10.5px] text-neutral-400">
+                    {timeAgo(e.at)}
+                  </span>
+                </li>
+              ))}
+            </ul>
           </section>
         )}
       </div>
@@ -201,4 +319,15 @@ export function formatTokens(n: number): string {
   if (n < 1000) return String(n);
   if (n < 1_000_000) return `${(n / 1000).toFixed(1)}k`;
   return `${(n / 1_000_000).toFixed(2)}M`;
+}
+
+const MIX_COLORS = ["bg-neutral-900", "bg-neutral-500", "bg-neutral-300"];
+const MIX_DOTS = ["bg-neutral-900", "bg-neutral-500", "bg-neutral-300"];
+
+function formatDuration(ms: number): string {
+  const totalMin = Math.max(0, Math.round(ms / 60_000));
+  if (totalMin < 60) return `${totalMin}m`;
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  return m === 0 ? `${h}h` : `${h}h ${m}m`;
 }

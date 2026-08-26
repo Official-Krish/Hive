@@ -352,6 +352,19 @@ export interface MapOverlay {
     title: string | null;
     status: string | null;
     startedAt: string;
+    branch?: string | null;
+  } | null;
+  /** Aggregated day/productivity readout for the member (privacy-gated). */
+  stats?: {
+    sessionsToday: number;
+    activeMinutesToday: number;
+    costCentsToday: number | null;
+    testsPassedToday: number;
+    testsFailedToday: number;
+    /** Token share by model (null when usage is private). */
+    modelMix: Array<{ model: string; share: number }> | null;
+    /** Last terminal/file events on their running session (masked per privacy). */
+    recentEvents: Array<{ label: string; at: string }> | null;
   } | null;
   issue: {
     id: string;

@@ -457,6 +457,7 @@ export interface MapOverlay {
     title: string | null;
     status: string | null;
     startedAt: string;
+    branch?: string | null;
   } | null;
   issue: {
     id: string;
@@ -467,6 +468,15 @@ export interface MapOverlay {
   inputTokens: number;
   outputTokens: number;
   costCents: number | null;
+  stats?: {
+    sessionsToday: number;
+    activeMinutesToday: number;
+    costCentsToday: number | null;
+    testsPassedToday: number;
+    testsFailedToday: number;
+    modelMix: Array<{ model: string; share: number }> | null;
+    recentEvents: Array<{ label: string; at: string }> | null;
+  } | null;
 }
 
 /* ------------------------------------------------------------------ */

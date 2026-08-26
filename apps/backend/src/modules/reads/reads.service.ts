@@ -1,6 +1,8 @@
 import {
   prisma,
   AgentStatus,
+  EventType,
+  TestStatus,
   type ActivityStatus,
   type ActivityType,
   type AgentType,
@@ -12,7 +14,6 @@ import {
   type Prisma,
   type TaskPriority,
   type TaskStatus,
-  type TestStatus,
 } from "@hive/db";
 import type {
   ActivityDetail,
@@ -737,6 +738,114 @@ export class ReadsService {
       _sum: { inputTokens: true, outputTokens: true, costCents: true },
     });
 
+    // ── cockpit stats (privacy applied below) ────────────────────────────
+    const privacy = await this.privacyOf(workspaceId);
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+
+    const [sessionsTodayRows, testsToday, todayCost, mixRows] =
+      await Promise.all([
+        prisma.agentSession.findMany({
+          where: { developerId, workspaceId, startedAt: { gte: startOfDay } },
+          select: { startedAt: true, endedAt: true },
+        }),
+        prisma.testRun.groupBy({
+          by: ["status"],
+          where: { developerId, endedAt: { gte: startOfDay } },
+          _count: true,
+        }),
+        prisma.tokenUsage.aggregate({
+          where: {
+            session: { developerId, workspaceId },
+            measuredAt: { gte: startOfDay },
+          },
+          _sum: { costCents: true },
+        }),
+        prisma.tokenUsage.groupBy({
+          by: ["modelId"],
+          where: { session: { developerId, workspaceId } },
+          _sum: { inputTokens: true, outputTokens: true },
+        }),
+      ]);
+
+    const nowMs = Date.now();
+    const activeMinutesToday = Math.round(
+      sessionsTodayRows.reduce((acc, s) => {
+        const end = s.endedAt?.getTime() ?? nowMs;
+        return acc + Math.max(0, end - s.startedAt.getTime());
+      }, 0) / 60_000,
+    );
+
+    let testsPassedToday = 0;
+    let testsFailedToday = 0;
+    for (const t of testsToday) {
+      if (t.status === TestStatus.PASSED)
+        testsPassedToday += t._count as number;
+      if (t.status === TestStatus.FAILED)
+        testsFailedToday += t._count as number;
+    }
+
+    // Model mix — top models by total tokens.
+    const modelIds = mixRows
+      .map((m) => m.modelId)
+      .filter((id): id is string => !!id);
+    const modelNames = modelIds.length
+      ? await prisma.model.findMany({
+          where: { id: { in: modelIds } },
+          select: { id: true, name: true },
+        })
+      : [];
+    const nameById = new Map(modelNames.map((m) => [m.id, m.name]));
+    const totalMixTokens = mixRows.reduce(
+      (acc, m) => acc + (m._sum.inputTokens ?? 0) + (m._sum.outputTokens ?? 0),
+      0,
+    );
+    const modelMix = mixRows
+      .map((m) => ({
+        model: m.modelId ? (nameById.get(m.modelId) ?? "unknown") : "unknown",
+        total: (m._sum.inputTokens ?? 0) + (m._sum.outputTokens ?? 0),
+      }))
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 3)
+      .map(({ model, total }) => ({
+        model,
+        share: totalMixTokens > 0 ? total / totalMixTokens : 0,
+      }));
+
+    // Live feed — last terminal/file events on their active session.
+    const runningSession =
+      session && session.status === AgentStatus.RUNNING ? session : null;
+    let recentEvents: Array<{ label: string; at: string }> | null = null;
+    if (runningSession) {
+      const events = await prisma.agentEvent.findMany({
+        where: {
+          agentSessionId: runningSession.id,
+          type: { in: [EventType.TERMINAL_COMMAND, EventType.FILE_MODIFIED] },
+        },
+        orderBy: { sequence: "desc" },
+        take: 3,
+        select: { type: true, payload: true, occurredAt: true },
+      });
+      recentEvents = events.map((e) => {
+        const payload = (e.payload ?? {}) as {
+          command?: string;
+          path?: string;
+        };
+        let label = "activity";
+        if (e.type === EventType.TERMINAL_COMMAND) {
+          label = privacy.allowExactCommands
+            ? `$ ${String(payload.command ?? "").slice(0, 48)}`
+            : "ran a command";
+        } else if (e.type === EventType.FILE_MODIFIED) {
+          const p = String(payload.path ?? "");
+          label = privacy.allowFilePaths
+            ? `edited ${p.split("/").pop() || p}`
+            : "edited a file";
+        }
+        return { label, at: e.occurredAt.toISOString() };
+      });
+    }
+
     const overlay: MapOverlay = {
       developer,
       project: session?.repository
@@ -754,6 +863,7 @@ export class ReadsService {
             title: session.title,
             status: session.status.toLowerCase(),
             startedAt: session.startedAt.toISOString(),
+            branch: session.branch,
           }
         : null,
       issue: session?.issue
@@ -767,9 +877,17 @@ export class ReadsService {
       inputTokens: tokens._sum.inputTokens ?? 0,
       outputTokens: tokens._sum.outputTokens ?? 0,
       costCents: tokens._sum.costCents ?? null,
+      stats: {
+        sessionsToday: sessionsTodayRows.length,
+        activeMinutesToday,
+        costCentsToday: todayCost._sum.costCents ?? null,
+        testsPassedToday,
+        testsFailedToday,
+        modelMix: modelMix.length > 0 ? modelMix : null,
+        recentEvents,
+      },
     };
 
-    const privacy = await this.privacyOf(workspaceId);
     return PrivacyGate.mapOverlay(overlay, privacy);
   }
 
