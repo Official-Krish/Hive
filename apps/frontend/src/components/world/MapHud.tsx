@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Check, X } from "lucide-react";
 import { useMapOverlay } from "@/hooks/useRealtimeMap";
 import { type MapOverlay } from "@/lib/http";
 import { timeAgo } from "@/components/dashboard/primitives";
@@ -127,7 +128,7 @@ function MemberModalInner({
           aria-label="Close"
           className="flex size-8 items-center justify-center rounded-full text-neutral-400 transition-colors hover:bg-black/[0.05] hover:text-neutral-900"
         >
-          ✕
+          <X className="size-3.5" />
         </button>
       </div>
 
@@ -271,12 +272,14 @@ function MemberModalInner({
                 {(stats.testsPassedToday > 0 || stats.testsFailedToday > 0) && (
                   <>
                     <span className="h-3 w-px bg-black/[0.09]" />
-                    <span className="text-emerald-700">
-                      {stats.testsPassedToday}✓
+                    <span className="flex items-center gap-0.5 text-emerald-700">
+                      {stats.testsPassedToday}
+                      <Check className="size-3" />
                     </span>
                     {stats.testsFailedToday > 0 && (
-                      <span className="text-rose-600">
-                        {stats.testsFailedToday}✗
+                      <span className="flex items-center gap-0.5 text-rose-600">
+                        {stats.testsFailedToday}
+                        <X className="size-3" />
                       </span>
                     )}
                     <span className="text-neutral-500">tests</span>

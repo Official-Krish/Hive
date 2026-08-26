@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FiArrowLeft, FiSend, FiUsers } from "react-icons/fi";
+import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { type ConversationSummary } from "@hive/types";
 import { useChat } from "@/hooks/useChat";
 import type { RealtimeClient } from "@/lib/realtime";
 
@@ -115,7 +115,9 @@ export function ChatPanel({
   }, [chat.conversations, myUserId]);
 
   return (
-    <div className={`pointer-events-auto flex h-[520px] max-h-[70vh] w-[360px] max-w-[calc(100vw-2rem)] flex-col ${PANEL}`}>
+    <div
+      className={`pointer-events-auto flex h-[520px] max-h-[70vh] w-[360px] max-w-[calc(100vw-2rem)] flex-col ${PANEL}`}
+    >
       {/* header */}
       <div className={HEADER}>
         <span className="flex items-center gap-2">
@@ -130,10 +132,10 @@ export function ChatPanel({
             </button>
           )}
           {activeId
-            ? (active?.isGroup
-                ? (active.title ?? "Group")
-                : (active?.members.find((m) => m.userId !== myUserId)?.name ??
-                  "Direct message"))
+            ? active?.isGroup
+              ? (active.title ?? "Group")
+              : (active?.members.find((m) => m.userId !== myUserId)?.name ??
+                "Direct message")
             : "Messages"}
         </span>
         <span className="flex items-center gap-2">
@@ -153,7 +155,7 @@ export function ChatPanel({
             aria-label="Close chat"
             className="rounded p-0.5 text-neutral-400 transition-colors hover:text-neutral-900"
           >
-            ✕
+            <X className="size-3.5" />
           </button>
         </span>
       </div>
@@ -206,11 +208,14 @@ export function ChatPanel({
 
       {/* body */}
       {!activeId ? (
-        <ul ref={listRef} className="flex-1 divide-y divide-black/[0.05] overflow-y-auto">
+        <ul
+          ref={listRef}
+          className="flex-1 divide-y divide-black/[0.05] overflow-y-auto"
+        >
           {chat.conversations.length === 0 && (
             <li className="px-4 py-6 text-center text-[12.5px] italic text-neutral-500">
-              No conversations yet. Open someone's profile on the map and say hi —
-              or create a group above.
+              No conversations yet. Open someone's profile on the map and say hi
+              — or create a group above.
             </li>
           )}
           {chat.conversations.map((c) => {
@@ -277,7 +282,7 @@ export function ChatPanel({
                       >
                         {isTyping
                           ? "typing…"
-                          : (c.lastMessage?.body ?? "Say hello 👋")}
+                          : (c.lastMessage?.body ?? "Say hello")}
                       </span>
                       {c.unreadCount > 0 && (
                         <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-emerald-600 px-1 text-[9.5px] font-bold text-white">
@@ -293,7 +298,10 @@ export function ChatPanel({
         </ul>
       ) : (
         <>
-          <div ref={scrollRef} className="flex-1 space-y-2 overflow-y-auto px-4 py-3">
+          <div
+            ref={scrollRef}
+            className="flex-1 space-y-2 overflow-y-auto px-4 py-3"
+          >
             {messages.map((m) => {
               const mine = m.senderId === myUserId;
               const sender = active?.members.find(
@@ -317,7 +325,9 @@ export function ChatPanel({
                         {sender?.name ?? "Member"}
                       </div>
                     )}
-                    <div className="whitespace-pre-wrap break-words">{m.body}</div>
+                    <div className="whitespace-pre-wrap break-words">
+                      {m.body}
+                    </div>
                     <div
                       className={cn(
                         "mt-1 text-right text-[9.5px] tabular-nums",

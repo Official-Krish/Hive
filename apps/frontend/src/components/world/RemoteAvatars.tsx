@@ -1,6 +1,7 @@
 import { useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
+import { AlertTriangle, Check, X, Zap } from "lucide-react";
 import Avatar from "./Avatar";
 import { AvatarErrorBoundary } from "./AvatarErrorBoundary";
 import type { MapAvatar } from "@/hooks/useRealtimeMap";
@@ -70,10 +71,15 @@ export function RemoteAvatars({
         const meta: Array<{
           text: string;
           tone?: "amber" | "green" | "red" | "neutral";
+          icon?: React.ReactNode;
         }> = [];
-        if (needsYou) meta.push({ text: "⚠ needs you", tone: "amber" });
-        if (avatar.label)
-          meta.push({ text: avatar.label, tone: "neutral" });
+        if (needsYou)
+          meta.push({
+            text: "Needs you",
+            tone: "amber",
+            icon: <AlertTriangle className="size-2.5" />,
+          });
+        if (avatar.label) meta.push({ text: avatar.label, tone: "neutral" });
         if (avatar.project)
           meta.push({ text: avatar.project, tone: "neutral" });
         const t = pills?.get(id);
@@ -83,17 +89,23 @@ export function RemoteAvatars({
             : undefined;
         if (testFresh) {
           meta.push({
-            text: `${testFresh.passed ? "✓" : "✗"} tests`,
+            text: "Tests",
             tone: testFresh.passed ? "green" : "red",
+            icon: testFresh.passed ? (
+              <Check className="size-2.5" />
+            ) : (
+              <X className="size-2.5" />
+            ),
           });
         } else if (t) {
           meta.push({
-            text: `⚡ ${formatTokens(t.inputTokens)} in · ${formatTokens(
+            text: `${formatTokens(t.inputTokens)} in · ${formatTokens(
               t.outputTokens,
             )} out${
               t.costCents != null ? ` · $${(t.costCents / 100).toFixed(2)}` : ""
             }`,
             tone: "neutral",
+            icon: <Zap className="size-2.5" />,
           });
         }
 

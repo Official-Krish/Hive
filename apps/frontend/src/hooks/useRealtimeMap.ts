@@ -10,7 +10,7 @@ export interface MapAvatar {
   avatarUrl: string | null;
   /** GLB chosen on the dashboard; null until the member picks one. */
   mapAvatarModel: string | null;
-  /** User-set presence label (e.g. "Shipping 🚀"), null when unset. */
+  /** User-set presence label (e.g. "Shipping"), null when unset. */
   label: string | null;
   /** Live status of their current/latest agent session (null when none). */
   sessionStatus: string | null;

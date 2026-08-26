@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState, type MutableRefObject } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type MutableRefObject,
+  type ReactNode,
+} from "react";
 import { useFBX, useGLTF, Html } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
@@ -25,7 +31,11 @@ interface AvatarProps {
   status?: string;
   badgeColor?: string;
   /** Small context pills stacked under the name (project, tests, tokens…). */
-  meta?: Array<{ text: string; tone?: "amber" | "green" | "red" | "neutral" }>;
+  meta?: Array<{
+    text: string;
+    tone?: "amber" | "green" | "red" | "neutral";
+    icon?: ReactNode;
+  }>;
 }
 
 const META_TONE: Record<string, string> = {
@@ -265,11 +275,12 @@ export default function Avatar({
           {meta?.slice(0, 3).map((m, i) => (
             <div
               key={i}
-              className={`whitespace-nowrap rounded-full px-1.5 py-[1.5px] text-[8.5px] font-semibold leading-none tabular-nums shadow-sm select-none ${
+              className={`flex items-center gap-[3px] whitespace-nowrap rounded-full px-1.5 py-[1.5px] text-[8.5px] font-semibold leading-none tabular-nums shadow-sm select-none ${
                 META_TONE[m.tone ?? "neutral"]
               }`}
             >
-              {m.text}
+              {m.icon}
+              <span>{m.text}</span>
             </div>
           ))}
         </div>
