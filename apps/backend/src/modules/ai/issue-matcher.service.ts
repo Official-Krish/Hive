@@ -1,6 +1,5 @@
 import { EventType, prisma } from "@hive/db";
 import { env } from "../../config/env";
-import { logger } from "../../lib/logger";
 import { aiEnabled, getAiClient } from "./ai-client";
 
 interface IssueCandidate {
@@ -64,9 +63,8 @@ const defaultInfer: IssueInfer = async (prompt) => {
       confidence: Number.isFinite(value.confidence) ? value.confidence! : 0,
     };
   } catch {
-    logger.warn(
-      { sessionPrompt: prompt.slice(0, 200) },
-      "AI returned non-JSON",
+    console.warn(
+      `[hive] AI returned non-JSON for prompt: ${prompt.slice(0, 200)}`,
     );
     return { issueNumber: null, confidence: 0 };
   }
@@ -126,10 +124,6 @@ export class IssueMatcherService {
     const issue = issues.find((i) => i.number === match.issueNumber);
     if (!issue || match.confidence < env.AI_MIN_CONFIDENCE) return;
 
-    logger.info(
-      { sessionId, issueNumber: issue.number, confidence: match.confidence },
-      "AI matched session to issue",
-    );
     await prisma.agentSession.update({
       where: { id: sessionId },
       data: { issueId: issue.id },

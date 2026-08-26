@@ -4,7 +4,6 @@ import type { DeviceSummary, RegisterDeviceInput } from "@hive/types";
 import { deviceBus } from "../realtime/realtime.bus";
 import type { DeviceContext } from "../../core/context";
 import { DeviceOfflineError, NotFoundError } from "../../core/errors";
-import { logger } from "../../lib/logger";
 import { generateRandomToken, hashToken } from "../../lib/crypto";
 import { z } from "zod";
 
@@ -125,7 +124,7 @@ export class DeviceService {
         data: { lastSeenAt: new Date() },
       })
       .catch((err: unknown) => {
-        logger.error({ err, deviceId }, "Failed to mark device seen");
+        console.error(`[hive] failed to mark device seen (${deviceId})`, err);
       });
   }
 

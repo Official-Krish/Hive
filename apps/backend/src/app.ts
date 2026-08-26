@@ -2,10 +2,7 @@ import cookieParser from "cookie-parser";
 import cors from "cors";
 import express from "express";
 import helmet from "helmet";
-import { randomUUID } from "node:crypto";
-import { pinoHttp } from "pino-http";
 import { env } from "./config/env";
-import { logger } from "./lib/logger";
 import { csrfProtect } from "./middleware/csrfProtect";
 import { errorHandler } from "./middleware/errorHandler";
 import { notFound } from "./middleware/notFound";
@@ -39,18 +36,6 @@ export function createApp() {
     cors({
       origin: [env.API_URL, ...env.clientOrigins],
       credentials: true,
-    }),
-  );
-  app.use(
-    pinoHttp({
-      logger,
-      genReqId: (req) => req.headers["x-request-id"] ?? randomUUID(),
-      customLogLevel: (_req, res, err) => {
-        if (err) return "error";
-        if (res.statusCode >= 500) return "error";
-        if (res.statusCode >= 400) return "warn";
-        return "info";
-      },
     }),
   );
   app.use(requestContext());

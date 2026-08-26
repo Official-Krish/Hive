@@ -219,7 +219,16 @@ export class IngestService {
         status: AgentStatus.RUNNING,
         startedAt: this.date(event.timestamp),
       },
-      update: {},
+      // Re-point drifted sessions: the device may have re-registered against
+      // a different workspace since the row was first created (e.g. a session
+      // born before registration completed). Latest device wins.
+      update: {
+        workspaceId,
+        developerId: userId,
+        agentId: agent.id,
+        repositoryId,
+        branch: event.branch ?? undefined,
+      },
     });
     await IssueLinksService.linkSession(
       repositoryId,

@@ -33,9 +33,6 @@ const envSchema = z.object({
   AI_API_KEY: z.string().default(""),
   AI_MODEL: z.string().default("nvidia/nemotron-3-ultra-550b-a55b"),
   AI_MIN_CONFIDENCE: z.coerce.number().min(0).max(1).default(0.6),
-  LOG_LEVEL: z
-    .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
-    .default("info"),
 });
 
 const parsed = envSchema.safeParse(process.env);
