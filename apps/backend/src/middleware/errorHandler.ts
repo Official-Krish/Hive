@@ -2,7 +2,6 @@ import type { ErrorRequestHandler } from "express";
 import { ZodError } from "zod";
 import { env } from "../config/env";
 import { isAppError } from "../core/errors";
-import { logger } from "../lib/logger";
 
 function zodDetails(error: ZodError): Array<{ path: string; message: string }> {
   return error.issues.map((issue) => ({
@@ -54,7 +53,7 @@ export function errorHandler(): ErrorRequestHandler {
       });
     }
 
-    logger.error({ err, requestId }, "Unhandled error");
+    console.error(`[hive] unhandled error (request ${requestId ?? "?"})`, err);
 
     if (res.headersSent) {
       return _next(err);

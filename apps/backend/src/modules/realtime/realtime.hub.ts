@@ -8,7 +8,6 @@ import {
   type RealtimeClientMessage,
   type RealtimeEvent,
 } from "@hive/types";
-import { logger } from "../../lib/logger";
 import { ACCESS_COOKIE } from "../../lib/cookies";
 import { hashToken } from "../../lib/crypto";
 import { verifyAccessToken } from "../../lib/jwt";
@@ -80,7 +79,6 @@ export class RealtimeHub {
     );
     deviceBus.setOnlineChecker((deviceId) => this.isDeviceOnline(deviceId));
 
-    logger.info({ port: this.server.port }, "Realtime server listening");
     return this;
   }
 
@@ -239,7 +237,10 @@ export class RealtimeHub {
       };
       this.publishToWorkspace(client.workspaceId, online);
     } catch (err) {
-      logger.error({ err, userId: client.userId }, "Realtime open failed");
+      console.error(
+        `[hive] realtime open failed for user ${client.userId}`,
+        err,
+      );
       ws.close(1011, "Internal error");
     }
   }
@@ -259,11 +260,6 @@ export class RealtimeHub {
       timestamp: Date.now(),
     };
     ws.send(JSON.stringify(ping));
-
-    logger.info(
-      { deviceId: data.deviceId, userId: data.userId },
-      "Collector device connected",
-    );
   }
 
   private async onMessage(ws: Socket, message: string | Buffer): Promise<void> {
@@ -372,7 +368,10 @@ export class RealtimeHub {
       };
       this.publishToWorkspace(client.workspaceId, event);
     } catch (err) {
-      logger.error({ err, userId: client.userId }, "Realtime close failed");
+      console.error(
+        `[hive] realtime close failed for user ${client.userId}`,
+        err,
+      );
     }
   }
 
@@ -380,9 +379,5 @@ export class RealtimeHub {
     const existing = this.deviceSockets.get(ws);
     if (existing) this.deviceSockets.delete(ws);
     ws.unsubscribe(deviceChannel(data.deviceId));
-    logger.info(
-      { deviceId: data.deviceId, userId: data.userId },
-      "Collector device disconnected",
-    );
   }
 }

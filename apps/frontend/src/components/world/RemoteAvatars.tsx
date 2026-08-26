@@ -4,6 +4,8 @@ import * as THREE from "three";
 import Avatar from "./Avatar";
 import { AvatarErrorBoundary } from "./AvatarErrorBoundary";
 import type { MapAvatar } from "@/hooks/useRealtimeMap";
+import { type NearbyTokens } from "@/hooks/useNearbyTokens";
+import { formatTokens } from "./MapHud";
 
 const DEFAULT_AVATAR = "/avatars/male/hive_male_01.glb";
 
@@ -22,18 +24,23 @@ const STATUS_COLOR: Record<string, string> = {
 interface RemoteAvatarsProps {
   avatars: ReadonlyMap<string, MapAvatar>;
   myUserId: string;
+  /** Token readouts for members currently within proximity radius. */
+  pills?: ReadonlyMap<string, NearbyTokens>;
   onAvatarClick?: (developerId: string) => void;
 }
 
 /**
- * Renders every remote avatar in the workspace at its current 2D (x, z) position
- * using the player's GLB. The current user's avatar is skipped — it is rendered
- * by PlayerController. Positions are read from a ref each frame so React
- * doesn't re-render the scene on every move event.
+ * Renders every ONLINE remote avatar in the workspace at its current 2D (x, z)
+ * position using the player's GLB. Offline/away members are hidden — someone
+ * who never joined (or left) should not stand frozen in the office. The
+ * current user's avatar is skipped — it is rendered by PlayerController.
+ * Positions are read from a ref each frame so React doesn't re-render the
+ * scene on every move event.
  */
 export function RemoteAvatars({
   avatars,
   myUserId,
+  pills,
   onAvatarClick,
 }: RemoteAvatarsProps) {
   const groupRefs = useRef<Map<string, THREE.Group>>(new Map());
@@ -49,6 +56,7 @@ export function RemoteAvatars({
   const entries: Array<[string, MapAvatar]> = [];
   for (const [id, a] of avatars) {
     if (id === myUserId) continue;
+    if (a.status !== "online") continue;
     entries.push([id, a]);
   }
 
@@ -56,6 +64,12 @@ export function RemoteAvatars({
     <>
       {entries.map(([id, avatar]) => {
         const modelUrl = safeModelUrl(avatar.mapAvatarModel);
+        const t = pills?.get(id);
+        const metaLine = t
+          ? `${formatTokens(t.inputTokens)} in · ${formatTokens(t.outputTokens)} out${
+              t.costCents != null ? ` · $${(t.costCents / 100).toFixed(2)}` : ""
+            }`
+          : undefined;
         return (
           <group
             key={id}
@@ -91,6 +105,7 @@ export function RemoteAvatars({
                   STATUS_COLOR[avatar.status ?? "online"] ?? "bg-sky-500"
                 }
                 position={[0, 0, 0]}
+                metaLine={metaLine}
               />
             </AvatarErrorBoundary>
           </group>

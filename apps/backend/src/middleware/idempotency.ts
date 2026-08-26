@@ -53,7 +53,7 @@ export function idempotency(): RequestHandler {
             })
             .catch((err: unknown) => {
               if ((err as { code?: string })?.code !== "P2002") {
-                req.log?.error?.({ err }, "failed to persist idempotency key");
+                console.error("[hive] failed to persist idempotency key", err);
               }
             });
         }

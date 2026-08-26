@@ -2,7 +2,6 @@ import { prisma } from "@hive/db";
 import { closeRedis, ensureConnected } from "@hive/queue";
 import { createApp } from "./app";
 import { env } from "./config/env";
-import { logger } from "./lib/logger";
 import { queue } from "./lib/queue";
 import { IssueMatcherService } from "./modules/ai/issue-matcher.service";
 import { RealtimeHub } from "./modules/realtime/realtime.hub";
@@ -11,21 +10,14 @@ async function main(): Promise<void> {
   await prisma.$connect();
 
   const redisConnected = await ensureConnected();
-  if (redisConnected) {
-    logger.info("Redis connected");
-  } else {
-    logger.warn(
+  if (!redisConnected) {
+    console.warn(
       "Redis unavailable, queue enqueues will fail until it recovers",
     );
   }
 
   const app = createApp();
-  const server = app.listen(env.PORT, () => {
-    logger.info(
-      { port: env.PORT, env: env.NODE_ENV, url: env.API_URL },
-      "API server listening",
-    );
-  });
+  const server = app.listen(env.PORT);
 
   const realtime = new RealtimeHub({ port: env.WS_PORT }).start();
 
@@ -40,8 +32,7 @@ async function main(): Promise<void> {
     return undefined;
   });
 
-  const shutdown = async (signal: string): Promise<void> => {
-    logger.info({ signal }, "Shutting down");
+  const shutdown = async (): Promise<void> => {
     queue.stop();
     await realtime.stop();
     closeRedis();
@@ -52,11 +43,11 @@ async function main(): Promise<void> {
     setTimeout(() => process.exit(1), 10_000).unref();
   };
 
-  process.on("SIGINT", () => void shutdown("SIGINT"));
-  process.on("SIGTERM", () => void shutdown("SIGTERM"));
+  process.on("SIGINT", () => void shutdown());
+  process.on("SIGTERM", () => void shutdown());
 }
 
 main().catch((err) => {
-  logger.error({ err }, "Failed to start server");
+  console.error("Failed to start server:", err);
   process.exit(1);
 });

@@ -25,8 +25,8 @@ interface PlayerControllerProps {
 }
 
 // --- Movement tuning --------------------------------------------------------
-const WALK_SPEED = 2.6; // m/s
-const RUN_SPEED = 6.2; // m/s (Shift)
+const WALK_SPEED = 3.4; // m/s
+const RUN_SPEED = 7.4; // m/s (Shift)
 const GRAVITY = 24; // m/s^2
 const JUMP_V = 7.6; // m/s launch velocity
 const PLAYER_RADIUS = 0.34;

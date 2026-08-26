@@ -41,7 +41,7 @@ export function WorldPage() {
 
   if (me.isLoading || workspace.isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#0b1017] text-slate-300">
+      <div className="flex min-h-screen items-center justify-center gap-3 bg-[#faf9f6] text-neutral-500">
         <Spinner /> Loading spatial office…
       </div>
     );
@@ -97,7 +97,7 @@ export function WorldPage() {
 
 function Centered({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#0b1017] p-6">
+    <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#faf9f6] p-6">
       <Panel className="max-w-md p-6">{children}</Panel>
     </div>
   );

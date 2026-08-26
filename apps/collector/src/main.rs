@@ -107,7 +107,19 @@ async fn run_cli(cli: Cli) -> anyhow::Result<()> {
                 // from the web") but did not register; nothing to start.
                 return Ok(());
             }
-            daemon::start().map(|pid| println!("collector started (pid {pid})"))
+            let was_running = matches!(daemon::read_pid(), Ok(Some(pid)) if daemon::pid_alive(pid));
+            match daemon::ensure_running() {
+                Ok(pid) => println!(
+                    "{} (pid {pid})",
+                    if was_running {
+                        "collector already running"
+                    } else {
+                        "collector started"
+                    }
+                ),
+                Err(err) => return Err(err),
+            }
+            Ok(())
         }
         Command::Stop => daemon::stop().map(|()| println!("collector stopped")),
         Command::Status => {

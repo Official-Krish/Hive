@@ -90,19 +90,22 @@ hive start
 # ✓ registered device "my-macbook" (cmt…)
 # Workspaces:
 #   1. Main (owner)
-# Select workspace [1]: 1
+#   2. Acme Platform (admin)
+# Select workspace (number or name) [1]: acme
 # ✓ config written to ~/.config/hive/config.toml
 # collector started (pid 1234)
 ```
 
 The collector talks to the local backend at `http://localhost:3000`
 (WebSocket port auto-discovered from `/api/v1/health`), so the backend must be
-running first. You can also pre-register ahead of time with `hive install`.
+running first. `hive install` starts the collector automatically when it
+finishes; use it to pre-register ahead of time too.
 
 ### 3. Run / stop
 
 ```sh
 hive status     # running? connected? queued batches?
+hive start      # (re)start the background daemon — idempotent
 hive stop       # graceful shutdown (SIGTERM)
 hive run        # foreground (useful for debugging: RUST_LOG=debug)
 ```

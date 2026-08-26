@@ -24,6 +24,8 @@ interface AvatarProps {
   name?: string;
   status?: string;
   badgeColor?: string;
+  /** Small secondary line under the name (e.g. nearby AI token readout). */
+  metaLine?: string;
 }
 
 export default function Avatar({
@@ -35,6 +37,7 @@ export default function Avatar({
   name = "You",
   status = "Active",
   badgeColor = "bg-sky-500",
+  metaLine,
 }: AvatarProps) {
   const { scene } = useGLTF(modelUrl);
   const idleFBX = useFBX("/Animations/idle.fbx");
@@ -225,7 +228,7 @@ export default function Avatar({
 
     // Walk feel at low speed, full run at high speed.
     actions.run.setEffectiveTimeScale(
-      THREE.MathUtils.lerp(0.75, 1.35, THREE.MathUtils.clamp(m.speed, 0, 1)),
+      THREE.MathUtils.lerp(0.8, 1.45, THREE.MathUtils.clamp(m.speed, 0, 1)),
     );
   });
 
@@ -236,20 +239,27 @@ export default function Avatar({
     <group {...groupProps}>
       <primitive object={scene} scale={SCALE} />
 
-      {/* Small pill floating just above the head. No distanceFactor: the label
-          keeps a constant, legible screen size at every zoom level. */}
+      {/* Minimal nameplate floating just above the head. No distanceFactor:
+          the label keeps a constant, legible screen size at every zoom. */}
       <Html
         position={[0, labelY, 0]}
         center
         zIndexRange={[100, 0]}
         style={{ pointerEvents: "none" }}
       >
-        <div
-          title={status}
-          className="flex items-center gap-1.5 whitespace-nowrap rounded-full border border-white/15 bg-slate-900/80 px-2 py-[2px] text-[10px] font-semibold leading-none text-white shadow-lg backdrop-blur-sm select-none"
-        >
-          <span className={`h-1.5 w-1.5 rounded-full ${badgeColor}`} />
-          <span>{name}</span>
+        <div className="flex flex-col items-center gap-1">
+          <div
+            title={status}
+            className="flex items-center gap-1.5 whitespace-nowrap rounded-full bg-black/55 px-2 py-[2px] text-[9.5px] font-medium leading-none tracking-[0.01em] text-white/95 shadow-sm backdrop-blur-[2px] select-none"
+          >
+            <span className={`h-1 w-1 rounded-full ${badgeColor}`} />
+            <span>{name}</span>
+          </div>
+          {metaLine && (
+            <div className="whitespace-nowrap rounded-full bg-black/40 px-1.5 py-[1.5px] text-[8.5px] font-medium leading-none tabular-nums text-white/80 select-none">
+              ⚡ {metaLine}
+            </div>
+          )}
         </div>
       </Html>
     </group>

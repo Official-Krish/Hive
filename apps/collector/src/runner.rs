@@ -21,6 +21,13 @@ pub async fn run() -> Result<()> {
     }
 
     ensure_state_dir()?;
+
+    // Hold this for the process lifetime: guarantees a second `hive run`
+    // fails loudly instead of silently doubling events if the pidfile was
+    // lost.
+    let _instance_lock =
+        crate::daemon::acquire_instance_lock().context("collector is single-instance")?;
+
     write_pidfile(std::process::id())?;
     let mut status = read_status();
     status.running = true;
