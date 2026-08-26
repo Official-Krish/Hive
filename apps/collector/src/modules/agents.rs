@@ -11,6 +11,11 @@ use tokio::sync::watch;
 
 const IDLE_TIMEOUT_MS: i64 = 10 * 60 * 1000;
 
+/// A session whose log hasn't been appended to for this long is treated as
+/// waiting on the user (Claude/Codex stream JSONL constantly while generating
+/// — silence means they're blocked on a prompt/approval).
+const STALLED_MS: i64 = 2 * 60 * 1000;
+
 fn home_dir() -> Option<PathBuf> {
     std::env::var("HOME").ok().map(PathBuf::from)
 }
@@ -53,7 +58,10 @@ fn tail_jsonl(path: &Path, offset: &mut usize) -> Vec<String> {
 /// Shared JSONL tailer for Claude Code and Codex session logs.
 struct JsonlAgent {
     name: &'static str,
+    /// session id -> last log activity (file mtime, ms epoch)
     sessions: HashMap<String, i64>,
+    /// sessions we've reported as waiting on the user
+    waiting: std::collections::HashSet<String>,
     offsets: HashMap<PathBuf, usize>,
 }
 
@@ -62,6 +70,7 @@ impl JsonlAgent {
         Self {
             name,
             sessions: HashMap::new(),
+            waiting: std::collections::HashSet::new(),
             offsets: HashMap::new(),
         }
     }
@@ -93,30 +102,74 @@ impl JsonlAgent {
             }
             let offset = self.offsets.entry(path.clone()).or_insert(0);
             for line in tail_jsonl(&path, offset) {
-                self.note_activity(&session_id);
                 for event in parse(&line, &session_id, self.name) {
                     crate::bus::try_send(tx, event);
                 }
             }
-            if !self.sessions.contains_key(&session_id) {
-                self.emit_started(tx, &session_id);
+
+            // Activity signal = file mtime (appended on every agent turn).
+            let mtime = path.mtime_ms();
+            let now_ms = chrono::Utc::now().timestamp_millis();
+            match self.sessions.get_mut(&session_id) {
+                Some(last) => {
+                    if mtime > *last {
+                        *last = mtime;
+                    }
+                    let stalled = now_ms - *last > STALLED_MS;
+                    let was_waiting = self.waiting.contains(&session_id);
+                    if stalled && !was_waiting {
+                        self.waiting.insert(session_id.clone());
+                        crate::bus::try_send(
+                            tx,
+                            TelemetryEvent::AgentStatus {
+                                timestamp: now_rfc3339(),
+                                session_id: session_id.clone(),
+                                status: "waiting_approval".into(),
+                            },
+                        );
+                    } else if !stalled && was_waiting {
+                        self.waiting.remove(&session_id);
+                        crate::bus::try_send(
+                            tx,
+                            TelemetryEvent::AgentStatus {
+                                timestamp: now_rfc3339(),
+                                session_id: session_id.clone(),
+                                status: "running".into(),
+                            },
+                        );
+                    }
+                }
+                None => {
+                    // First sighting — emit started; a session born silent is
+                    // immediately waiting.
+                    let stalled_at_birth = now_ms - mtime > STALLED_MS;
+                    self.sessions.insert(session_id.clone(), mtime);
+                    self.emit_started(tx, &session_id);
+                    if stalled_at_birth {
+                        self.waiting.insert(session_id.clone());
+                        crate::bus::try_send(
+                            tx,
+                            TelemetryEvent::AgentStatus {
+                                timestamp: now_rfc3339(),
+                                session_id: session_id.clone(),
+                                status: "waiting_approval".into(),
+                            },
+                        );
+                    }
+                }
             }
         }
         self.flush_idle(tx);
-    }
-
-    fn note_activity(&mut self, session_id: &str) {
-        self.sessions.insert(
-            session_id.to_string(),
-            chrono::Utc::now().timestamp_millis(),
-        );
     }
 
     fn emit_started(&mut self, tx: &EventSender, session_id: &str) {
         if self.sessions.contains_key(session_id) {
             return;
         }
-        self.note_activity(session_id);
+        self.sessions.insert(
+            session_id.to_string(),
+            chrono::Utc::now().timestamp_millis(),
+        );
         let event = TelemetryEvent::AgentStarted {
             timestamp: now_rfc3339(),
             session_id: session_id.to_string(),
@@ -140,9 +193,10 @@ impl JsonlAgent {
             .collect();
         for id in idle {
             self.sessions.remove(&id);
+            self.waiting.remove(&id);
             let event = TelemetryEvent::AgentStopped {
                 timestamp: now_rfc3339(),
-                session_id: id,
+                session_id: id.clone(),
                 status: "stopped".to_string(),
             };
             crate::bus::try_send(tx, event);
