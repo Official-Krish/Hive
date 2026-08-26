@@ -60,7 +60,7 @@ export class RealtimeService {
     workspaceId: string,
     mapId: string,
   ): Promise<RealtimeMember[]> {
-    const [members, avatars, presences] = await Promise.all([
+    const [members, avatars, presences, sessions] = await Promise.all([
       prisma.workspaceMember.findMany({
         where: { workspaceId },
         select: {
@@ -78,14 +78,32 @@ export class RealtimeService {
         where: { workspaceId },
         select: { userId: true, status: true },
       }),
+      // Latest agent session per member — drives the "needs you" beacon and
+      // the project tag on the map.
+      prisma.agentSession.findMany({
+        where: { workspaceId },
+        orderBy: { startedAt: "desc" },
+        select: {
+          developerId: true,
+          status: true,
+          repository: { select: { githubFullName: true, name: true } },
+        },
+        take: 500,
+      }),
     ]);
 
     const avatarByUser = new Map(avatars.map((a) => [a.userId, a]));
     const presenceByUser = new Map(presences.map((p) => [p.userId, p]));
+    const sessionByUser = new Map<string, (typeof sessions)[number]>();
+    for (const s of sessions) {
+      if (!sessionByUser.has(s.developerId))
+        sessionByUser.set(s.developerId, s);
+    }
 
     return members.map((membership) => {
       const avatar = avatarByUser.get(membership.userId);
       const presence = presenceByUser.get(membership.userId);
+      const session = sessionByUser.get(membership.userId);
       // No Presence row means the developer has never joined the map —
       // report offline rather than assuming online.
       const status = !presence
@@ -100,6 +118,10 @@ export class RealtimeService {
         name: membership.user.name,
         avatarUrl: membership.user.avatarUrl,
         mapAvatarModel: membership.user.mapAvatarModel,
+        sessionStatus: session?.status.toLowerCase() ?? null,
+        project: session?.repository
+          ? (session.repository.githubFullName ?? session.repository.name)
+          : null,
         status,
         position: avatar
           ? { x: avatar.x, y: avatar.y, roomId: avatar.roomId }

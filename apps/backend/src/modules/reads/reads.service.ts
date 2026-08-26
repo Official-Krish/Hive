@@ -709,6 +709,9 @@ export class ReadsService {
       include: {
         agent: { select: { id: true, name: true, type: true, model: true } },
         issue: { select: { id: true, number: true, title: true, state: true } },
+        repository: {
+          select: { githubFullName: true, name: true },
+        },
       },
       orderBy: { startedAt: "desc" },
     });
@@ -722,6 +725,9 @@ export class ReadsService {
           issue: {
             select: { id: true, number: true, title: true, state: true },
           },
+          repository: {
+            select: { githubFullName: true, name: true },
+          },
         },
         orderBy: { startedAt: "desc" },
       }));
@@ -733,6 +739,9 @@ export class ReadsService {
 
     const overlay: MapOverlay = {
       developer,
+      project: session?.repository
+        ? (session.repository.githubFullName ?? session.repository.name)
+        : null,
       currentSession: session
         ? {
             id: session.id,

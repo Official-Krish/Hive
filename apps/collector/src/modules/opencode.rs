@@ -9,6 +9,11 @@ use std::path::{Path, PathBuf};
 /// Sessions are considered stopped when they show no activity for this long.
 const IDLE_TIMEOUT_MS: i64 = 10 * 60 * 1000;
 
+/// A RUNNING session whose `time_updated` hasn't moved for this long is
+/// treated as waiting on the user (OpenCode streams message events constantly
+/// while generating — silence means it's blocked on a prompt/approval).
+const STALLED_MS: i64 = 2 * 60 * 1000;
+
 /// Newer opencode versions store sessions in a SQLite DB
 /// (`~/.local/share/opencode/opencode.db`); older ones write JSON files under
 /// `project/<slug>/storage/<session>/message/<messageId>/message.json`. This
@@ -28,6 +33,8 @@ struct SessionState {
     last_input: i64,
     last_output: i64,
     last_updated: i64,
+    /// Whether we've already reported this session as waiting on the user.
+    waiting: bool,
 }
 
 #[derive(Debug)]
@@ -126,13 +133,38 @@ impl OpenCodeTracker {
                         state.last_output = row.tokens_output;
                     }
                     state.last_updated = row.time_updated;
+
+                    // Stalled-while-running ⇒ waiting on the user.
+                    let stalled = now - row.time_updated > STALLED_MS;
+                    if stalled && !state.waiting {
+                        state.waiting = true;
+                        crate::bus::try_send(
+                            tx,
+                            TelemetryEvent::AgentStatus {
+                                timestamp: now_rfc3339(),
+                                session_id: row.id.clone(),
+                                status: "waiting_approval".into(),
+                            },
+                        );
+                    } else if !stalled && state.waiting {
+                        state.waiting = false;
+                        crate::bus::try_send(
+                            tx,
+                            TelemetryEvent::AgentStatus {
+                                timestamp: now_rfc3339(),
+                                session_id: row.id.clone(),
+                                status: "running".into(),
+                            },
+                        );
+                    }
                 } else {
                     emit_stopped(tx, &row.id, &state.title);
                     self.sessions.remove(&row.id);
                 }
             } else if active {
-                let repository = directory_repo(&row.directory);
+                let repository = project_repo(&row.directory);
                 let branch = directory_branch(&row.directory);
+                let stalled_at_birth = now - row.time_updated > STALLED_MS;
                 let (model, _) = parse_model(&row.model);
                 tracing::debug!(session = %row.id, model = %model, "opencode: emitting started");
                 crate::bus::try_send(
@@ -148,6 +180,16 @@ impl OpenCodeTracker {
                         branch,
                     },
                 );
+                if stalled_at_birth {
+                    crate::bus::try_send(
+                        tx,
+                        TelemetryEvent::AgentStatus {
+                            timestamp: now_rfc3339(),
+                            session_id: row.id.clone(),
+                            status: "waiting_approval".into(),
+                        },
+                    );
+                }
                 self.sessions.insert(
                     row.id.clone(),
                     SessionState {
@@ -155,6 +197,7 @@ impl OpenCodeTracker {
                         last_input: row.tokens_input,
                         last_output: row.tokens_output,
                         last_updated: row.time_updated,
+                        waiting: stalled_at_birth,
                     },
                 );
             }
@@ -279,6 +322,21 @@ fn directory_repo(directory: &str) -> Option<String> {
     Path::new(directory)
         .file_name()
         .map(|s| s.to_string_lossy().into_owned())
+}
+
+/// Repo slug (`owner/name`) resolved from the session directory's git remote,
+/// falling back to the folder name.
+fn project_repo(directory: &str) -> Option<String> {
+    if let Ok(repo) = git2::Repository::discover(directory) {
+        if let Ok(origin) = repo.find_remote("origin") {
+            if let Some(url) = origin.url() {
+                if let Some(slug) = crate::modules::git::remote_slug(url) {
+                    return Some(slug);
+                }
+            }
+        }
+    }
+    directory_repo(directory)
 }
 
 fn directory_branch(directory: &str) -> Option<String> {
@@ -413,6 +471,7 @@ mod tests {
             last_input: 10,
             last_output: 5,
             last_updated: now_ms(),
+            waiting: false,
         };
         assert_eq!(token_deltas(&state, &row("s", 13, 9, 0)), (3, 4));
         assert_eq!(token_deltas(&state, &row("s", 8, 9, 0)), (0, 4));

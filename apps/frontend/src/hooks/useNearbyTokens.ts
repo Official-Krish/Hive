@@ -43,7 +43,7 @@ export function useNearbyTokens(
             next.set(developerId, {
               inputTokens: data.inputTokens,
               outputTokens: data.outputTokens,
-              costCents: data.costCents,
+              costCents: data.costCents ?? null,
             });
             return next;
           });

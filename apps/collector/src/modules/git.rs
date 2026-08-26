@@ -125,7 +125,7 @@ fn repo_name(repo: &Repository, path: &Path) -> String {
 }
 
 /// Extracts `owner/repo` from a git remote URL (https or git@ssh).
-fn remote_slug(url: &str) -> Option<String> {
+pub(crate) fn remote_slug(url: &str) -> Option<String> {
     let trimmed = url.trim_end_matches(".git");
     let path = if let Some(idx) = trimmed.find("://") {
         let after = &trimmed[idx + 3..];

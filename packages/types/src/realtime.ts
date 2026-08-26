@@ -22,6 +22,10 @@ export const realtimeMemberSchema = z.object({
   avatarUrl: z.string().nullable(),
   /** The GLB the member picked on the dashboard — null until they choose one. */
   mapAvatarModel: z.string().nullable(),
+  /** Live status of their current/latest agent session (null when none). */
+  sessionStatus: z.string().nullable(),
+  /** Repo (owner/name) of their current/latest agent session. */
+  project: z.string().nullable(),
   status: presenceStatusSchema,
   position: avatarPositionSchema.nullable(),
 });
@@ -66,6 +70,23 @@ export const realtimeEventSchema = z.discriminatedUnion("type", [
     workspaceId: z.string(),
     developerId: z.string(),
     sessionId: z.string(),
+    timestamp: z.number(),
+  }),
+  z.object({
+    type: z.literal("agent.status"),
+    workspaceId: z.string(),
+    developerId: z.string(),
+    sessionId: z.string(),
+    status: z.enum(["running", "blocked", "waiting_approval"]),
+    timestamp: z.number(),
+  }),
+  z.object({
+    type: z.literal("test.finished"),
+    workspaceId: z.string(),
+    developerId: z.string(),
+    repositoryName: z.string().nullable(),
+    passed: z.boolean(),
+    durationMs: z.number().nullable(),
     timestamp: z.number(),
   }),
   z.object({

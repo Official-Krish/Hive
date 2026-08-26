@@ -8,7 +8,6 @@ import { timeAgo } from "@/components/dashboard/primitives";
 const PANEL =
   "overflow-hidden rounded-2xl bg-[#f4f2ed]/97 ring-1 ring-black/[0.09] " +
   "shadow-[inset_0_1px_0_rgba(255,255,255,0.7),0_24px_48px_-20px_rgba(28,25,18,0.4)] backdrop-blur-sm";
-
 const LABEL =
   "text-[9px] font-semibold uppercase tracking-[0.16em] text-neutral-400";
 
@@ -22,7 +21,7 @@ interface MemberDetailPopupProps {
 
 /**
  * Centered member modal — everything the backend knows about a teammate's
- * current work: live session, linked issue, and AI token spend.
+ * current work: live session, linked issue, project, and AI token spend.
  */
 export function MemberDetailPopup({
   workspaceId,
@@ -31,7 +30,6 @@ export function MemberDetailPopup({
   developerId,
   onClose,
 }: MemberDetailPopupProps) {
-  // Esc to dismiss.
   useEffect(() => {
     if (!developerId) return;
     const onKey = (e: KeyboardEvent) => {
@@ -121,6 +119,15 @@ function MemberModalInner({
       <div className="space-y-5 px-5 py-4 text-[13px] text-neutral-800">
         {overlay.isLoading && !data && (
           <div className="py-2 text-neutral-500">Loading activity…</div>
+        )}
+
+        {data?.project && (
+          <section>
+            <div className={LABEL}>Project</div>
+            <div className="mt-1 font-mono text-[12px] text-neutral-800">
+              {data.project}
+            </div>
+          </section>
         )}
 
         {data?.currentSession ? (

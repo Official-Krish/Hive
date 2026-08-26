@@ -16,9 +16,11 @@ export type RealtimeEventMap = {
   "activity.updated": Extract<RealtimeEvent, { type: "activity.updated" }>;
   "agent.started": Extract<RealtimeEvent, { type: "agent.started" }>;
   "agent.stopped": Extract<RealtimeEvent, { type: "agent.stopped" }>;
+  "agent.status": Extract<RealtimeEvent, { type: "agent.status" }>;
   "avatar.moved": Extract<RealtimeEvent, { type: "avatar.moved" }>;
   "repo.push": Extract<RealtimeEvent, { type: "repo.push" }>;
   "pr.updated": Extract<RealtimeEvent, { type: "pr.updated" }>;
+  "test.finished": Extract<RealtimeEvent, { type: "test.finished" }>;
 };
 
 type EventHandler<K extends keyof RealtimeEventMap> = (

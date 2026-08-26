@@ -30,12 +30,10 @@ interface RemoteAvatarsProps {
 }
 
 /**
- * Renders every ONLINE remote avatar in the workspace at its current 2D (x, z)
- * position using the player's GLB. Offline/away members are hidden — someone
- * who never joined (or left) should not stand frozen in the office. The
- * current user's avatar is skipped — it is rendered by PlayerController.
- * Positions are read from a ref each frame so React doesn't re-render the
- * scene on every move event.
+ * Renders every ONLINE remote avatar in the workspace at its current 2D
+ * (x, z) position. Offline/away members are hidden — someone who never joined
+ * should not stand frozen in the office. Nameplates carry context pills:
+ * needs-you beacon, project tag, fresh test result, and nearby token spend.
  */
 export function RemoteAvatars({
   avatars,
@@ -53,6 +51,7 @@ export function RemoteAvatars({
     }
   });
 
+  const now = Date.now();
   const entries: Array<[string, MapAvatar]> = [];
   for (const [id, a] of avatars) {
     if (id === myUserId) continue;
@@ -64,12 +63,38 @@ export function RemoteAvatars({
     <>
       {entries.map(([id, avatar]) => {
         const modelUrl = safeModelUrl(avatar.mapAvatarModel);
+        const needsYou =
+          avatar.sessionStatus === "blocked" ||
+          avatar.sessionStatus === "waiting_approval";
+
+        const meta: Array<{
+          text: string;
+          tone?: "amber" | "green" | "red" | "neutral";
+        }> = [];
+        if (needsYou) meta.push({ text: "⚠ needs you", tone: "amber" });
+        if (avatar.project)
+          meta.push({ text: avatar.project, tone: "neutral" });
         const t = pills?.get(id);
-        const metaLine = t
-          ? `${formatTokens(t.inputTokens)} in · ${formatTokens(t.outputTokens)} out${
+        const testFresh =
+          avatar.lastTest && now - avatar.lastTest.at < 8_000
+            ? avatar.lastTest
+            : undefined;
+        if (testFresh) {
+          meta.push({
+            text: `${testFresh.passed ? "✓" : "✗"} tests`,
+            tone: testFresh.passed ? "green" : "red",
+          });
+        } else if (t) {
+          meta.push({
+            text: `⚡ ${formatTokens(t.inputTokens)} in · ${formatTokens(
+              t.outputTokens,
+            )} out${
               t.costCents != null ? ` · $${(t.costCents / 100).toFixed(2)}` : ""
-            }`
-          : undefined;
+            }`,
+            tone: "neutral",
+          });
+        }
+
         return (
           <group
             key={id}
@@ -91,7 +116,10 @@ export function RemoteAvatars({
                   name={avatar.name || "Member"}
                   status={avatar.status ?? "online"}
                   badgeColor={
-                    STATUS_COLOR[avatar.status ?? "online"] ?? "bg-sky-500"
+                    needsYou
+                      ? "bg-amber-400"
+                      : (STATUS_COLOR[avatar.status ?? "online"] ??
+                        "bg-sky-500")
                   }
                   position={[0, 0, 0]}
                 />
@@ -102,10 +130,12 @@ export function RemoteAvatars({
                 name={avatar.name || "Member"}
                 status={avatar.status ?? "online"}
                 badgeColor={
-                  STATUS_COLOR[avatar.status ?? "online"] ?? "bg-sky-500"
+                  needsYou
+                    ? "bg-amber-400"
+                    : (STATUS_COLOR[avatar.status ?? "online"] ?? "bg-sky-500")
                 }
                 position={[0, 0, 0]}
-                metaLine={metaLine}
+                meta={meta}
               />
             </AvatarErrorBoundary>
           </group>

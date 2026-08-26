@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Canvas, useThree } from "@react-three/fiber";
 import { Preload } from "@react-three/drei";
 import * as THREE from "three";
@@ -94,6 +94,71 @@ export function WorldCanvas({
 
   const meName = me.data?.user.name ?? "You";
 
+  // Members whose agent is blocked / waiting on them.
+  const needsAttention = [...avatars.entries()].filter(
+    ([id, a]) =>
+      id !== myUserId &&
+      (a.sessionStatus === "blocked" || a.sessionStatus === "waiting_approval"),
+  );
+
+  // Office ticker: pushes, PRs and test pulses across the workspace.
+  interface FeedItem {
+    key: string;
+    text: string;
+    tone: "push" | "pr" | "test";
+    at: number;
+  }
+  const [feed, setFeed] = useState<FeedItem[]>([]);
+  const avatarsRef = useRef(avatars);
+  avatarsRef.current = avatars;
+  const feedSeq = useRef(0);
+
+  useEffect(() => {
+    if (!client) return;
+    const nameOf = (id: string) =>
+      avatarsRef.current.get(id)?.name ?? "Someone";
+    const push = (text: string, tone: FeedItem["tone"]) => {
+      setFeed((prev) =>
+        [
+          {
+            key: `${Date.now()}-${++feedSeq.current}`,
+            text,
+            tone,
+            at: Date.now(),
+          },
+          ...prev,
+        ].slice(0, 4),
+      );
+    };
+    const offs = [
+      client.on("repo.push", (e) =>
+        push(
+          `${e.commitCount} commit${e.commitCount === 1 ? "" : "s"} → ${e.repoName} (${e.branch.replace("refs/heads/", "")})`,
+          "push",
+        ),
+      ),
+      client.on("pr.updated", (e) =>
+        push(`PR #${e.prNumber} ${e.status} · ${e.title}`, "pr"),
+      ),
+      client.on("test.finished", (e) =>
+        push(
+          `${nameOf(e.developerId)} — tests ${e.passed ? "passed" : "failed"}${
+            e.durationMs ? ` (${(e.durationMs / 1000).toFixed(1)}s)` : ""
+          }`,
+          "test",
+        ),
+      ),
+    ];
+    const prune = setInterval(
+      () => setFeed((prev) => prev.filter((f) => Date.now() - f.at < 60_000)),
+      10_000,
+    );
+    return () => {
+      offs.forEach((off) => off());
+      clearInterval(prune);
+    };
+  }, [client]);
+
   return (
     <div className="relative w-full h-screen overflow-hidden font-sans select-none">
       {/* Top bar: back · workspace · location · you */}
@@ -134,12 +199,32 @@ export function WorldCanvas({
           </span>
         </div>
 
+        {/* Agents waiting on a human — click cycles through them */}
+        {needsAttention.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setOpenMemberId(needsAttention[0]?.[0] ?? null)}
+            title={`${needsAttention.length} agent(s) need you — ${needsAttention
+              .map(([, a]) => a.name || "member")
+              .join(", ")}`}
+            className={`${CHIP} pointer-events-auto ml-auto border-amber-500/40 bg-amber-50/95 py-1.5 transition-colors hover:bg-amber-100/95`}
+          >
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-500" />
+            <span className="text-[12px] font-semibold text-amber-900">
+              {needsAttention.length} agent
+              {needsAttention.length === 1 ? "" : "s"} need you
+            </span>
+          </button>
+        )}
+
         {/* Your own activity/tokens — remote members get this via their avatar */}
         <button
           type="button"
           onClick={() => setOpenMemberId(myUserId)}
           title="Your session & AI token usage"
-          className={`${CHIP} pointer-events-auto ml-auto py-1.5 transition-colors hover:bg-white/70`}
+          className={`${CHIP} pointer-events-auto ${
+            needsAttention.length === 0 ? "ml-auto" : ""
+          } py-1.5 transition-colors hover:bg-white/70`}
         >
           <span className="font-serif text-[13.5px] leading-none text-neutral-900 px-2">
             {meName}
@@ -176,6 +261,32 @@ export function WorldCanvas({
           </span>
         </div>
       </div>
+
+      {/* Office ticker — pushes / PRs / test pulses */}
+      {feed.length > 0 && (
+        <div className="pointer-events-none absolute bottom-4 left-1/2 z-10 flex -translate-x-1/2 flex-col items-center gap-1.5">
+          {feed.slice(0, 3).map((f, i) => (
+            <div
+              key={f.key}
+              className={`${CHIP} px-3.5 py-1.5 text-[11px] font-medium text-neutral-700 ${
+                i === 0 ? "opacity-100" : i === 1 ? "opacity-70" : "opacity-45"
+              }`}
+              style={{ transform: `scale(${1 - i * 0.04})` }}
+            >
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${
+                  f.tone === "test"
+                    ? "bg-sky-500"
+                    : f.tone === "pr"
+                      ? "bg-violet-500"
+                      : "bg-emerald-500"
+                }`}
+              />
+              <span className="whitespace-nowrap">{f.text}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* 3D world */}
       <Canvas

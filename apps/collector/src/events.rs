@@ -35,6 +35,13 @@ pub enum TelemetryEvent {
         session_id: String,
         status: String,
     },
+    #[serde(rename = "agent.status", rename_all = "camelCase")]
+    AgentStatus {
+        timestamp: String,
+        session_id: String,
+        /// One of: running | blocked | waiting_approval
+        status: String,
+    },
     #[serde(rename = "agent.token_usage", rename_all = "camelCase")]
     AgentTokenUsage {
         timestamp: String,
@@ -289,6 +296,11 @@ mod tests {
                 timestamp: now_rfc3339(),
                 session_id: "s".into(),
                 status: "completed".into(),
+            },
+            TelemetryEvent::AgentStatus {
+                timestamp: now_rfc3339(),
+                session_id: "s".into(),
+                status: "waiting_approval".into(),
             },
             TelemetryEvent::AgentTokenUsage {
                 timestamp: now_rfc3339(),

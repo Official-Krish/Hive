@@ -449,6 +449,8 @@ export interface MapOverlay {
     email: string;
     avatarUrl: string | null;
   };
+  /** Repo (owner/name) of their current/latest agent session. */
+  project?: string | null;
   currentSession: {
     id: string;
     agent: { id: string; name: string; type: string; model: string | null };
