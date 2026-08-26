@@ -79,6 +79,9 @@ export interface DeveloperRef {
   name: string;
   email: string;
   avatarUrl: string | null;
+  /** Presence status + optional custom label (world overlay only). */
+  status?: string | null;
+  label?: string | null;
 }
 
 export interface RepositoryRef {
@@ -94,7 +97,7 @@ export interface MapRead {
     userId: string;
     name: string;
     avatarUrl: string | null;
-    status: "online" | "away" | "offline" | null;
+    status: "online" | "away" | "on_call" | "busy" | "offline" | null;
     position: { x: number; y: number; roomId: string | null } | null;
   }>;
 }

@@ -6,3 +6,4 @@ export * from "./src/workspace";
 export * from "./src/reads";
 export * from "./src/privacy";
 export * from "./src/org";
+export * from "./src/chat";

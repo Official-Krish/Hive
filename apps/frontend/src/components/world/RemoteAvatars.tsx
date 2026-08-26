@@ -72,6 +72,8 @@ export function RemoteAvatars({
           tone?: "amber" | "green" | "red" | "neutral";
         }> = [];
         if (needsYou) meta.push({ text: "⚠ needs you", tone: "amber" });
+        if (avatar.label)
+          meta.push({ text: avatar.label, tone: "neutral" });
         if (avatar.project)
           meta.push({ text: avatar.project, tone: "neutral" });
         const t = pills?.get(id);

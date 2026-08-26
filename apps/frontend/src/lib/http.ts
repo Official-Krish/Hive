@@ -1,3 +1,7 @@
+import type {
+  ChatMessageDto,
+  ConversationSummary,
+} from "@hive/types";
 import { API_BASE_URL } from "./config";
 
 export class ApiError extends Error {
@@ -448,6 +452,9 @@ export interface MapOverlay {
     name: string;
     email: string;
     avatarUrl: string | null;
+    /** Presence (world overlay only). */
+    status?: string | null;
+    label?: string | null;
   };
   /** Repo (owner/name) of their current/latest agent session. */
   project?: string | null;
@@ -912,6 +919,38 @@ export const http = {
 
   models: {
     list: (): Promise<ModelSummary[]> => request("/api/v1/models"),
+  },
+
+  /* ── chat ── */
+  chat: {
+    list: (workspaceId: string): Promise<ConversationSummary[]> =>
+      request(`/api/v1/workspaces/${workspaceId}/conversations`),
+
+    create: (
+      workspaceId: string,
+      input: { memberIds: string[]; title?: string },
+    ): Promise<ConversationSummary> =>
+      request(`/api/v1/workspaces/${workspaceId}/conversations`, {
+        method: "POST",
+        body: input,
+      }),
+
+    messages: (
+      workspaceId: string,
+      conversationId: string,
+      before?: string,
+    ): Promise<ChatMessageDto[]> => {
+      const q = before ? `?before=${encodeURIComponent(before)}` : "";
+      return request(
+        `/api/v1/workspaces/${workspaceId}/conversations/${conversationId}/messages${q}`,
+      );
+    },
+
+    markRead: (workspaceId: string, conversationId: string): Promise<void> =>
+      request(
+        `/api/v1/workspaces/${workspaceId}/conversations/${conversationId}/read`,
+        { method: "POST" },
+      ),
   },
 };
 

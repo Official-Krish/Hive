@@ -110,8 +110,14 @@ function MemberModalInner({
             {title}
           </div>
           {!isMe && data?.developer.email && (
-            <div className="truncate text-[11.5px] text-neutral-500">
-              {data.developer.email}
+            <div className="flex items-center gap-2 truncate text-[11.5px] capitalize text-neutral-500">
+              {data?.developer.label ? (
+                <span className="font-medium not-italic text-neutral-700">
+                  {data.developer.status} · {data.developer.label}
+                </span>
+              ) : (
+                (data?.developer.status ?? "")
+              )}
             </div>
           )}
         </div>

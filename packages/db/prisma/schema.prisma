@@ -45,6 +45,9 @@ model User {
   idempotencyKeys         IdempotencyKey[]
   updatedPrivacySettings  PrivacySetting[]
   githubAccounts          GitHubAccount[]
+  conversationParticipants ConversationParticipant[]
+  sentMessages            Message[]
+  conversationsCreated    Conversation[]          @relation("ConversationCreator")
 }
 
 model Organization {
@@ -83,6 +86,7 @@ model Workspace {
   efficiencyMetrics EfficiencyMetric[]
   alerts            Alert[]
   maps              WorkspaceMap[]
+  conversations     Conversation[]
   presences         Presence[]
   privacySetting    PrivacySetting?
   auditLogs         AuditLog[]
@@ -705,6 +709,7 @@ model Presence {
   userId      String
   workspaceId String
   status      PresenceStatus @default(OFFLINE)
+  customLabel String?
   activityId  String?        @unique
   position    Json?
   lastSeenAt  DateTime       @default(now())
@@ -731,6 +736,51 @@ model PrivacySetting {
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   updatedBy User?     @relation(fields: [updatedById], references: [id], onDelete: SetNull)
+}
+
+model Conversation {
+  id            String   @id @default(cuid())
+  workspaceId   String
+  /// null = direct message between exactly two participants.
+  title         String?
+  createdById   String
+  lastMessageAt DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  workspace    Workspace                 @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy    User                      @relation("ConversationCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  participants ConversationParticipant[]
+  messages     Message[]
+
+  @@index([workspaceId, lastMessageAt])
+}
+
+model ConversationParticipant {
+  id             String    @id @default(cuid())
+  conversationId String
+  userId         String
+  lastReadAt     DateTime?
+  joinedAt       DateTime  @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, userId])
+  @@index([userId])
+}
+
+model Message {
+  id             String   @id @default(cuid())
+  conversationId String
+  senderId       String
+  body           String   @db.VarChar(4000)
+  createdAt      DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
 }
 
 enum UserRole {
@@ -876,6 +926,8 @@ enum AlertStatus {
 enum PresenceStatus {
   ONLINE
   AWAY
+  ON_CALL
+  BUSY
   OFFLINE
 }
 

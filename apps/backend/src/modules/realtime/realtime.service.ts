@@ -48,12 +48,66 @@ export class RealtimeService {
     userId: string,
     workspaceId: string,
     status: PresenceStatus,
+    label?: string | null,
   ): Promise<void> {
     await prisma.presence.upsert({
       where: { userId_workspaceId: { userId, workspaceId } },
-      create: { userId, workspaceId, status, lastSeenAt: new Date() },
-      update: { status, lastSeenAt: new Date() },
+      create: {
+        userId,
+        workspaceId,
+        status,
+        customLabel: label ?? null,
+        lastSeenAt: new Date(),
+      },
+      update: {
+        status,
+        customLabel: label ?? null,
+        lastSeenAt: new Date(),
+      },
     });
+  }
+
+  /** True when the user participates in the conversation AND it belongs to
+   * the given workspace — guards every chat send/typing/history call. */
+  async isChatParticipant(
+    conversationId: string,
+    workspaceId: string,
+    userId: string,
+  ): Promise<boolean> {
+    const row = await prisma.conversationParticipant.findUnique({
+      where: {
+        conversationId_userId: { conversationId, userId },
+      },
+      select: { conversation: { select: { workspaceId: true } } },
+    });
+    return row?.conversation.workspaceId === workspaceId;
+  }
+
+  /** Persist a chat message (participant-verified) and bump the
+   * conversation's lastMessageAt. Returns null when not allowed. */
+  async sendMessage(
+    conversationId: string,
+    workspaceId: string,
+    senderId: string,
+    body: string,
+  ): Promise<{ id: string; senderId: string; body: string; createdAt: Date } | null> {
+    if (
+      !(await this.isChatParticipant(conversationId, workspaceId, senderId))
+    ) {
+      return null;
+    }
+    const [msg] = await prisma.$transaction([
+      prisma.message.create({
+        data: { conversationId, senderId, body },
+        select: { id: true, senderId: true, body: true, createdAt: true },
+      }),
+      prisma.conversation.update({
+        where: { id: conversationId },
+        data: { lastMessageAt: new Date() },
+        select: { id: true },
+      }),
+    ]);
+    return msg;
   }
 
   async getSnapshot(
@@ -76,7 +130,7 @@ export class RealtimeService {
       }),
       prisma.presence.findMany({
         where: { workspaceId },
-        select: { userId: true, status: true },
+        select: { userId: true, status: true, customLabel: true },
       }),
       // Latest agent session per member — drives the "needs you" beacon and
       // the project tag on the map.
@@ -122,6 +176,7 @@ export class RealtimeService {
         project: session?.repository
           ? (session.repository.githubFullName ?? session.repository.name)
           : null,
+        label: presence?.customLabel ?? null,
         status,
         position: avatar
           ? { x: avatar.x, y: avatar.y, roomId: avatar.roomId }

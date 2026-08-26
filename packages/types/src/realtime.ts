@@ -1,6 +1,12 @@
 import { z } from "zod";
 
-export const presenceStatusSchema = z.enum(["online", "away", "offline"]);
+export const presenceStatusSchema = z.enum([
+  "online",
+  "away",
+  "on_call",
+  "busy",
+  "offline",
+]);
 
 /**
  * Realtime events sent from the server to clients over WebSocket.
@@ -26,6 +32,8 @@ export const realtimeMemberSchema = z.object({
   sessionStatus: z.string().nullable(),
   /** Repo (owner/name) of their current/latest agent session. */
   project: z.string().nullable(),
+  /** User-set presence label (e.g. "Shipping 🚀"), null when unset. */
+  label: z.string().nullable(),
   status: presenceStatusSchema,
   position: avatarPositionSchema.nullable(),
 });
@@ -45,6 +53,28 @@ export const realtimeEventSchema = z.discriminatedUnion("type", [
     workspaceId: z.string(),
     developerId: z.string(),
     status: presenceStatusSchema,
+    /** Optional user-set label, e.g. "Shipping 🚀" or "On call w/ acme". */
+    label: z.string().max(60).nullable().optional(),
+    timestamp: z.number(),
+  }),
+  z.object({
+    type: z.literal("chat.message"),
+    workspaceId: z.string(),
+    conversationId: z.string(),
+    clientId: z.string().nullable().optional(),
+    message: z.object({
+      id: z.string(),
+      senderId: z.string(),
+      body: z.string(),
+      createdAt: z.string(),
+    }),
+    timestamp: z.number(),
+  }),
+  z.object({
+    type: z.literal("chat.typing"),
+    workspaceId: z.string(),
+    conversationId: z.string(),
+    userId: z.string(),
     timestamp: z.number(),
   }),
   z.object({
@@ -134,7 +164,20 @@ export const realtimeClientMessageSchema = z.discriminatedUnion("type", [
   }),
   z.object({
     type: z.literal("presence.update"),
-    status: z.enum(["online", "away"]),
+    status: z.enum(["online", "away", "on_call", "busy"]),
+    /** Optional user-set label shown next to their name. */
+    label: z.string().min(1).max(60).optional(),
+  }),
+  z.object({
+    type: z.literal("chat.send"),
+    conversationId: z.string().min(1),
+    /** Client-generated id for echo dedupe. */
+    clientId: z.string().min(1).max(64),
+    body: z.string().min(1).max(4000),
+  }),
+  z.object({
+    type: z.literal("chat.typing"),
+    conversationId: z.string().min(1),
   }),
 ]);
 

@@ -10,6 +10,8 @@ export interface MapAvatar {
   avatarUrl: string | null;
   /** GLB chosen on the dashboard; null until the member picks one. */
   mapAvatarModel: string | null;
+  /** User-set presence label (e.g. "Shipping 🚀"), null when unset. */
+  label: string | null;
   /** Live status of their current/latest agent session (null when none). */
   sessionStatus: string | null;
   /** Repo (owner/name) of their current/latest agent session. */
@@ -38,6 +40,7 @@ function blankMember(developerId: string): MapAvatar {
     avatarUrl: null,
     mapAvatarModel: null,
     sessionStatus: null,
+    label: null,
     project: null,
     status: "online",
     x: 0,
@@ -151,6 +154,7 @@ export function useRealtimeMap(
             mapAvatarModel: member.mapAvatarModel,
             sessionStatus: member.sessionStatus,
             project: member.project,
+            label: member.label ?? null,
             status: member.status,
             x: member.position?.x ?? 0,
             y: member.position?.y ?? 0,
@@ -201,6 +205,7 @@ export function useRealtimeMap(
           mapAvatarModel: current?.mapAvatarModel ?? null,
           sessionStatus: current?.sessionStatus ?? null,
           project: current?.project ?? null,
+          label: current?.label ?? null,
           lastTest: current?.lastTest,
           status: current?.status ?? "online",
           x: event.x,
