@@ -94,6 +94,15 @@ pub async fn run() -> Result<()> {
         "✓ config written to {}",
         crate::config::config_path().display()
     );
+
+    // Leave the machine collecting telemetry: spawn the daemon (or keep the
+    // existing one alive) right after registration.
+    match crate::daemon::ensure_running() {
+        Ok(pid) => println!("✓ collector running (pid {pid})"),
+        Err(err) => {
+            println!("! couldn't start the collector automatically ({err:#}) — run `hive start`")
+        }
+    }
     Ok(())
 }
 
@@ -174,23 +183,71 @@ fn ws_url_for(api_url: &str, ws_port: u64) -> Option<String> {
     Some(u.to_string())
 }
 
+fn ws_name(ws: &serde_json::Value) -> &str {
+    ws["name"].as_str().unwrap_or("?")
+}
+
+fn ws_id(ws: &serde_json::Value) -> Result<String> {
+    Ok(ws["id"]
+        .as_str()
+        .context("workspace missing id")?
+        .to_string())
+}
+
+/// Indices of workspaces whose name contains `query` (case-insensitive).
+/// An all-digits query is never treated as a name match.
+fn match_workspaces(items: &[serde_json::Value], query: &str) -> Vec<usize> {
+    let q = query.trim().to_lowercase();
+    if q.is_empty() || q.parse::<usize>().is_ok() {
+        return Vec::new();
+    }
+    items
+        .iter()
+        .enumerate()
+        .filter(|(_, ws)| ws_name(ws).to_lowercase().contains(&q))
+        .map(|(i, _)| i)
+        .collect()
+}
+
+/// Interactive workspace picker: accepts a 1-based number or a (partial)
+/// case-insensitive name. Re-asks on anything ambiguous; empty input picks
+/// the first workspace.
 fn pick_workspace(items: &[serde_json::Value]) -> Result<String> {
     println!("Workspaces:");
     for (i, ws) in items.iter().enumerate() {
-        let name = ws["name"].as_str().unwrap_or("?");
         let role = ws["role"].as_str().unwrap_or("member");
-        println!("  {}. {} ({role})", i + 1, name);
+        println!("  {}. {} ({role})", i + 1, ws_name(ws));
     }
-    let choice = session::prompt("Select workspace", "1");
-    let idx: usize = choice.trim().parse().unwrap_or(1);
-    let Some(ws) = items.get(idx.saturating_sub(1)) else {
-        bail!("invalid selection");
-    };
-    let id = ws["id"]
-        .as_str()
-        .context("workspace missing id")?
-        .to_string();
-    Ok(id)
+
+    loop {
+        let choice = session::prompt("Select workspace (number or name)", "1");
+        let trimmed = choice.trim();
+
+        if trimmed.is_empty() {
+            return ws_id(&items[0]);
+        }
+        if let Ok(idx) = trimmed.parse::<usize>() {
+            match items.get(idx.checked_sub(1).expect("non-zero above")) {
+                Some(ws) => return ws_id(ws),
+                None => {
+                    println!("  ! There is no workspace #{idx} — pick 1..{}", items.len());
+                    continue;
+                }
+            }
+        }
+
+        let matches = match_workspaces(items, trimmed);
+        match matches.as_slice() {
+            [] => println!("  ! No workspace matching \"{trimmed}\""),
+            [only] => return ws_id(&items[*only]),
+            many => {
+                println!("  ? \"{trimmed}\" matches several — be more specific:");
+                for i in many {
+                    println!("     {}. {}", i + 1, ws_name(&items[*i]));
+                }
+            }
+        }
+    }
 }
 
 fn hostname() -> String {
@@ -217,5 +274,20 @@ mod tests {
             ws_url_for("http://localhost:3000", 4001).as_deref(),
             Some("ws://localhost:4001/")
         );
+    }
+
+    fn ws(name: &str) -> serde_json::Value {
+        serde_json::json!({ "id": format!("id-{name}"), "name": name, "role": "owner" })
+    }
+
+    #[test]
+    fn matches_workspaces_by_partial_case_insensitive_name() {
+        let items = vec![ws("Main"), ws("Acme Platform"), ws("acme-labs")];
+        assert_eq!(match_workspaces(&items, "acme"), vec![1, 2]);
+        assert_eq!(match_workspaces(&items, "PLATFORM"), vec![1]);
+        assert_eq!(match_workspaces(&items, "Main"), vec![0]);
+        assert_eq!(match_workspaces(&items, "nope"), Vec::<usize>::new());
+        // Digits are always treated as a number, never a name filter.
+        assert_eq!(match_workspaces(&items, "1"), Vec::<usize>::new());
     }
 }

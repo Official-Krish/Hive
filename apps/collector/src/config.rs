@@ -142,8 +142,12 @@ impl Config {
     }
 }
 
-/// `~/.config/hive/config.toml`
+/// `~/.config/hive/config.toml` — overridable with `HIVE_CONFIG_DIR` so tests
+/// never touch the real one.
 pub fn config_path() -> PathBuf {
+    if let Ok(dir) = std::env::var("HIVE_CONFIG_DIR") {
+        return PathBuf::from(dir).join("config.toml");
+    }
     if let Ok(home) = std::env::var("HOME") {
         return PathBuf::from(home)
             .join(".config")
@@ -153,10 +157,30 @@ pub fn config_path() -> PathBuf {
     PathBuf::from("hive.toml")
 }
 
-/// `~/.local/state/hive` (XDG state dir; `~/.hive` on macOS).
+/// `~/.local/state/hive` (XDG state dir) — overridable with `HIVE_STATE_DIR`
+/// (or programmatically via `set_state_dir_for_tests`) so nothing ever
+/// clobbers a live daemon's pidfile/status/outbox.
 pub fn state_dir() -> PathBuf {
-    let base = dirs_state();
-    base
+    #[cfg(test)]
+    if let Some(dir) = STATE_DIR_OVERRIDE.read().unwrap().clone() {
+        return dir;
+    }
+    if let Ok(dir) = std::env::var("HIVE_STATE_DIR") {
+        let path = PathBuf::from(dir);
+        if !path.as_os_str().is_empty() {
+            return path;
+        }
+    }
+    dirs_state()
+}
+
+#[cfg(test)]
+static STATE_DIR_OVERRIDE: std::sync::RwLock<Option<PathBuf>> = std::sync::RwLock::new(None);
+
+/// Test-only: pin the state dir to a throwaway path.
+#[cfg(test)]
+pub fn set_state_dir_for_tests(dir: &Path) {
+    *STATE_DIR_OVERRIDE.write().unwrap() = Some(dir.to_path_buf());
 }
 
 fn dirs_state() -> PathBuf {
