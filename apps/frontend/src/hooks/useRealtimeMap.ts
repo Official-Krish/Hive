@@ -10,10 +10,18 @@ export interface MapAvatar {
   avatarUrl: string | null;
   /** GLB chosen on the dashboard; null until the member picks one. */
   mapAvatarModel: string | null;
+  /** User-set presence label (e.g. "Shipping"), null when unset. */
+  label: string | null;
+  /** Live status of their current/latest agent session (null when none). */
+  sessionStatus: string | null;
+  /** Repo (owner/name) of their current/latest agent session. */
+  project: string | null;
   status: RealtimeMember["status"];
   x: number;
   y: number;
   roomId: string | null;
+  /** Client-side only: most recent test pulse (for the red/green flash). */
+  lastTest?: { passed: boolean; at: number };
 }
 
 export interface MapPosition {
@@ -24,6 +32,22 @@ export interface MapPosition {
 
 const DEFAULT_RADIUS = 80;
 const MOVE_THROTTLE_MS = 50;
+
+function blankMember(developerId: string): MapAvatar {
+  return {
+    developerId,
+    name: "",
+    avatarUrl: null,
+    mapAvatarModel: null,
+    sessionStatus: null,
+    label: null,
+    project: null,
+    status: "online",
+    x: 0,
+    y: 0,
+    roomId: null,
+  };
+}
 
 export interface UseRealtimeMapOptions {
   radius?: number;
@@ -128,6 +152,9 @@ export function useRealtimeMap(
             name: member.name,
             avatarUrl: member.avatarUrl,
             mapAvatarModel: member.mapAvatarModel,
+            sessionStatus: member.sessionStatus,
+            project: member.project,
+            label: member.label ?? null,
             status: member.status,
             x: member.position?.x ?? 0,
             y: member.position?.y ?? 0,
@@ -137,6 +164,28 @@ export function useRealtimeMap(
         avatarsRef.current = next;
         setAvatars(next);
         recomputeNear();
+      }),
+      socket.on("agent.status", (event) => {
+        const current = avatarsRef.current.get(event.developerId);
+        if (!current) return;
+        const next = new Map(avatarsRef.current);
+        next.set(event.developerId, {
+          ...current,
+          sessionStatus: event.status,
+        });
+        avatarsRef.current = next;
+        setAvatars(next);
+      }),
+      socket.on("test.finished", (event) => {
+        const current = avatarsRef.current.get(event.developerId);
+        const pulse = { passed: event.passed, at: Date.now() };
+        const next = new Map(avatarsRef.current);
+        next.set(event.developerId, {
+          ...(current ?? blankMember(event.developerId)),
+          lastTest: pulse,
+        });
+        avatarsRef.current = next;
+        setAvatars(next);
       }),
       socket.on("presence.changed", (event) => {
         const current = avatarsRef.current.get(event.developerId);
@@ -154,6 +203,10 @@ export function useRealtimeMap(
           name: current?.name ?? "",
           avatarUrl: current?.avatarUrl ?? null,
           mapAvatarModel: current?.mapAvatarModel ?? null,
+          sessionStatus: current?.sessionStatus ?? null,
+          project: current?.project ?? null,
+          label: current?.label ?? null,
+          lastTest: current?.lastTest,
           status: current?.status ?? "online",
           x: event.x,
           y: event.y,

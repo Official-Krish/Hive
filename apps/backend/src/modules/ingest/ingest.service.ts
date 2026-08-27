@@ -170,18 +170,10 @@ export class IngestService {
         await this.handleTestStarted(workspaceId, userId, event);
         break;
       case "test.finished":
-        await prisma.testRun.updateMany({
-          where: { id: event.testRunId },
-          data: {
-            status: TEST_STATUS_MAP[event.status],
-            durationMs: event.durationMs,
-            totalTests: event.totalTests,
-            passedTests: event.passedTests,
-            failedTests: event.failedTests,
-            skippedTests: event.skippedTests,
-            endedAt: new Date(),
-          },
-        });
+        await this.handleTestFinished(workspaceId, userId, event);
+        break;
+      case "agent.status":
+        await this.handleAgentStatus(workspaceId, userId, event);
         break;
       case "process.started":
       case "process.stopped":
@@ -549,6 +541,72 @@ export class IngestService {
         startedAt: this.date(event.timestamp),
       },
       update: {},
+    });
+  }
+
+  private async handleAgentStatus(
+    workspaceId: string,
+    userId: string,
+    event: Extract<TelemetryEvent, { type: "agent.status" }>,
+  ): Promise<void> {
+    const status =
+      event.status === "blocked"
+        ? AgentStatus.BLOCKED
+        : event.status === "waiting_approval"
+          ? AgentStatus.WAITING_APPROVAL
+          : AgentStatus.RUNNING;
+    await prisma.agentSession.updateMany({
+      where: { id: event.sessionId },
+      data: { status },
+    });
+
+    this.broadcast({
+      type: "agent.status",
+      workspaceId,
+      developerId: userId,
+      sessionId: event.sessionId,
+      status: event.status,
+      timestamp: Date.now(),
+    });
+  }
+
+  private async handleTestFinished(
+    workspaceId: string,
+    userId: string,
+    event: Extract<TelemetryEvent, { type: "test.finished" }>,
+  ): Promise<void> {
+    await prisma.testRun.updateMany({
+      where: { id: event.testRunId },
+      data: {
+        status: TEST_STATUS_MAP[event.status],
+        durationMs: event.durationMs,
+        totalTests: event.totalTests,
+        passedTests: event.passedTests,
+        failedTests: event.failedTests,
+        skippedTests: event.skippedTests,
+        endedAt: new Date(),
+      },
+    });
+
+    // Broadcast so the office reacts (ticker + nameplate pulse).
+    const row = await prisma.testRun.findUnique({
+      where: { id: event.testRunId },
+      select: {
+        developerId: true,
+        repository: { select: { githubFullName: true, name: true } },
+      },
+    });
+    if (!row || row.developerId !== userId) return;
+
+    this.broadcast({
+      type: "test.finished",
+      workspaceId,
+      developerId: userId,
+      repositoryName:
+        row.repository?.githubFullName ?? row.repository?.name ?? null,
+      passed: event.status === "passed",
+      durationMs: event.durationMs ?? null,
+      timestamp: Date.now(),
     });
   }
 

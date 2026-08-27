@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState, type MutableRefObject } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type MutableRefObject,
+  type ReactNode,
+} from "react";
 import { useFBX, useGLTF, Html } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
@@ -24,9 +30,20 @@ interface AvatarProps {
   name?: string;
   status?: string;
   badgeColor?: string;
-  /** Small secondary line under the name (e.g. nearby AI token readout). */
-  metaLine?: string;
+  /** Small context pills stacked under the name (project, tests, tokens…). */
+  meta?: Array<{
+    text: string;
+    tone?: "amber" | "green" | "red" | "neutral";
+    icon?: ReactNode;
+  }>;
 }
+
+const META_TONE: Record<string, string> = {
+  amber: "bg-amber-400/95 text-neutral-900",
+  green: "bg-emerald-400/95 text-neutral-900",
+  red: "bg-rose-500/95 text-white",
+  neutral: "bg-black/40 text-white/80",
+};
 
 export default function Avatar({
   modelUrl = "/avatars/male/hive_male_01.glb",
@@ -37,7 +54,7 @@ export default function Avatar({
   name = "You",
   status = "Active",
   badgeColor = "bg-sky-500",
-  metaLine,
+  meta,
 }: AvatarProps) {
   const { scene } = useGLTF(modelUrl);
   const idleFBX = useFBX("/Animations/idle.fbx");
@@ -240,7 +257,7 @@ export default function Avatar({
       <primitive object={scene} scale={SCALE} />
 
       {/* Minimal nameplate floating just above the head. No distanceFactor:
-          the label keeps a constant, legible screen size at every zoom. */}
+          the label keeps a constant, legible screen size at every zoom level. */}
       <Html
         position={[0, labelY, 0]}
         center
@@ -255,11 +272,17 @@ export default function Avatar({
             <span className={`h-1 w-1 rounded-full ${badgeColor}`} />
             <span>{name}</span>
           </div>
-          {metaLine && (
-            <div className="whitespace-nowrap rounded-full bg-black/40 px-1.5 py-[1.5px] text-[8.5px] font-medium leading-none tabular-nums text-white/80 select-none">
-              ⚡ {metaLine}
+          {meta?.slice(0, 3).map((m, i) => (
+            <div
+              key={i}
+              className={`flex items-center gap-[3px] whitespace-nowrap rounded-full px-1.5 py-[1.5px] text-[8.5px] font-semibold leading-none tabular-nums shadow-sm select-none ${
+                META_TONE[m.tone ?? "neutral"]
+              }`}
+            >
+              {m.icon}
+              <span>{m.text}</span>
             </div>
-          )}
+          ))}
         </div>
       </Html>
     </group>

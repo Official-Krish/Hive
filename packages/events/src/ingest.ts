@@ -2,6 +2,7 @@ import { z } from "zod";
 import {
   agentStartedSchema,
   agentStoppedSchema,
+  agentStatusEventSchema,
   agentTokenUsageSchema,
   agentSummarySchema,
 } from "./agent";
@@ -27,6 +28,7 @@ import { fileModifiedSchema } from "./filesystem";
 export const telemetryEventSchema = z.discriminatedUnion("type", [
   agentStartedSchema,
   agentStoppedSchema,
+  agentStatusEventSchema,
   agentTokenUsageSchema,
   agentSummarySchema,
   activityStartedSchema,

@@ -14,11 +14,22 @@ const HOOK_MARKER_START: &str = "# --- hive collector hook (start) ---";
 const HOOK_MARKER_END: &str = "# --- hive collector hook (end) ---";
 const HOOK_SNIPPET: &str = r#"# --- hive collector hook (start) ---
 _hive_collector_preexec() {
-  local cmd="$1"
-  printf '{"cmd":%s,"pid":%s}\n' "$(printf '%s' "$cmd" | python3 -c 'import json,sys;print(json.dumps(sys.stdin.read()))' 2>/dev/null || printf '"%s"' "${cmd//\"/\\\"}")" "$$" > /dev/tcp/127.0.0.1/19387 2>/dev/null || true
+  _hive_last_cmd="$1"
+  _hive_t0=$SECONDS
+}
+_hive_collector_precmd() {
+  local ec=$?
+  [ -n "$_hive_last_cmd" ] || return
+  local sep=$'\x1f'
+  local payload
+  payload=$(printf '%s%s%s%s%s%s%s%s' "$_hive_last_cmd" "$sep" "$$" "$sep" "$ec" "$sep" "$(( (SECONDS - _hive_t0) * 1000 ))" "$sep$PWD" | \
+    python3 -c 'import json,sys; cmd,pid,ec,ms,cwd=sys.stdin.read().split("\x1f"); print(json.dumps({"type":"done","cmd":cmd,"pid":int(pid),"exit":int(ec),"ms":int(ms),"cwd":cwd}))' 2>/dev/null) || true
+  [ -n "$payload" ] && printf '%s\n' "$payload" > /dev/tcp/127.0.0.1/19387 2>/dev/null || true
+  _hive_last_cmd=""
 }
 autoload -Uz add-zsh-hook 2>/dev/null
 add-zsh-hook preexec _hive_collector_preexec 2>/dev/null
+add-zsh-hook precmd _hive_collector_precmd 2>/dev/null
 # --- hive collector hook (end) ---
 "#;
 
@@ -26,6 +37,12 @@ add-zsh-hook preexec _hive_collector_preexec 2>/dev/null
 struct TerminalMessage {
     cmd: String,
     pid: Option<u32>,
+    /// Present on `precmd` completion reports (new hook shape).
+    #[serde(default, rename = "type")]
+    kind: Option<String>,
+    exit: Option<i32>,
+    ms: Option<i64>,
+    cwd: Option<String>,
 }
 
 /// Serves the loopback listener that shell hooks post terminal commands to.
@@ -83,6 +100,9 @@ async fn handle_conn(mut stream: TcpStream, tx: &EventSender) -> Result<()> {
     if let Ok(msg) = serde_json::from_str::<TerminalMessage>(&text) {
         if !msg.cmd.trim().is_empty() {
             emit_terminal(tx, &msg);
+            if msg.kind.as_deref() == Some("done") {
+                emit_test_run(tx, &msg);
+            }
         }
     }
     let _ = stream.write_all(b"ok").await;
@@ -108,6 +128,89 @@ fn emit_terminal(tx: &EventSender, msg: &TerminalMessage) {
             crate::bus::try_send(tx, event);
         }
     }
+}
+
+/// Commands whose completion is worth reporting as a test run.
+fn is_test_command(cmd: &str) -> bool {
+    let c = cmd.to_lowercase();
+    [
+        "bun test",
+        "vitest",
+        "jest",
+        "pytest",
+        "cargo test",
+        "go test",
+        "npm test",
+        "npm run test",
+        "pnpm test",
+        "yarn test",
+        "node --test",
+    ]
+    .iter()
+    .any(|k| c.contains(k))
+}
+
+/// Nearest git repo slug (`owner/name`) for a working directory.
+fn repo_slug_for_dir(dir: &str) -> Option<String> {
+    let repo = git2::Repository::discover(dir).ok()?;
+    let origin = repo.find_remote("origin").ok()?;
+    let url = origin.url()?;
+    crate::modules::git::remote_slug(url)
+}
+
+/// A completed test command becomes a TestStarted + TestFinished pair so the
+/// workspace's red/green pulse reflects human-run tests, not just CI.
+fn emit_test_run(tx: &EventSender, msg: &TerminalMessage) {
+    if !is_test_command(&msg.cmd) {
+        return;
+    }
+    let (Some(exit), Some(ms)) = (msg.exit, msg.ms) else {
+        return;
+    };
+    let passed = exit == 0;
+    let repository = msg.cwd.as_deref().and_then(repo_slug_for_dir);
+    let branch = msg
+        .cwd
+        .as_deref()
+        .and_then(directory_branch)
+        .or_else(|| None);
+    let run_id = uuid::Uuid::new_v4().to_string();
+    tracing::debug!(run_id, passed, ms, "terminal: emitting test run");
+
+    crate::bus::try_send(
+        tx,
+        TelemetryEvent::TestStarted {
+            timestamp: now_rfc3339(),
+            test_run_id: run_id.clone(),
+            activity_id: None,
+            repository: repository.clone(),
+            branch: branch.clone(),
+            command: Some(msg.cmd.clone()),
+        },
+    );
+    crate::bus::try_send(
+        tx,
+        TelemetryEvent::TestFinished {
+            timestamp: now_rfc3339(),
+            test_run_id: run_id,
+            status: if passed { "passed" } else { "failed" }.into(),
+            total_tests: None,
+            passed_tests: None,
+            failed_tests: None,
+            skipped_tests: None,
+            duration_ms: Some(ms.max(0) as u64),
+        },
+    );
+}
+
+fn directory_branch(dir: &str) -> Option<String> {
+    let repo = git2::Repository::discover(dir).ok()?;
+    let head = repo.find_reference("HEAD").ok()?;
+    let target = head
+        .symbolic_target()
+        .or_else(|| head.name())
+        .map(String::from)?;
+    target.strip_prefix("refs/heads/").map(|s| s.to_string())
 }
 
 fn rc_path() -> PathBuf {

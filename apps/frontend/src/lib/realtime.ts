@@ -16,9 +16,13 @@ export type RealtimeEventMap = {
   "activity.updated": Extract<RealtimeEvent, { type: "activity.updated" }>;
   "agent.started": Extract<RealtimeEvent, { type: "agent.started" }>;
   "agent.stopped": Extract<RealtimeEvent, { type: "agent.stopped" }>;
+  "agent.status": Extract<RealtimeEvent, { type: "agent.status" }>;
   "avatar.moved": Extract<RealtimeEvent, { type: "avatar.moved" }>;
   "repo.push": Extract<RealtimeEvent, { type: "repo.push" }>;
   "pr.updated": Extract<RealtimeEvent, { type: "pr.updated" }>;
+  "test.finished": Extract<RealtimeEvent, { type: "test.finished" }>;
+  "chat.message": Extract<RealtimeEvent, { type: "chat.message" }>;
+  "chat.typing": Extract<RealtimeEvent, { type: "chat.typing" }>;
 };
 
 type EventHandler<K extends keyof RealtimeEventMap> = (
@@ -112,8 +116,28 @@ export class RealtimeClient {
     return this.send({ type: "avatar.move", x, y, roomId });
   }
 
-  sendPresence(status: "online" | "away"): boolean {
-    return this.send({ type: "presence.update", status });
+  sendPresence(
+    status: "online" | "away" | "on_call" | "busy",
+    label?: string,
+  ): boolean {
+    return this.send({
+      type: "presence.update",
+      status,
+      ...(label ? { label } : {}),
+    });
+  }
+
+  sendChatMessage(conversationId: string, clientId: string, body: string) {
+    return this.send({
+      type: "chat.send",
+      conversationId,
+      clientId,
+      body,
+    });
+  }
+
+  sendTyping(conversationId: string) {
+    return this.send({ type: "chat.typing", conversationId });
   }
 
   private open(): void {

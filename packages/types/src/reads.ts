@@ -79,6 +79,9 @@ export interface DeveloperRef {
   name: string;
   email: string;
   avatarUrl: string | null;
+  /** Presence status + optional custom label (world overlay only). */
+  status?: string | null;
+  label?: string | null;
 }
 
 export interface RepositoryRef {
@@ -94,7 +97,7 @@ export interface MapRead {
     userId: string;
     name: string;
     avatarUrl: string | null;
-    status: "online" | "away" | "offline" | null;
+    status: "online" | "away" | "on_call" | "busy" | "offline" | null;
     position: { x: number; y: number; roomId: string | null } | null;
   }>;
 }
@@ -344,12 +347,27 @@ export interface DeveloperStats {
  */
 export interface MapOverlay {
   developer: DeveloperRef;
+  /** Repo (owner/name) of their current/latest agent session. */
+  project?: string | null;
   currentSession: {
     id: string;
     agent: { id: string; name: string; type: string; model: string | null };
     title: string | null;
     status: string | null;
     startedAt: string;
+    branch?: string | null;
+  } | null;
+  /** Aggregated day/productivity readout for the member (privacy-gated). */
+  stats?: {
+    sessionsToday: number;
+    activeMinutesToday: number;
+    costCentsToday: number | null;
+    testsPassedToday: number;
+    testsFailedToday: number;
+    /** Token share by model (null when usage is private). */
+    modelMix: Array<{ model: string; share: number }> | null;
+    /** Last terminal/file events on their running session (masked per privacy). */
+    recentEvents: Array<{ label: string; at: string }> | null;
   } | null;
   issue: {
     id: string;

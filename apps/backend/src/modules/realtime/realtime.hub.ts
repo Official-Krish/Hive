@@ -302,18 +302,71 @@ export class RealtimeHub {
         break;
       }
       case "presence.update": {
+        const status =
+          parsed.status === "away"
+            ? PresenceStatus.AWAY
+            : parsed.status === "on_call"
+              ? PresenceStatus.ON_CALL
+              : parsed.status === "busy"
+                ? PresenceStatus.BUSY
+                : PresenceStatus.ONLINE;
+        const label = parsed.label ?? null;
         await this.service.updatePresence(
           client.userId,
           workspaceId,
-          parsed.status === "away"
-            ? PresenceStatus.AWAY
-            : PresenceStatus.ONLINE,
+          status,
+          label,
         );
         const event: RealtimeEvent = {
           type: "presence.changed",
           workspaceId,
           developerId: client.userId,
           status: parsed.status,
+          label,
+          timestamp,
+        };
+        this.publishToWorkspace(workspaceId, event);
+        break;
+      }
+      case "chat.send": {
+        const msg = await this.service.sendMessage(
+          parsed.conversationId,
+          workspaceId,
+          client.userId,
+          parsed.body,
+        );
+        if (!msg) return; // not a participant — ignore silently
+        const event: RealtimeEvent = {
+          type: "chat.message",
+          workspaceId,
+          conversationId: parsed.conversationId,
+          clientId: parsed.clientId,
+          message: {
+            id: msg.id,
+            senderId: msg.senderId,
+            body: msg.body,
+            createdAt: msg.createdAt.toISOString(),
+          },
+          timestamp,
+        };
+        this.publishToWorkspace(workspaceId, event);
+        break;
+      }
+      case "chat.typing": {
+        if (
+          !(await this.service.isChatParticipant(
+            parsed.conversationId,
+            workspaceId,
+            client.userId,
+          ))
+        ) {
+          return;
+        }
+        const event: RealtimeEvent = {
+          type: "chat.typing",
+          workspaceId,
+          conversationId: parsed.conversationId,
+          userId: client.userId,
           timestamp,
         };
         this.publishToWorkspace(workspaceId, event);

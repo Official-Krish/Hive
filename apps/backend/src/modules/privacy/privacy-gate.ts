@@ -172,6 +172,16 @@ export class PrivacyGate {
     if (!p.allowTokenUsage) {
       out = { ...out, inputTokens: 0, outputTokens: 0, costCents: null };
     }
+    if (out.stats) {
+      out = {
+        ...out,
+        stats: {
+          ...out.stats,
+          costCentsToday: p.allowTokenUsage ? out.stats.costCentsToday : null,
+          modelMix: p.allowTokenUsage ? out.stats.modelMix : null,
+        },
+      };
+    }
     if (out.currentSession) {
       let session = out.currentSession;
       if (!p.allowPromptMetadata) session = { ...session, title: null };

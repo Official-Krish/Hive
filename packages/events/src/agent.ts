@@ -35,6 +35,20 @@ export const agentStoppedSchema = z.object({
   status: agentStatusSchema,
 });
 
+/** Live status transition for a RUNNING session (e.g. waiting on approval). */
+export const agentLiveStatusSchema = z.enum([
+  "running",
+  "blocked",
+  "waiting_approval",
+]);
+
+export const agentStatusEventSchema = z.object({
+  type: z.literal("agent.status"),
+  timestamp: z.string().datetime(),
+  sessionId: z.string().min(1),
+  status: agentLiveStatusSchema,
+});
+
 export const agentTokenUsageSchema = z.object({
   type: z.literal("agent.token_usage"),
   timestamp: z.string().datetime(),
@@ -56,6 +70,7 @@ export const agentSummarySchema = z.object({
 export const agentEventSchema = z.discriminatedUnion("type", [
   agentStartedSchema,
   agentStoppedSchema,
+  agentStatusEventSchema,
   agentTokenUsageSchema,
   agentSummarySchema,
 ]);
