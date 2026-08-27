@@ -148,6 +148,21 @@ export const realtimeEventSchema = z.discriminatedUnion("type", [
     status: z.string(),
     timestamp: z.number(),
   }),
+  z.object({
+    type: z.literal("github.notification"),
+    workspaceId: z.string(),
+    developerId: z.string(),
+    notification: z.object({
+      id: z.string(),
+      type: z.string(),
+      title: z.string(),
+      body: z.string().nullable(),
+      repository: z.string(),
+      url: z.string().url(),
+      createdAt: z.string().datetime(),
+    }),
+    timestamp: z.number(),
+  }),
 ]);
 
 export type RealtimeEvent = z.infer<typeof realtimeEventSchema>;
@@ -178,6 +193,10 @@ export const realtimeClientMessageSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("chat.typing"),
     conversationId: z.string().min(1),
+  }),
+  z.object({
+    type: z.literal("github.notification.read"),
+    notificationId: z.string().min(1),
   }),
 ]);
 

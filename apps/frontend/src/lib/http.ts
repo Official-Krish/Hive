@@ -1,6 +1,7 @@
 import type {
   ChatMessageDto,
   ConversationSummary,
+  GitHubNotificationsResponse,
 } from "@hive/types";
 import { API_BASE_URL } from "./config";
 
@@ -187,6 +188,15 @@ export interface GitHubRepoOption {
   url: string | null;
   private: boolean;
   admin: boolean;
+}
+
+export interface GitHubInstallationView {
+  id: string;
+  installationId: string;
+  githubAppId: string;
+  repositoryCount: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface WorkspaceMemberPublic {
@@ -660,6 +670,29 @@ export const http = {
       request("/api/v1/github/disconnect", { method: "POST" }),
     listRepos: (): Promise<{ repos: GitHubRepoOption[] }> =>
       request("/api/v1/github/repos"),
+    notifications: (params?: {
+      unreadOnly?: boolean;
+      limit?: number;
+      offset?: number;
+    }): Promise<GitHubNotificationsResponse> =>
+      request("/api/v1/github/notifications", { query: params }),
+    markRead: (id: string): Promise<{ success: boolean }> =>
+      request(`/api/v1/github/notifications/${id}/read`, { method: "POST" }),
+    markAllRead: (): Promise<{ success: boolean }> =>
+      request("/api/v1/github/notifications/read-all", { method: "POST" }),
+    installUrl: (workspaceId: string): Promise<{ url: string }> =>
+      request(`/api/v1/github/${workspaceId}/app/install/url`),
+    listInstallations: (
+      workspaceId: string,
+    ): Promise<{ installations: GitHubInstallationView[] }> =>
+      request(`/api/v1/github/${workspaceId}/installations`),
+    deleteInstallation: (
+      workspaceId: string,
+      installationId: string,
+    ): Promise<{ success: boolean }> =>
+      request(`/api/v1/github/${workspaceId}/installations/${installationId}`, {
+        method: "DELETE",
+      }),
   },
 
   workspaces: {

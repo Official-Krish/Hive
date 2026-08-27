@@ -7,7 +7,13 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { motion } from "motion/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FiArrowLeft, FiCopy, FiRefreshCw, FiTrash2 } from "react-icons/fi";
+import {
+  FiArrowLeft,
+  FiCopy,
+  FiGithub,
+  FiRefreshCw,
+  FiTrash2,
+} from "react-icons/fi";
 import {
   ApiError,
   http,
@@ -118,6 +124,42 @@ export function WorkspaceSettings() {
         err instanceof ApiError
           ? err.message
           : "Couldn't assign the repository.",
+      ),
+  });
+
+  const installations = useQuery({
+    queryKey: ["github", "installations", workspaceId],
+    queryFn: () => http.github.listInstallations(workspaceId),
+    enabled: workspaceId.length > 0,
+    retry: false,
+    staleTime: 60_000,
+  });
+
+  const installMutation = useMutation({
+    mutationFn: async () => {
+      const { url } = await http.github.installUrl(workspaceId);
+      window.location.href = url;
+    },
+    onError: (err) =>
+      notifyError(
+        err instanceof ApiError ? err.message : "Couldn't start the install.",
+      ),
+  });
+
+  const removeInstallMutation = useMutation({
+    mutationFn: (installationDbId: string) =>
+      http.github.deleteInstallation(workspaceId, installationDbId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["github", "installations", workspaceId],
+      });
+      notifySuccess("GitHub App uninstalled");
+    },
+    onError: (err) =>
+      notifyError(
+        err instanceof ApiError
+          ? err.message
+          : "Couldn't uninstall the GitHub App.",
       ),
   });
 
@@ -342,6 +384,70 @@ export function WorkspaceSettings() {
                 Assign
               </button>
             </div>
+          </div>
+        </PaperInset>
+
+        {/* github app */}
+        <PaperInset
+          top={
+            <StripMeta>
+              <FiGithub className="size-3.5" aria-hidden />
+              <span className="uppercase tracking-[0.08em]">GitHub App</span>
+            </StripMeta>
+          }
+        >
+          <div className="px-5 py-6 sm:px-7">
+            <p className="text-[12.5px] leading-relaxed text-neutral-600">
+              Install the Hive GitHub App to grant this workspace access to your
+              repositories. Webhooks flow in automatically — no manual secret
+              needed.
+            </p>
+            {(installations.data?.installations ?? []).length > 0 ? (
+              <ul className="mt-4 divide-y divide-neutral-900/[0.07]">
+                {installations.data!.installations.map((inst) => (
+                  <li
+                    key={inst.id}
+                    className="flex items-center justify-between gap-3 py-3"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-[13px] font-medium text-neutral-900">
+                        GitHub App installed
+                      </p>
+                      <p className="text-[11px] text-neutral-500">
+                        {inst.repositoryCount} repository
+                        {inst.repositoryCount === 1 ? "" : "ies"} linked
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      className={paperGhostBtnClass}
+                      onClick={() => removeInstallMutation.mutate(inst.id)}
+                      disabled={removeInstallMutation.isPending}
+                    >
+                      <FiTrash2 className="size-4" aria-hidden />
+                      Uninstall
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  className={inkBtnClass}
+                  onClick={() => installMutation.mutate()}
+                  disabled={installMutation.isPending}
+                >
+                  {installMutation.isPending && <Spinner ink />}
+                  Install GitHub App
+                </button>
+                {installations.isError && (
+                  <span className="text-[12px] text-rose-700">
+                    GitHub App isn't configured yet.
+                  </span>
+                )}
+              </div>
+            )}
           </div>
         </PaperInset>
 
