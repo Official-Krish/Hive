@@ -64,10 +64,7 @@ export function createApp() {
   app.use("/api/v1/models", modelsRouter);
   app.use("/api/v1/invites", invitesRouter);
   app.use("/api/v1/orgs", orgsRouter);
-  app.use(
-    "/api/v1/workspaces/:workspaceId/conversations",
-    conversationsRouter,
-  );
+  app.use("/api/v1/workspaces", conversationsRouter);
 
   app.use(notFound());
   app.use(errorHandler());

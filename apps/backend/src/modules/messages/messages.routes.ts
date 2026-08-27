@@ -11,24 +11,29 @@ import { requireWorkspaceMember } from "../../middleware/workspace";
 import { NotFoundError, ForbiddenError } from "../../core/errors";
 
 /**
- * Workspace-scoped chat conversations. Mounted at
- * `/api/v1/workspaces/:workspaceId/conversations` — the parent mount supplies
- * `:workspaceId`, and requireWorkspaceMember gates every route on it.
+ * Workspace-scoped chat conversations. Mounted at `/api/v1/workspaces` (like the
+ * other workspace routers); each route carries `:workspaceId` so Express
+ * populates `req.params.workspaceId` for requireWorkspaceMember.
  */
 export const conversationsRouter = Router();
 
-conversationsRouter.use(requireAuth(), requireWorkspaceMember());
-
 /** List the caller's conversations in this workspace with unread counts. */
-conversationsRouter.get("/", async (req: Request, res: Response) => {
-  const auth = getAuth(res);
-  const workspaceId = String(req.params.workspaceId);
-  res.json({ data: await listConversations(workspaceId, auth.userId) });
-});
+conversationsRouter.get(
+  "/:workspaceId/conversations",
+  requireAuth(),
+  requireWorkspaceMember(),
+  async (req: Request, res: Response) => {
+    const auth = getAuth(res);
+    const workspaceId = String(req.params.workspaceId);
+    res.json({ data: await listConversations(workspaceId, auth.userId) });
+  },
+);
 
 /** Create a DM (deduped) or group conversation. */
 conversationsRouter.post(
-  "/",
+  "/:workspaceId/conversations",
+  requireAuth(),
+  requireWorkspaceMember(),
   validateBody(createConversationInputSchema),
   async (req: Request, res: Response) => {
     const auth = getAuth(res);
@@ -45,15 +50,15 @@ conversationsRouter.post(
 
 /** Paginated history (newest last). `?before=<iso>` for older pages. */
 conversationsRouter.get(
-  "/:conversationId/messages",
+  "/:workspaceId/conversations/:conversationId/messages",
+  requireAuth(),
+  requireWorkspaceMember(),
   async (req: Request, res: Response) => {
     const auth = getAuth(res);
     const workspaceId = String(req.params.workspaceId);
     const conversationId = String(req.params.conversationId);
     await assertAccess(conversationId, workspaceId, auth.userId);
-    const before = req.query.before
-      ? new Date(String(req.query.before))
-      : null;
+    const before = req.query.before ? new Date(String(req.query.before)) : null;
     const rows = await prisma.message.findMany({
       where: {
         conversationId,
@@ -77,7 +82,9 @@ conversationsRouter.get(
 
 /** Mark read up to now. */
 conversationsRouter.post(
-  "/:conversationId/read",
+  "/:workspaceId/conversations/:conversationId/read",
+  requireAuth(),
+  requireWorkspaceMember(),
   async (req: Request, res: Response) => {
     const auth = getAuth(res);
     const workspaceId = String(req.params.workspaceId);

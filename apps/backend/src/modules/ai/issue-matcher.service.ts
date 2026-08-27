@@ -53,22 +53,40 @@ const defaultInfer: IssueInfer = async (prompt) => {
     response_format: { type: "json_object" },
   });
   const text = completion.choices[0]?.message?.content ?? "";
-  try {
-    const value = JSON.parse(text) as {
-      issueNumber?: number | null;
-      confidence?: number;
-    };
-    return {
-      issueNumber: value.issueNumber ?? null,
-      confidence: Number.isFinite(value.confidence) ? value.confidence! : 0,
-    };
-  } catch {
+  const value = extractJson<{
+    issueNumber?: number | null;
+    confidence?: number;
+  }>(text);
+  if (!value) {
     console.warn(
       `[hive] AI returned non-JSON for prompt: ${prompt.slice(0, 200)}`,
     );
     return { issueNumber: null, confidence: 0 };
   }
+  return {
+    issueNumber: value.issueNumber ?? null,
+    confidence: Number.isFinite(value.confidence) ? value.confidence! : 0,
+  };
 };
+
+/**
+ * Pull a JSON object out of a model response that may be wrapped in markdown
+ * code fences or prefixed with prose. NIM models frequently ignore
+ * `response_format: json_object` and emit ```json ... ```, so a naive
+ * `JSON.parse` would fail.
+ */
+function extractJson<T>(text: string): T | null {
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const candidate = fenced?.[1] ?? text;
+  const start = candidate.indexOf("{");
+  const end = candidate.lastIndexOf("}");
+  if (start === -1 || end === -1 || end < start) return null;
+  try {
+    return JSON.parse(candidate.slice(start, end + 1)) as T;
+  } catch {
+    return null;
+  }
+}
 
 export class IssueMatcherService {
   constructor(private readonly infer: IssueInfer = defaultInfer) {}
