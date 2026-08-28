@@ -34,11 +34,11 @@ export const updateWorkspaceInputSchema = z.object({
 });
 export type UpdateWorkspaceInput = z.infer<typeof updateWorkspaceInputSchema>;
 
-export const assignRepoInputSchema = z.object({
+export const linkRepoInputSchema = z.object({
   repositoryId: z.string().min(1),
   webhookUrl: z.url().optional(),
 });
-export type AssignRepoInput = z.infer<typeof assignRepoInputSchema>;
+export type LinkRepoInput = z.infer<typeof linkRepoInputSchema>;
 
 export const createInviteInputSchema = z.object({
   email: z.email("Invalid email").max(255),
@@ -76,6 +76,14 @@ export interface WorkspaceSummary {
   webhookSecret?: string;
 }
 
+export interface WorkspaceSettingsRepository {
+  id: string;
+  name: string;
+  fullName: string | null;
+  url: string | null;
+  provider: string;
+}
+
 export interface WorkspaceSettings {
   id: string;
   name: string;
@@ -83,12 +91,7 @@ export interface WorkspaceSettings {
   description: string | null;
   /** Masked webhook secret for display, e.g. "hive_********...********". */
   webhookSecretMasked: string;
-  repository: {
-    id: string;
-    name: string;
-    fullName: string;
-    url: string | null;
-  } | null;
+  repositories: WorkspaceSettingsRepository[];
 }
 
 export interface GitHubRepo {

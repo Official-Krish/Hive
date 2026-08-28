@@ -59,6 +59,7 @@ describe("org detail + update", () => {
   test("reads and updates an org as its owner", async () => {
     const ownerEmail = await c.registerUser();
     const orgId = await primaryOrgId(ownerEmail);
+    await c.createWorkspace("Orgs");
 
     const get = await c.api(`/api/v1/orgs/${orgId}`);
     expect(get.status).toBe(200);

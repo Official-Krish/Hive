@@ -31,7 +31,6 @@ model User {
   refreshTokens           RefreshToken[]
   apiKeys                 ApiKey[]
   invitesCreated          Invite[]                @relation("InviteInviter")
-  auditLogs               AuditLog[]
   activities              Activity[]
   agentSessions           AgentSession[]
   tasks                   Task[]
@@ -48,6 +47,7 @@ model User {
   conversationParticipants ConversationParticipant[]
   sentMessages            Message[]
   conversationsCreated    Conversation[]          @relation("ConversationCreator")
+  githubNotifications     GitHubNotification[]
 }
 
 model Organization {
@@ -62,7 +62,6 @@ model Organization {
   workspaces Workspace[]
   teams      Team[]
   invites    Invite[]
-  auditLogs  AuditLog[]
 }
 
 model Workspace {
@@ -89,8 +88,9 @@ model Workspace {
   conversations     Conversation[]
   presences         Presence[]
   privacySetting    PrivacySetting?
-  auditLogs         AuditLog[]
   invites           Invite[]
+  githubInstallations GitHubInstallation[]
+  githubNotifications GitHubNotification[]
 
   @@unique([orgId, slug])
   @@index([orgId])
@@ -236,27 +236,6 @@ model Invite {
 
   @@index([orgId])
   @@index([email])
-}
-
-model AuditLog {
-  id          String   @id @default(cuid())
-  orgId       String?
-  workspaceId String?
-  userId      String?
-  action      String
-  targetType  String?
-  targetId    String?
-  metadata    Json?
-  ip          String?
-  userAgent   String?
-  createdAt   DateTime @default(now())
-
-  org       Organization? @relation(fields: [orgId], references: [id], onDelete: SetNull)
-  workspace Workspace?    @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
-  user      User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
-
-  @@index([orgId, createdAt])
-  @@index([userId, createdAt])
 }
 
 model IdempotencyKey {
@@ -783,6 +762,39 @@ model Message {
   @@index([conversationId, createdAt])
 }
 
+model GitHubNotification {
+  id        String   @id @default(cuid())
+  userId    String
+  workspaceId String
+  type       GitHubNotificationType
+  title      String
+  body       String?
+  payload    Json
+  readAt     DateTime?
+  createdAt  DateTime @default(now())
+  
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace  Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  
+  @@index([userId, readAt])
+  @@index([workspaceId, createdAt])
+}
+
+model GitHubInstallation {
+  id             String   @id @default(cuid())
+  workspaceId    String
+  installationId String   @unique
+  githubAppId    String
+  repositories   Json?
+  webhookSecret  String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  
+  @@unique([workspaceId])
+}
+
 enum UserRole {
   OWNER
   ADMIN
@@ -944,4 +956,19 @@ enum MetricPeriod {
   DAY
   WEEK
   MONTH
+}
+
+enum GitHubNotificationType {
+  ISSUE_ASSIGNED
+  ISSUE_COMMENT
+  ISSUE_CLOSED
+  PR_OPENED
+  PR_REVIEW_REQUESTED
+  PR_REVIEW_SUBMITTED
+  PR_MERGED
+  PR_CLOSED
+  PR_COMMENT
+  ISSUE_MENTION
+  PR_REVIEW_COMMENT
+  RELEASE_PUBLISHED
 }

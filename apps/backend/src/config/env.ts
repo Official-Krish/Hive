@@ -28,6 +28,12 @@ const envSchema = z.object({
     .url()
     .default("http://localhost:3000/api/v1/github/auth/callback"),
   GITHUB_TOKEN_ENCRYPTION_KEY: z.string().min(16),
+  GITHUB_APP_ID: z.string().default(""),
+  GITHUB_APP_SLUG: z.string().default(""),
+  GITHUB_APP_CLIENT_ID: z.string().default(""),
+  GITHUB_APP_CLIENT_SECRET: z.string().default(""),
+  GITHUB_APP_PRIVATE_KEY: z.string().default(""),
+  GITHUB_APP_WEBHOOK_SECRET: z.string().default(""),
   AI_PROVIDER: z.string().default(""),
   AI_BASE_URL: z.url().default("https://integrate.api.nvidia.com/v1"),
   AI_API_KEY: z.string().default(""),

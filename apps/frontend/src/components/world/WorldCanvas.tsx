@@ -24,6 +24,7 @@ import { http } from "@/lib/http";
 import RemoteAvatars from "./RemoteAvatars";
 import { MemberDetailPopup } from "./MapHud";
 import { ChatPanel } from "./ChatPanel";
+import { GitHubNotificationBell } from "./GitHubNotificationBell";
 import { cn } from "@/lib/utils";
 import { useChat } from "@/hooks/useChat";
 
@@ -146,22 +147,22 @@ export function WorldCanvas({
   const needsAttention = [...avatars.entries()].filter(
     ([id, a]) =>
       id !== myUserId &&
-      (a.sessionStatus === "blocked" ||
-        a.sessionStatus === "waiting_approval"),
+      (a.sessionStatus === "blocked" || a.sessionStatus === "waiting_approval"),
   );
 
   // Chat panel + presence picker state.
   const myPresence = avatars.get(myUserId);
   const myStatusLabel =
     (myPresence?.label as string | undefined) ??
-    ({
-      online: "Online",
-      away: "Away",
-      on_call: "On call",
-      busy: "Busy",
-    } as Record<string, string>)[myPresence?.status ?? "online"] ??
+    (
+      {
+        online: "Online",
+        away: "Away",
+        on_call: "On call",
+        busy: "Busy",
+      } as Record<string, string>
+    )[myPresence?.status ?? "online"] ??
     "Online";
-
 
   // Office ticker: pushes, PRs and test pulses across the workspace.
   interface FeedItem {
@@ -280,6 +281,9 @@ export function WorldCanvas({
         )}
 
         <div className="pointer-events-auto ml-auto flex items-center gap-2">
+          {/* GitHub notifications */}
+          <GitHubNotificationBell workspaceId={workspaceId} client={client} />
+
           {/* Chat toggle */}
           <button
             type="button"
@@ -306,7 +310,8 @@ export function WorldCanvas({
               <span
                 className={cn(
                   "h-1.5 w-1.5 rounded-full",
-                  STATUS_DOT[myPresence?.status ?? "online"] ?? "bg-emerald-500",
+                  STATUS_DOT[myPresence?.status ?? "online"] ??
+                    "bg-emerald-500",
                 )}
               />
               <span className="font-serif text-[13.5px] leading-none text-neutral-900">
@@ -345,7 +350,9 @@ export function WorldCanvas({
                         : "text-neutral-700",
                     )}
                   >
-                    <span className={cn("h-2 w-2 rounded-full", STATUS_DOT[value])} />
+                    <span
+                      className={cn("h-2 w-2 rounded-full", STATUS_DOT[value])}
+                    />
                     {label}
                   </button>
                 ))}
@@ -353,8 +360,8 @@ export function WorldCanvas({
                   current={myStatusLabel}
                   onApply={(label) => {
                     client?.sendPresence(
-                      (myPresence?.status as "online" | "away" | "on_call" | "busy") ??
-                        "online",
+                      (myPresence?.status as
+                        "online" | "away" | "on_call" | "busy") ?? "online",
                       label,
                     );
                     setStatusMenu(false);

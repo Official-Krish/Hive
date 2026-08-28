@@ -23,6 +23,10 @@ export type RealtimeEventMap = {
   "test.finished": Extract<RealtimeEvent, { type: "test.finished" }>;
   "chat.message": Extract<RealtimeEvent, { type: "chat.message" }>;
   "chat.typing": Extract<RealtimeEvent, { type: "chat.typing" }>;
+  "github.notification": Extract<
+    RealtimeEvent,
+    { type: "github.notification" }
+  >;
 };
 
 type EventHandler<K extends keyof RealtimeEventMap> = (
@@ -138,6 +142,13 @@ export class RealtimeClient {
 
   sendTyping(conversationId: string) {
     return this.send({ type: "chat.typing", conversationId });
+  }
+
+  markGitHubNotificationRead(notificationId: string) {
+    return this.send({
+      type: "github.notification.read",
+      notificationId,
+    });
   }
 
   private open(): void {

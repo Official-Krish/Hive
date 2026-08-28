@@ -1,6 +1,7 @@
 import type {
   ChatMessageDto,
   ConversationSummary,
+  GitHubNotificationsResponse,
 } from "@hive/types";
 import { API_BASE_URL } from "./config";
 
@@ -166,18 +167,21 @@ export interface WorkspaceSummary {
   webhookSecret?: string;
 }
 
+export interface WorkspaceRepository {
+  id: string;
+  name: string;
+  fullName: string | null;
+  url: string | null;
+  provider: string;
+}
+
 export interface WorkspaceSettings {
   id: string;
   name: string;
   slug: string;
   description: string | null;
   webhookSecretMasked: string;
-  repository: {
-    id: string;
-    name: string;
-    fullName: string;
-    url: string | null;
-  } | null;
+  repositories: WorkspaceRepository[];
 }
 
 export interface GitHubRepoOption {
@@ -187,6 +191,15 @@ export interface GitHubRepoOption {
   url: string | null;
   private: boolean;
   admin: boolean;
+}
+
+export interface GitHubInstallationView {
+  id: string;
+  installationId: string;
+  githubAppId: string;
+  repositoryCount: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface WorkspaceMemberPublic {
@@ -272,7 +285,42 @@ export interface OrgMemberPublic {
   email: string;
   avatarUrl: string | null;
   role: string;
+  status: string;
   joinedAt: string;
+}
+
+export interface TeamSummary {
+  id: string;
+  orgId: string;
+  name: string;
+  slug: string;
+  createdById: string;
+  memberCount: number;
+  createdAt: string;
+}
+
+export interface TeamMemberPublic {
+  userId: string;
+  name: string;
+  email: string;
+  avatarUrl: string | null;
+  role: string;
+  joinedAt: string;
+}
+
+export interface CreateTeamInput {
+  name: string;
+  slug?: string;
+}
+
+export interface UpdateTeamInput {
+  name?: string;
+  slug?: string;
+}
+
+export interface AddTeamMemberInput {
+  userId: string;
+  role: string;
 }
 
 export interface PrivacySettingRead {
@@ -660,6 +708,29 @@ export const http = {
       request("/api/v1/github/disconnect", { method: "POST" }),
     listRepos: (): Promise<{ repos: GitHubRepoOption[] }> =>
       request("/api/v1/github/repos"),
+    notifications: (params?: {
+      unreadOnly?: boolean;
+      limit?: number;
+      offset?: number;
+    }): Promise<GitHubNotificationsResponse> =>
+      request("/api/v1/github/notifications", { query: params }),
+    markRead: (id: string): Promise<{ success: boolean }> =>
+      request(`/api/v1/github/notifications/${id}/read`, { method: "POST" }),
+    markAllRead: (): Promise<{ success: boolean }> =>
+      request("/api/v1/github/notifications/read-all", { method: "POST" }),
+    installUrl: (workspaceId: string): Promise<{ url: string }> =>
+      request(`/api/v1/github/${workspaceId}/app/install/url`),
+    listInstallations: (
+      workspaceId: string,
+    ): Promise<{ installations: GitHubInstallationView[] }> =>
+      request(`/api/v1/github/${workspaceId}/installations`),
+    deleteInstallation: (
+      workspaceId: string,
+      installationId: string,
+    ): Promise<{ success: boolean }> =>
+      request(`/api/v1/github/${workspaceId}/installations/${installationId}`, {
+        method: "DELETE",
+      }),
   },
 
   workspaces: {
@@ -691,14 +762,23 @@ export const http = {
         method: "POST",
       }),
 
-    assignRepo: (
+    linkRepository: (
       workspaceId: string,
       repositoryId: string,
     ): Promise<{ success: boolean }> =>
-      request(`/api/v1/workspaces/${workspaceId}/settings/assign-repo`, {
+      request(`/api/v1/workspaces/${workspaceId}/settings/repositories`, {
         method: "POST",
         body: { repositoryId },
       }),
+
+    unlinkRepository: (
+      workspaceId: string,
+      repoId: string,
+    ): Promise<{ success: boolean }> =>
+      request(
+        `/api/v1/workspaces/${workspaceId}/settings/repositories/${repoId}`,
+        { method: "DELETE" },
+      ),
 
     members: {
       list: (workspaceId: string): Promise<WorkspaceMemberPublic[]> =>
@@ -794,6 +874,65 @@ export const http = {
 
     workspaces: (orgId: string): Promise<WorkspaceSummary[]> =>
       request(`/api/v1/orgs/${orgId}/workspaces`),
+  },
+
+  teams: {
+    list: (orgId: string): Promise<TeamSummary[]> =>
+      request(`/api/v1/orgs/${orgId}/teams`),
+
+    create: (orgId: string, input: CreateTeamInput): Promise<TeamSummary> =>
+      request(`/api/v1/orgs/${orgId}/teams`, { method: "POST", body: input }),
+
+    get: (orgId: string, teamId: string): Promise<TeamSummary> =>
+      request(`/api/v1/orgs/${orgId}/teams/${teamId}`),
+
+    update: (
+      orgId: string,
+      teamId: string,
+      input: UpdateTeamInput,
+    ): Promise<TeamSummary> =>
+      request(`/api/v1/orgs/${orgId}/teams/${teamId}`, {
+        method: "PATCH",
+        body: input,
+      }),
+
+    remove: (orgId: string, teamId: string): Promise<{ success: boolean }> =>
+      request(`/api/v1/orgs/${orgId}/teams/${teamId}`, { method: "DELETE" }),
+
+    members: {
+      list: (orgId: string, teamId: string): Promise<TeamMemberPublic[]> =>
+        request(`/api/v1/orgs/${orgId}/teams/${teamId}/members`),
+
+      add: (
+        orgId: string,
+        teamId: string,
+        input: AddTeamMemberInput,
+      ): Promise<{ success: boolean }> =>
+        request(`/api/v1/orgs/${orgId}/teams/${teamId}/members`, {
+          method: "POST",
+          body: input,
+        }),
+
+      changeRole: (
+        orgId: string,
+        teamId: string,
+        userId: string,
+        role: string,
+      ): Promise<{ success: boolean }> =>
+        request(
+          `/api/v1/orgs/${orgId}/teams/${teamId}/members/${userId}/role`,
+          { method: "PATCH", body: { role } },
+        ),
+
+      remove: (
+        orgId: string,
+        teamId: string,
+        userId: string,
+      ): Promise<{ success: boolean }> =>
+        request(`/api/v1/orgs/${orgId}/teams/${teamId}/members/${userId}`, {
+          method: "DELETE",
+        }),
+    },
   },
 
   privacy: {

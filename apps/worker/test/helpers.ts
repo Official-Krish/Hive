@@ -25,7 +25,12 @@ export async function createFixture(): Promise<Fixture> {
     data: { email: `${unique("user")}@example.com`, name: "Test User" },
   });
   const workspace = await prisma.workspace.create({
-    data: { orgId: org.id, name: "Test Workspace", slug: unique("ws") },
+    data: {
+      orgId: org.id,
+      name: "Test Workspace",
+      slug: unique("ws"),
+      webhookSecret: unique("whsec"),
+    },
   });
   const model = await prisma.model.create({
     data: {

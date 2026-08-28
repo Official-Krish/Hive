@@ -1,10 +1,3 @@
-/* ─────────────────────────────────────────────────────────────
-   SIDEBAR — the console rail.
-   A quiet monochrome column that mirrors the landing AppBar:
-   serif wordmark, four destinations with one travelling marker,
-   the workspace's organization, and the signed-in operator at
-   the base. No colour but live green and the operator's own.
-   ───────────────────────────────────────────────────────────── */
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import { motion, useReducedMotion } from "motion/react";
 import {
@@ -64,7 +57,6 @@ export function Sidebar() {
     staleTime: 60_000,
   });
   const user = me?.user;
-  const org = me?.organizations?.[0];
 
   async function handleLogout() {
     try {
@@ -105,18 +97,33 @@ export function Sidebar() {
 
       {/* organization + operator */}
       <div className="border-t border-neutral-900/[0.08] p-3">
-        {org && (
-          <Link
-            to="/dashboard"
-            className="mb-2 flex items-baseline justify-between rounded-lg px-2 py-1.5 transition-colors hover:bg-neutral-900/[0.04]"
-          >
-            <span className="truncate text-[11px] font-medium uppercase tracking-[0.12em] text-neutral-500">
-              {org.name}
-            </span>
-            <span className="ml-2 flex-shrink-0 text-[9.5px] font-semibold uppercase tracking-[0.14em] text-neutral-400">
-              {org.plan}
-            </span>
-          </Link>
+        {me?.organizations && me.organizations.length > 0 && (
+          <div className="mb-2 space-y-0.5">
+            <p className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-neutral-400">
+              Organizations
+            </p>
+            {me.organizations.map((o) => (
+              <NavLink
+                key={o.id}
+                to={`/dashboard/o/${o.id}`}
+                className={({ isActive }) =>
+                  cn(
+                    "flex items-baseline justify-between rounded-lg px-2 py-1.5 transition-colors",
+                    isActive
+                      ? "bg-neutral-900/[0.06] text-neutral-900"
+                      : "text-neutral-500 hover:bg-neutral-900/[0.04] hover:text-neutral-900",
+                  )
+                }
+              >
+                <span className="truncate text-[12px] font-medium">
+                  {o.name}
+                </span>
+                <span className="ml-2 flex-shrink-0 text-[9.5px] font-semibold uppercase tracking-[0.14em] text-neutral-400">
+                  {o.plan}
+                </span>
+              </NavLink>
+            ))}
+          </div>
         )}
 
         {user && (

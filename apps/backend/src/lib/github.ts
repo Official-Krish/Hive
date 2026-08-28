@@ -1,3 +1,5 @@
+import jwt from "jsonwebtoken";
+
 export interface GitHubUser {
   id: number;
   login: string;
@@ -38,6 +40,98 @@ export interface GitHubClientOptions {
   redirectUri: string;
   apiBaseUrl?: string;
   loginBaseUrl?: string;
+}
+
+export interface GitHubAppClientOptions {
+  appId: string;
+  appSlug: string;
+  privateKey: string;
+  apiBaseUrl?: string;
+  loginBaseUrl?: string;
+}
+
+export interface GitHubInstallationToken {
+  token: string;
+  expiresAt: string;
+  permissions: Record<string, string>;
+}
+
+export interface GitHubAppRepositoryList {
+  totalCount: number;
+  repositories: GitHubRepo[];
+}
+
+/**
+ * GitHub App client. Authenticates as the app (RS256 JWT signed with the app
+ * private key) to mint installation access tokens, which in turn grant
+ * repository-scoped access for listing installed repos.
+ */
+export class GitHubAppClient {
+  private readonly apiBaseUrl: string;
+  private readonly loginBaseUrl: string;
+  private readonly normalizedKey: string;
+
+  constructor(private readonly options: GitHubAppClientOptions) {
+    this.apiBaseUrl = options.apiBaseUrl ?? "https://api.github.com";
+    this.loginBaseUrl = options.loginBaseUrl ?? "https://github.com";
+    this.normalizedKey = options.privateKey.replace(/\\n/g, "\n").trim();
+  }
+
+  buildInstallUrl(state: string): string {
+    const params = new URLSearchParams({ state });
+    return `${this.loginBaseUrl}/apps/${this.options.appSlug}/installations/new?${params.toString()}`;
+  }
+
+  private createAppJwt(): string {
+    const now = Math.floor(Date.now() / 1000);
+    return jwt.sign(
+      { iat: now - 60, exp: now + 540, iss: this.options.appId },
+      this.normalizedKey,
+      { algorithm: "RS256" },
+    );
+  }
+
+  async getInstallationToken(
+    installationId: string,
+    permissions?: Record<string, string>,
+  ): Promise<GitHubInstallationToken> {
+    const response = await fetch(
+      `${this.apiBaseUrl}/app/installations/${installationId}/access_tokens`,
+      {
+        method: "POST",
+        headers: {
+          Accept: "application/vnd.github+json",
+          Authorization: `Bearer ${this.createAppJwt()}`,
+          "X-GitHub-Api-Version": "2022-11-28",
+        },
+        body: JSON.stringify(permissions ? { permissions } : {}),
+      },
+    );
+    if (!response.ok) {
+      throw new Error(`GitHub installation token failed: ${response.status}`);
+    }
+    return (await response.json()) as GitHubInstallationToken;
+  }
+
+  async listInstallationRepos(installationId: string): Promise<GitHubRepo[]> {
+    const response = await fetch(
+      `${this.apiBaseUrl}/app/installations/${installationId}/repositories?per_page=100`,
+      {
+        headers: {
+          Accept: "application/vnd.github+json",
+          Authorization: `Bearer ${this.createAppJwt()}`,
+          "X-GitHub-Api-Version": "2022-11-28",
+        },
+      },
+    );
+    if (!response.ok) {
+      throw new Error(
+        `GitHub list installation repos failed: ${response.status}`,
+      );
+    }
+    const data = (await response.json()) as GitHubAppRepositoryList;
+    return data.repositories ?? [];
+  }
 }
 
 export const OAUTH_SCOPES = ["read:user", "user:email", "repo"];
