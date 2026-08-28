@@ -390,6 +390,17 @@ describe("github webhooks", () => {
       },
     });
 
+    await prisma.repository.create({
+      data: {
+        workspaceId,
+        githubRepoId: githubId,
+        githubFullName: fullName,
+        name: "hive",
+        provider: "GITHUB",
+        url: `https://github.com/${fullName}`,
+      },
+    });
+
     const body = JSON.stringify({
       ref: "refs/heads/main",
       after: "abc123",
@@ -450,6 +461,17 @@ describe("github webhooks", () => {
       },
     });
 
+    await prisma.repository.create({
+      data: {
+        workspaceId,
+        githubRepoId: githubId,
+        githubFullName: fullName,
+        name: "notes",
+        provider: "GITHUB",
+        url: `https://github.com/${fullName}`,
+      },
+    });
+
     const body = JSON.stringify({
       action: "opened",
       pull_request: {
@@ -497,9 +519,21 @@ describe("github webhooks", () => {
   });
 
   test("marks a merged pull_request as merged", async () => {
+    const { workspaceId } = await createUserWithWorkspace("Merged");
     const owner = ghUser();
     const githubId = nextId();
     const fullName = `octo-${githubId}/notes`;
+
+    await prisma.repository.create({
+      data: {
+        workspaceId,
+        githubRepoId: githubId,
+        githubFullName: fullName,
+        name: "notes",
+        provider: "GITHUB",
+        url: `https://github.com/${fullName}`,
+      },
+    });
 
     const body = JSON.stringify({
       action: "closed",
@@ -533,15 +567,28 @@ describe("github webhooks", () => {
   });
 
   test("records an errored delivery when the handler fails", async () => {
+    const { workspaceId } = await createUserWithWorkspace("Broken");
+    const githubId = nextId();
+    const fullName = `octo-${githubId}/broken`;
+    await prisma.repository.create({
+      data: {
+        workspaceId,
+        githubRepoId: githubId,
+        githubFullName: fullName,
+        name: "broken",
+        provider: "GITHUB",
+      },
+    });
+
     const res = await sendWebhook(
       "push",
       JSON.stringify({
         ref: "refs/heads/main",
         commits: { bad: true },
         repository: {
-          id: nextId(),
+          id: githubId,
           name: "broken",
-          full_name: "octocat/broken",
+          full_name: fullName,
           owner: { login: "octocat", id: nextId() },
         },
       }),
@@ -553,5 +600,51 @@ describe("github webhooks", () => {
       orderBy: { receivedAt: "desc" },
     });
     expect(delivery).not.toBeNull();
+  });
+
+  test("ignores webhooks for a repository that is not linked to any workspace", async () => {
+    const { userId, workspaceId } = await createUserWithWorkspace("Listener");
+    const owner = ghUser();
+    const githubId = nextId();
+    const fullName = `octo-${githubId}/rogue`;
+
+    await prisma.gitHubAccount.create({
+      data: {
+        userId,
+        githubId: owner.id,
+        login: owner.login,
+        accessToken: "enc",
+      },
+    });
+
+    // The repo is owned by the connected account but was never linked via the
+    // GitHub App or manual link — so it must be ignored entirely.
+    const body = JSON.stringify({
+      ref: "refs/heads/main",
+      after: "abc123",
+      head_commit: { id: "abc123" },
+      commits: [
+        { id: "abc123", message: "first", timestamp: "2026-01-01T00:00:00Z" },
+      ],
+      repository: {
+        id: githubId,
+        name: "rogue",
+        full_name: fullName,
+        html_url: `https://github.com/${fullName}`,
+        default_branch: "main",
+        owner: { login: owner.login, id: owner.id },
+      },
+    });
+
+    const res = await sendWebhook("push", body);
+    expect(res.status).toBe(204);
+
+    const repo = await prisma.repository.findUnique({
+      where: { githubFullName: fullName },
+    });
+    expect(repo).toBeNull();
+    expect(
+      await prisma.gitHubNotification.count({ where: { workspaceId } }),
+    ).toBe(0);
   });
 });

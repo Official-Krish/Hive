@@ -536,16 +536,9 @@ export class GitHubService {
       if (instSecret) return instSecret;
     }
 
-    const account = await this.resolveAccount(repoPayload);
-    if (!account) return null;
-    const workspaceId = await this.primaryWorkspaceFor(account.userId);
-    if (!workspaceId) return null;
-    const ws = await prisma.workspace.findUnique({
-      where: { id: workspaceId },
-      select: { webhookSecret: true },
-    });
-    if (ws?.webhookSecret) return ws.webhookSecret;
-    return this.installationSecretForWorkspace(workspaceId);
+    // Only repos already linked to a workspace (via GitHub App install or
+    // manual link) may resolve a webhook secret. Unlinked repos are ignored.
+    return null;
   }
 
   private async installationSecretForWorkspace(
@@ -626,8 +619,8 @@ export class GitHubService {
 
   private async handlePush(payload: GitHubPushPayload): Promise<void> {
     if (!payload.repository?.id) return;
-    const account = await this.resolveAccount(payload.repository);
-    const repo = await this.findOrCreateRepository(payload.repository, account);
+    const repo = await this.findOrCreateRepository(payload.repository);
+    if (!repo) return;
 
     const branchName = (payload.ref ?? "").replace("refs/heads/", "") || "HEAD";
     const headSha = payload.head_commit?.id ?? payload.after ?? "";
@@ -692,7 +685,8 @@ export class GitHubService {
     if (!payload.repository?.id || !pr?.number) return;
 
     const account = await this.resolveAccount(payload.repository);
-    const repo = await this.findOrCreateRepository(payload.repository, account);
+    const repo = await this.findOrCreateRepository(payload.repository);
+    if (!repo) return;
 
     const status: PRStatus =
       payload.action === "closed"
@@ -763,7 +757,8 @@ export class GitHubService {
     if (!payload.repository?.id || !ghIssue?.number) return;
 
     const account = await this.resolveAccount(payload.repository);
-    const repo = await this.findOrCreateRepository(payload.repository, account);
+    const repo = await this.findOrCreateRepository(payload.repository);
+    if (!repo) return;
 
     const state = ghIssue.state === "closed" ? "closed" : "open";
     await prisma.issue.upsert({
@@ -836,7 +831,8 @@ export class GitHubService {
     if (!payload.repository?.id || !release?.tag_name) return;
 
     const account = await this.resolveAccount(payload.repository);
-    const repo = await this.findOrCreateRepository(payload.repository, account);
+    const repo = await this.findOrCreateRepository(payload.repository);
+    if (!repo) return;
 
     if (repo.workspaceId) {
       await this.notifyWorkspace(repo.workspaceId, account?.userId ?? null, {
@@ -859,8 +855,8 @@ export class GitHubService {
     if (!payload.repository?.id || !pr?.number || !review?.id) return;
 
     const account = await this.resolveAccount(payload.repository);
-    const repo = await this.findOrCreateRepository(payload.repository, account);
-
+    const repo = await this.findOrCreateRepository(payload.repository);
+    if (!repo) return;
     if (!repo.workspaceId) return;
     await this.notifyWorkspace(repo.workspaceId, account?.userId ?? null, {
       type: GitHubNotificationType.PR_REVIEW_SUBMITTED,
@@ -890,8 +886,8 @@ export class GitHubService {
     if (!payload.repository?.id || !pr?.number || !comment?.id) return;
 
     const account = await this.resolveAccount(payload.repository);
-    const repo = await this.findOrCreateRepository(payload.repository, account);
-
+    const repo = await this.findOrCreateRepository(payload.repository);
+    if (!repo) return;
     if (!repo.workspaceId) return;
     await this.notifyWorkspace(repo.workspaceId, account?.userId ?? null, {
       type: GitHubNotificationType.PR_REVIEW_COMMENT,
@@ -929,11 +925,13 @@ export class GitHubService {
 
   private async findOrCreateRepository(
     payloadRepo: GitHubRepoPayload,
-    account: GitHubAccount | null,
-  ): Promise<Repository> {
+  ): Promise<Repository | null> {
     const githubRepoId = payloadRepo.id;
     const githubFullName = payloadRepo.full_name ?? "";
-    const existing = await prisma.repository.findFirst({
+    if (!githubRepoId && !githubFullName) return null;
+    // Repos must be linked (GitHub App install or manual link) before their
+    // webhooks are processed — never auto-provision an unlinked repo row here.
+    return prisma.repository.findFirst({
       where: {
         OR: [
           ...(githubRepoId ? [{ githubRepoId }] : []),
@@ -941,32 +939,6 @@ export class GitHubService {
         ],
       },
     });
-    if (existing) return existing;
-
-    const workspaceId = account
-      ? await this.primaryWorkspaceFor(account.userId)
-      : null;
-
-    return prisma.repository.create({
-      data: {
-        workspaceId,
-        name: payloadRepo.name ?? githubFullName.split("/").pop() ?? "repo",
-        url: payloadRepo.html_url ?? null,
-        provider: RepositoryProvider.GITHUB,
-        defaultBranch: payloadRepo.default_branch ?? null,
-        githubRepoId,
-        githubFullName: githubFullName || null,
-        githubAccountId: account?.id ?? null,
-      },
-    });
-  }
-
-  private async primaryWorkspaceFor(userId: string): Promise<string | null> {
-    const membership = await prisma.workspaceMember.findFirst({
-      where: { userId },
-      orderBy: { createdAt: "asc" },
-    });
-    return membership?.workspaceId ?? null;
   }
 
   private safeDate(value?: string | null): Date | null {

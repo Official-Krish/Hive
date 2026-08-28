@@ -1,6 +1,6 @@
 import { Router } from "express";
 import {
-  assignRepoInputSchema,
+  linkRepoInputSchema,
   createGithubInviteInputSchema,
   createInviteInputSchema,
   createWorkspaceInputSchema,
@@ -55,11 +55,17 @@ workspacesRouter.post(
   controller.rotateSecret,
 );
 workspacesRouter.post(
-  "/:workspaceId/settings/assign-repo",
+  "/:workspaceId/settings/repositories",
   requireWorkspaceMember(),
   requireWorkspaceRole("admin", "owner"),
-  validateBody(assignRepoInputSchema),
-  controller.assignRepo,
+  validateBody(linkRepoInputSchema),
+  controller.linkRepo,
+);
+workspacesRouter.delete(
+  "/:workspaceId/settings/repositories/:id",
+  requireWorkspaceMember(),
+  requireWorkspaceRole("admin", "owner"),
+  controller.unlinkRepo,
 );
 
 workspacesRouter.get(

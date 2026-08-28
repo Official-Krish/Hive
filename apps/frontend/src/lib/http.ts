@@ -167,18 +167,21 @@ export interface WorkspaceSummary {
   webhookSecret?: string;
 }
 
+export interface WorkspaceRepository {
+  id: string;
+  name: string;
+  fullName: string | null;
+  url: string | null;
+  provider: string;
+}
+
 export interface WorkspaceSettings {
   id: string;
   name: string;
   slug: string;
   description: string | null;
   webhookSecretMasked: string;
-  repository: {
-    id: string;
-    name: string;
-    fullName: string;
-    url: string | null;
-  } | null;
+  repositories: WorkspaceRepository[];
 }
 
 export interface GitHubRepoOption {
@@ -724,14 +727,23 @@ export const http = {
         method: "POST",
       }),
 
-    assignRepo: (
+    linkRepository: (
       workspaceId: string,
       repositoryId: string,
     ): Promise<{ success: boolean }> =>
-      request(`/api/v1/workspaces/${workspaceId}/settings/assign-repo`, {
+      request(`/api/v1/workspaces/${workspaceId}/settings/repositories`, {
         method: "POST",
         body: { repositoryId },
       }),
+
+    unlinkRepository: (
+      workspaceId: string,
+      repoId: string,
+    ): Promise<{ success: boolean }> =>
+      request(
+        `/api/v1/workspaces/${workspaceId}/settings/repositories/${repoId}`,
+        { method: "DELETE" },
+      ),
 
     members: {
       list: (workspaceId: string): Promise<WorkspaceMemberPublic[]> =>

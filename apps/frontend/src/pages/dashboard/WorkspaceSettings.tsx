@@ -61,7 +61,6 @@ export function WorkspaceSettings() {
     if (settings.data) {
       setName(settings.data.name);
       setDescription(settings.data.description ?? "");
-      setRepositoryId(settings.data.repository?.id ?? "");
     }
   }, [settings.data]);
 
@@ -110,20 +109,36 @@ export function WorkspaceSettings() {
       ),
   });
 
-  const assignRepoMutation = useMutation({
+  const linkRepoMutation = useMutation({
     mutationFn: (newRepoId: string) =>
-      http.workspaces.assignRepo(workspaceId, newRepoId),
+      http.workspaces.linkRepository(workspaceId, newRepoId),
+    onSuccess: () => {
+      setRepositoryId("");
+      queryClient.invalidateQueries({
+        queryKey: ["workspace", workspaceId, "settings"],
+      });
+      notifySuccess("Repository linked");
+    },
+    onError: (err) =>
+      notifyError(
+        err instanceof ApiError ? err.message : "Couldn't link the repository.",
+      ),
+  });
+
+  const unlinkRepoMutation = useMutation({
+    mutationFn: (repoId: string) =>
+      http.workspaces.unlinkRepository(workspaceId, repoId),
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: ["workspace", workspaceId, "settings"],
       });
-      notifySuccess("Repository assigned");
+      notifySuccess("Repository unlinked");
     },
     onError: (err) =>
       notifyError(
         err instanceof ApiError
           ? err.message
-          : "Couldn't assign the repository.",
+          : "Couldn't unlink the repository.",
       ),
   });
 
@@ -205,6 +220,9 @@ export function WorkspaceSettings() {
   }
 
   const data: WorkspaceSettingsData = settings.data!;
+  const linkedFullNames = new Set(
+    data.repositories.map((r) => r.fullName).filter(Boolean) as string[],
+  );
   const canDelete = me.data?.user?.id && data.name === deleteConfirm;
   const dirty =
     data.name !== name.trim() ||
@@ -222,7 +240,7 @@ export function WorkspaceSettings() {
             <span className="italic text-neutral-400">, tuned.</span>
           </>
         }
-        subtitle="Identity, the webhook secret, repository assignment, and the way out."
+        subtitle="Identity, the webhook secret, linked repositories, and the way out."
       />
 
       <motion.section {...fade(0.05)} className="max-w-2xl space-y-5">
@@ -334,54 +352,94 @@ export function WorkspaceSettings() {
           </div>
         </PaperInset>
 
-        {/* repository */}
+        {/* repositories */}
         <PaperInset
           top={
             <StripMeta>
-              <span className="uppercase tracking-[0.08em]">Repository</span>
+              <span className="uppercase tracking-[0.08em]">Repositories</span>
             </StripMeta>
           }
         >
           <div className="px-5 py-6 sm:px-7">
             <p className="text-[12.5px] leading-relaxed text-neutral-600">
-              Assign a GitHub repo to this workspace, then configure its webhook
-              on GitHub manually with the secret above.
+              Link GitHub repositories to this workspace. Push, pull request,
+              issue, release and review activity from any linked repo surfaces
+              here and in the world map. Add a webhook with the secret above, or
+              install the GitHub App below to wire them all at once.
             </p>
-            {data.repository && (
-              <p className="mt-3 rounded-xl border border-neutral-900/[0.08] bg-neutral-900/[0.02] px-3 py-2 text-[12.5px] text-neutral-600">
-                Currently{" "}
-                <span className="font-medium text-neutral-900">
-                  {data.repository.fullName}
-                </span>
-              </p>
-            )}
+
+            <ul className="mt-4 space-y-2">
+              {data.repositories.length === 0 && (
+                <li className="rounded-xl border border-dashed border-neutral-900/15 px-3 py-3 text-[12.5px] text-neutral-500">
+                  No repositories linked yet.
+                </li>
+              )}
+              {data.repositories.map((repo) => (
+                <li
+                  key={repo.id}
+                  className="flex items-center justify-between gap-3 rounded-xl border border-neutral-900/[0.08] bg-neutral-900/[0.02] px-3 py-2.5"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-[13px] font-medium text-neutral-900">
+                      {repo.fullName}
+                    </p>
+                    <p className="text-[11px] text-neutral-500">
+                      {repo.provider}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {repo.url && (
+                      <a
+                        href={repo.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className={paperGhostBtnClass}
+                        title="Open on GitHub"
+                      >
+                        <FiGithub className="size-4" aria-hidden />
+                      </a>
+                    )}
+                    <button
+                      type="button"
+                      aria-label="Unlink repository"
+                      title="Unlink"
+                      className={paperGhostBtnClass}
+                      onClick={() => unlinkRepoMutation.mutate(repo.id)}
+                      disabled={unlinkRepoMutation.isPending}
+                    >
+                      <FiTrash2 className="size-4" aria-hidden />
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+
             <div className="mt-4 flex flex-wrap items-center gap-2">
               <select
                 className={`${paperInputClass} min-w-0 flex-1`}
                 value={repositoryId}
                 onChange={(e) => setRepositoryId(e.target.value)}
               >
-                <option value="">— None —</option>
-                {repoOptions.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.fullName}
-                    {r.private ? " · private" : ""}
-                  </option>
-                ))}
+                <option value="">— Add a repository —</option>
+                {repoOptions
+                  .filter((r) => !linkedFullNames.has(r.fullName))
+                  .map((r) => (
+                    <option key={r.id} value={String(r.id)}>
+                      {r.fullName}
+                      {r.private ? " · private" : ""}
+                    </option>
+                  ))}
               </select>
               <button
                 type="button"
                 className={inkBtnClass}
-                disabled={
-                  assignRepoMutation.isPending ||
-                  repositoryId === (data.repository?.id ?? "")
-                }
+                disabled={linkRepoMutation.isPending || !repositoryId}
                 onClick={() => {
-                  if (repositoryId) assignRepoMutation.mutate(repositoryId);
+                  if (repositoryId) linkRepoMutation.mutate(repositoryId);
                 }}
               >
-                {assignRepoMutation.isPending && <Spinner ink />}
-                Assign
+                {linkRepoMutation.isPending && <Spinner ink />}
+                Link
               </button>
             </div>
           </div>

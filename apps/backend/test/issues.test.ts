@@ -106,6 +106,18 @@ describe("issues webhook", () => {
       },
     });
 
+    const workspaceId = await c.createWorkspace("Tracker");
+    await prisma.repository.create({
+      data: {
+        workspaceId,
+        githubRepoId: githubId,
+        githubFullName: fullName,
+        name: "tracker",
+        provider: "GITHUB",
+        url: `https://github.com/${fullName}`,
+      },
+    });
+
     const body = JSON.stringify({
       action: "opened",
       issue: {
@@ -161,6 +173,18 @@ describe("issues webhook", () => {
         githubId,
         login: `octo-${githubId}`,
         accessToken: "enc",
+      },
+    });
+
+    const workspaceId = await c.createWorkspace("Late");
+    await prisma.repository.create({
+      data: {
+        workspaceId,
+        githubRepoId: githubId,
+        githubFullName: fullName,
+        name: "late",
+        provider: "GITHUB",
+        url: `https://github.com/${fullName}`,
       },
     });
 
@@ -225,6 +249,18 @@ describe("issues webhook", () => {
         githubId,
         login: `octo-${githubId}`,
         accessToken: "enc",
+      },
+    });
+
+    const workspaceId = await c.createWorkspace("Linked");
+    await prisma.repository.create({
+      data: {
+        workspaceId,
+        githubRepoId: githubId,
+        githubFullName: fullName,
+        name: "linked",
+        provider: "GITHUB",
+        url: `https://github.com/${fullName}`,
       },
     });
 

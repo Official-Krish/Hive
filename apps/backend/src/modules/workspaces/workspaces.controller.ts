@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
 import type {
-  AssignRepoInput,
+  LinkRepoInput,
   CreateGithubInviteInput,
   CreateInviteInput,
   CreateWorkspaceInput,
@@ -167,13 +167,23 @@ export class WorkspaceController {
     res.json({ data: result });
   };
 
-  assignRepo = async (req: Request, res: Response): Promise<void> => {
+  linkRepo = async (req: Request, res: Response): Promise<void> => {
     const auth = getAuth(res);
-    const input = req.body as AssignRepoInput;
-    await this.service.assignRepository(
+    const input = req.body as LinkRepoInput;
+    await this.service.linkRepository(
       WorkspaceController.param(req, "workspaceId"),
       auth.userId,
       input.repositoryId,
+    );
+    res.status(204).end();
+  };
+
+  unlinkRepo = async (req: Request, res: Response): Promise<void> => {
+    const auth = getAuth(res);
+    await this.service.unlinkRepository(
+      WorkspaceController.param(req, "workspaceId"),
+      auth.userId,
+      WorkspaceController.param(req, "id"),
     );
     res.status(204).end();
   };

@@ -129,29 +129,25 @@ export class WorkspaceService {
       where: { id: workspaceId },
       include: {
         repositories: {
-          where: { githubRepoId: { not: null } },
-          take: 1,
           orderBy: { createdAt: "desc" },
         },
       },
     });
     if (!workspace) throw new NotFoundError("Workspace not found");
 
-    const repo = workspace.repositories[0];
     return {
       id: workspace.id,
       name: workspace.name,
       slug: workspace.slug,
       description: workspace.description,
       webhookSecretMasked: this.maskSecret(workspace.webhookSecret),
-      repository: repo
-        ? {
-            id: repo.id,
-            name: repo.name,
-            fullName: repo.githubFullName ?? repo.name,
-            url: repo.url,
-          }
-        : null,
+      repositories: workspace.repositories.map((repo) => ({
+        id: repo.id,
+        name: repo.name,
+        fullName: repo.githubFullName ?? repo.name,
+        url: repo.url,
+        provider: repo.provider,
+      })),
     };
   }
 
@@ -168,7 +164,7 @@ export class WorkspaceService {
     return { secret: newSecret };
   }
 
-  async assignRepository(
+  async linkRepository(
     workspaceId: string,
     userId: string,
     repositoryId: string,
@@ -180,6 +176,25 @@ export class WorkspaceService {
     });
     if (!ws) throw new NotFoundError("Workspace not found");
     await this.assignRepositoryInternal(userId, workspaceId, repositoryId);
+  }
+
+  async unlinkRepository(
+    workspaceId: string,
+    userId: string,
+    repositoryId: string,
+  ): Promise<void> {
+    await this.assertAdminOrOwner(workspaceId, userId);
+    const repo = await prisma.repository.findFirst({
+      where: { id: repositoryId, workspaceId },
+      select: { id: true },
+    });
+    if (!repo) {
+      throw new NotFoundError("Repository is not linked to this workspace");
+    }
+    await prisma.repository.update({
+      where: { id: repositoryId },
+      data: { workspaceId: null },
+    });
   }
 
   private async assignRepositoryInternal(

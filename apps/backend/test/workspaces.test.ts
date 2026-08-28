@@ -346,7 +346,7 @@ describe("repository assignment", () => {
     });
     try {
       const res = await c.api(
-        `/api/v1/workspaces/${workspaceId}/settings/assign-repo`,
+        `/api/v1/workspaces/${workspaceId}/settings/repositories`,
         { method: "POST", body: { repositoryId: String(++githubIdCounter) } },
       );
       expect(res.status).toBe(403);
@@ -368,7 +368,7 @@ describe("repository assignment", () => {
     });
 
     const res = await c.api(
-      `/api/v1/workspaces/${workspaceId}/settings/assign-repo`,
+      `/api/v1/workspaces/${workspaceId}/settings/repositories`,
       { method: "POST", body: { repositoryId: repo.id } },
     );
     expect(res.status).toBe(204);
@@ -377,6 +377,125 @@ describe("repository assignment", () => {
       where: { id: repo.id },
     });
     expect(updated.workspaceId).toBe(workspaceId);
+  });
+
+  test("getSettings returns a repositories array for a linked repo", async () => {
+    c.clearJar();
+    const email = await c.registerUser();
+    await linkGithubAccount(
+      (await prisma.user.findUniqueOrThrow({ where: { email } })).id,
+    );
+
+    const ghId = String(++githubIdCounter);
+    const fullName = `acme-${ghId}/app`;
+    stubGithubRepo({
+      id: Number(ghId),
+      name: "app",
+      full_name: fullName,
+      html_url: `https://github.com/${fullName}`,
+      private: false,
+      default_branch: "main",
+      permissions: { admin: true },
+    });
+    try {
+      const wsId = await c.createWorkspace("Settings Repo");
+      const link = await c.api(
+        `/api/v1/workspaces/${wsId}/settings/repositories`,
+        { method: "POST", body: { repositoryId: ghId } },
+      );
+      expect(link.status, await link.clone().text()).toBe(204);
+
+      const res = await c.api(`/api/v1/workspaces/${wsId}/settings`);
+      expect(res.status, await res.clone().text()).toBe(200);
+      const body = await c.asJson<{
+        data: {
+          repositories: Array<{
+            id: string;
+            fullName: string;
+            provider: string;
+          }>;
+        };
+      }>(res);
+      expect(Array.isArray(body.data.repositories)).toBe(true);
+      expect(body.data.repositories.length).toBe(1);
+      expect(body.data.repositories[0]).toMatchObject({
+        fullName,
+        provider: "GITHUB",
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test("linking multiple repositories appends them to the workspace", async () => {
+    c.clearJar();
+    await c.registerUser();
+    const workspaceId = await c.createWorkspace("Multi Repo");
+
+    const repoA = await prisma.repository.create({
+      data: {
+        name: `a-${++githubIdCounter}`,
+        provider: RepositoryProvider.OTHER,
+      },
+    });
+    const repoB = await prisma.repository.create({
+      data: {
+        name: `b-${++githubIdCounter}`,
+        provider: RepositoryProvider.OTHER,
+      },
+    });
+
+    const linkA = await c.api(
+      `/api/v1/workspaces/${workspaceId}/settings/repositories`,
+      { method: "POST", body: { repositoryId: repoA.id } },
+    );
+    expect(linkA.status).toBe(204);
+    const linkB = await c.api(
+      `/api/v1/workspaces/${workspaceId}/settings/repositories`,
+      { method: "POST", body: { repositoryId: repoB.id } },
+    );
+    expect(linkB.status).toBe(204);
+
+    const res = await c.api(`/api/v1/workspaces/${workspaceId}/settings`);
+    const body = await c.asJson<{
+      data: { repositories: Array<{ id: string }> };
+    }>(res);
+    expect(body.data.repositories).toHaveLength(2);
+  });
+
+  test("unlinking a repository detaches it from the workspace", async () => {
+    c.clearJar();
+    await c.registerUser();
+    const workspaceId = await c.createWorkspace("Unlink Repo");
+
+    const repo = await prisma.repository.create({
+      data: {
+        name: `u-${++githubIdCounter}`,
+        provider: RepositoryProvider.OTHER,
+      },
+    });
+    const link = await c.api(
+      `/api/v1/workspaces/${workspaceId}/settings/repositories`,
+      { method: "POST", body: { repositoryId: repo.id } },
+    );
+    expect(link.status).toBe(204);
+
+    const unlink = await c.api(
+      `/api/v1/workspaces/${workspaceId}/settings/repositories/${repo.id}`,
+      { method: "DELETE" },
+    );
+    expect(unlink.status).toBe(204);
+
+    const after = await prisma.repository.findUniqueOrThrow({
+      where: { id: repo.id },
+    });
+    expect(after.workspaceId).toBeNull();
+
+    const res = await c.api(`/api/v1/workspaces/${workspaceId}/settings`);
+    const body = await c.asJson<{
+      data: { repositories: Array<{ id: string }> };
+    }>(res);
+    expect(body.data.repositories).toHaveLength(0);
   });
 });
 
