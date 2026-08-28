@@ -248,6 +248,79 @@ cd apps/collector && cargo test
 
 ---
 
+## Roles & permissions
+
+All memberships share the same three roles, defined by the `UserRole` enum in
+`packages/db/prisma/schema.prisma`:
+
+| Role     | Capabilities                                                              |
+| -------- | ------------------------------------------------------------------------- |
+| `owner`  | Full control of the scope, including destructive ownership actions.       |
+| `admin`  | Day-to-day management (settings, members, invites) but **not** ownership. |
+| `member` | Read access and standard participation.                                   |
+
+**Membership is independent per scope.** A user has a role in an _Organization_,
+a role in each _Workspace_ they belong to, and a role in each _Team_. The three
+are separate — an org owner is not automatically a workspace owner, and vice
+versa. (Inviting a user to a workspace also upserts an `OrganizationMember` at
+the same role, which is why roles usually align.) Any authenticated user may
+**create** a workspace (`POST /api/v1/workspaces`, no membership required).
+
+Role strings are returned lower-cased by the API (`owner` / `admin` / `member`).
+
+### Organization roles
+
+| Action                              | owner | admin | member |
+| ----------------------------------- | :---: | :---: | :----: |
+| View org, list members / workspaces |  ✅   |  ✅   |   ✅   |
+| Update name / slug                  |  ✅   |  ✅   |   ❌   |
+| Change plan                         |  ✅   |  ❌   |   ❌   |
+| Change a member's role              |  ✅   |  ❌   |   ❌   |
+| Remove a member                     |  ✅   |  ❌   |   ❌   |
+
+Self-protection: a member cannot change or remove their own role, and neither
+the org owner's role nor the owner themselves can be changed or removed.
+
+### Workspace roles
+
+| Action                                      | owner | admin | member |
+| ------------------------------------------- | :---: | :---: | :----: |
+| Read API (activities, sessions, repos, PRs, |  ✅   |  ✅   |   ✅   |
+| metrics, alerts, tasks, test runs, map)     |       |       |        |
+| View workspace settings (secret, repos,     |  ✅   |  ✅   |   ❌   |
+| members, invites)                           |       |       |        |
+| Update workspace (name / description)       |  ✅   |  ✅   |   ❌   |
+| Rotate webhook secret, link / unlink repos  |  ✅   |  ✅   |   ❌   |
+| Create / revoke invites                     |  ✅   |  ✅   |   ❌   |
+| Change a member's role, remove a member     |  ✅   |  ✅   |   ❌   |
+| Install / manage the GitHub App             |  ✅   |  ✅   |   ❌   |
+| Delete the workspace                        |  ✅   |  ❌   |   ❌   |
+
+Self-protection: the workspace owner's role can neither be changed nor removed;
+admins may change or remove themselves and any other non-owner.
+
+### Team roles (org-scoped)
+
+Teams belong to an organization, not a workspace. **Team management is gated by
+the caller's _organization_ role**, and the per-team `role` field is limited to
+`member` / `admin` (there is no team-level `owner`). The team `role` is currently
+_informational_ — it does not grant any server-side permission; the ability to
+add, re-role, or remove team members is derived from the org role below.
+
+| Action                                       | org owner | org admin | org member |
+| -------------------------------------------- | :-------: | :-------: | :--------: |
+| List teams, view a team, list team members   |    ✅     |    ✅     |     ✅     |
+| Create a team                                |    ✅     |    ✅     |     ❌     |
+| Update / delete a team                       |    ✅     |    ✅     |     ❌     |
+| Add a member (must already be an org member) |    ✅     |    ✅     |     ❌     |
+| Change a team member's team-role             |    ✅     |    ❌     |     ❌     |
+| Remove a team member                         |    ✅     |    ❌     |     ❌     |
+
+Self-protection: a member cannot change or remove their own team membership.
+Adding a user who is not already an organization member is rejected (HTTP 403).
+
+---
+
 ## License
 
 See [LICENSE](LICENSE).

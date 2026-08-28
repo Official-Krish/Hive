@@ -6,5 +6,6 @@ export * from "./src/workspace";
 export * from "./src/reads";
 export * from "./src/privacy";
 export * from "./src/org";
+export * from "./src/team";
 export * from "./src/chat";
 export * from "./src/github";

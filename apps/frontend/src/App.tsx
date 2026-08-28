@@ -19,6 +19,10 @@ import { InviteUser } from "./pages/dashboard/InviteUser";
 import { WorkspaceInvites } from "./pages/dashboard/WorkspaceInvites";
 import { WorkspaceDetail } from "./pages/dashboard/WorkspaceDetail";
 import { WorkspaceSettings } from "./pages/dashboard/WorkspaceSettings";
+import { OrgDetail } from "./pages/dashboard/OrgDetail";
+import { OrgMembers } from "./pages/dashboard/OrgMembers";
+import { OrgWorkspaces } from "./pages/dashboard/OrgWorkspaces";
+import { OrgTeams } from "./pages/dashboard/OrgTeams";
 import { AvatarSelection } from "./pages/dashboard/AvatarSelection";
 import WorldPage from "./pages/WorldPage";
 import { AuthGuard } from "./lib/ProtectedRoute";
@@ -88,6 +92,16 @@ const router = createBrowserRouter([
       { path: "avatar", element: <AvatarSelection /> },
       { path: "w/:workspaceId", element: <WorkspaceDetail /> },
       { path: "w/:workspaceId/settings", element: <WorkspaceSettings /> },
+      {
+        path: "o/:orgId",
+        element: <OrgDetail />,
+        children: [
+          { index: true, element: <Navigate to="members" replace /> },
+          { path: "members", element: <OrgMembers /> },
+          { path: "workspaces", element: <OrgWorkspaces /> },
+          { path: "teams", element: <OrgTeams /> },
+        ],
+      },
     ],
   },
 ]);

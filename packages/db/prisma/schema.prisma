@@ -31,7 +31,6 @@ model User {
   refreshTokens           RefreshToken[]
   apiKeys                 ApiKey[]
   invitesCreated          Invite[]                @relation("InviteInviter")
-  auditLogs               AuditLog[]
   activities              Activity[]
   agentSessions           AgentSession[]
   tasks                   Task[]
@@ -63,7 +62,6 @@ model Organization {
   workspaces Workspace[]
   teams      Team[]
   invites    Invite[]
-  auditLogs  AuditLog[]
 }
 
 model Workspace {
@@ -90,7 +88,6 @@ model Workspace {
   conversations     Conversation[]
   presences         Presence[]
   privacySetting    PrivacySetting?
-  auditLogs         AuditLog[]
   invites           Invite[]
   githubInstallations GitHubInstallation[]
   githubNotifications GitHubNotification[]
@@ -239,27 +236,6 @@ model Invite {
 
   @@index([orgId])
   @@index([email])
-}
-
-model AuditLog {
-  id          String   @id @default(cuid())
-  orgId       String?
-  workspaceId String?
-  userId      String?
-  action      String
-  targetType  String?
-  targetId    String?
-  metadata    Json?
-  ip          String?
-  userAgent   String?
-  createdAt   DateTime @default(now())
-
-  org       Organization? @relation(fields: [orgId], references: [id], onDelete: SetNull)
-  workspace Workspace?    @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
-  user      User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
-
-  @@index([orgId, createdAt])
-  @@index([userId, createdAt])
 }
 
 model IdempotencyKey {
