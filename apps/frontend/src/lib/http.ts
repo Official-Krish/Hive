@@ -573,17 +573,17 @@ export interface UpdateWorkspaceInput {
 }
 
 export interface UpdateMemberRoleInput {
-  role: string;
+  role: "admin" | "maintainer" | "developer" | "member" | "viewer";
 }
 
 export interface CreateInviteInput {
   email: string;
-  role?: string;
+  role?: "admin" | "maintainer" | "developer" | "member" | "viewer";
 }
 
 export interface CreateGithubInviteInput {
   githubLogin: string;
-  role?: "member" | "admin";
+  role?: "admin" | "maintainer" | "developer" | "member" | "viewer";
 }
 
 export interface RegisterDeviceInput {

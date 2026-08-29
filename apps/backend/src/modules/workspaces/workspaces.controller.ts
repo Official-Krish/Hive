@@ -4,6 +4,7 @@ import type {
   CreateGithubInviteInput,
   CreateInviteInput,
   CreateWorkspaceInput,
+  TransferOwnershipInput,
   UpdateMemberRoleInput,
   UpdateWorkspaceInput,
 } from "@hive/types";
@@ -70,9 +71,11 @@ export class WorkspaceController {
   };
 
   changeMemberRole = async (req: Request, res: Response): Promise<void> => {
+    const actor = getMembership(res).userId;
     const input = req.body as UpdateMemberRoleInput;
     await this.service.changeMemberRole(
       WorkspaceController.param(req, "workspaceId"),
+      actor,
       WorkspaceController.param(req, "userId"),
       input,
     );
@@ -80,11 +83,23 @@ export class WorkspaceController {
   };
 
   removeMember = async (req: Request, res: Response): Promise<void> => {
+    const actor = getMembership(res).userId;
     await this.service.removeMember(
       WorkspaceController.param(req, "workspaceId"),
+      actor,
       WorkspaceController.param(req, "userId"),
     );
     res.status(204).end();
+  };
+
+  transferOwnership = async (req: Request, res: Response): Promise<void> => {
+    const input = req.body as TransferOwnershipInput;
+    const data = await this.service.transferOwnership(
+      WorkspaceController.param(req, "workspaceId"),
+      getMembership(res).userId,
+      input,
+    );
+    res.json({ data });
   };
 
   invite = async (req: Request, res: Response): Promise<void> => {

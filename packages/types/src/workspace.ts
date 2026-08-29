@@ -1,6 +1,25 @@
 import { z } from "zod";
 
-export const userRoleSchema = z.enum(["owner", "admin", "member"]);
+export const userRoleSchema = z.enum([
+  "owner",
+  "admin",
+  "maintainer",
+  "developer",
+  "member",
+  "viewer",
+]);
+
+/** Roles that can be granted to a workspace member (never `owner`). */
+export const assignableWorkspaceRoleSchema = z.enum([
+  "admin",
+  "maintainer",
+  "developer",
+  "member",
+  "viewer",
+]);
+export type AssignableWorkspaceRole = z.infer<
+  typeof assignableWorkspaceRoleSchema
+>;
 
 export const createWorkspaceInputSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(100),
@@ -42,7 +61,7 @@ export type LinkRepoInput = z.infer<typeof linkRepoInputSchema>;
 
 export const createInviteInputSchema = z.object({
   email: z.email("Invalid email").max(255),
-  role: z.enum(["member", "admin"]).optional(),
+  role: assignableWorkspaceRoleSchema.optional(),
 });
 export type CreateInviteInput = z.infer<typeof createInviteInputSchema>;
 
@@ -53,16 +72,21 @@ export const createGithubInviteInputSchema = z.object({
     .min(1, "GitHub username is required")
     .max(39)
     .regex(/^[a-zA-Z0-9-]+$/, "Invalid GitHub username"),
-  role: z.enum(["member", "admin"]).optional(),
+  role: assignableWorkspaceRoleSchema.optional(),
 });
 export type CreateGithubInviteInput = z.infer<
   typeof createGithubInviteInputSchema
 >;
 
 export const updateMemberRoleSchema = z.object({
-  role: z.enum(["member", "admin"]),
+  role: assignableWorkspaceRoleSchema,
 });
 export type UpdateMemberRoleInput = z.infer<typeof updateMemberRoleSchema>;
+
+export const transferOwnershipSchema = z.object({
+  targetUserId: z.string().min(1, "Target user is required"),
+});
+export type TransferOwnershipInput = z.infer<typeof transferOwnershipSchema>;
 
 export interface WorkspaceSummary {
   id: string;

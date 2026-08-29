@@ -40,7 +40,7 @@ githubRouter.get(
   "/:workspaceId/app/install/url",
   requireAuth(),
   requireWorkspaceMember(),
-  requireWorkspaceRole("admin", "owner"),
+  requireWorkspaceRole("maintainer", "admin", "owner"),
   controller.appInstallUrl,
 );
 githubRouter.get(
@@ -52,14 +52,14 @@ githubRouter.get(
   "/:workspaceId/installations",
   requireAuth(),
   requireWorkspaceMember(),
-  requireWorkspaceRole("admin", "owner"),
+  requireWorkspaceRole("maintainer", "admin", "owner"),
   controller.listInstallations,
 );
 githubRouter.delete(
   "/:workspaceId/installations/:id",
   requireAuth(),
   requireWorkspaceMember(),
-  requireWorkspaceRole("admin", "owner"),
+  requireWorkspaceRole("maintainer", "admin", "owner"),
   controller.deleteInstallation,
 );
 

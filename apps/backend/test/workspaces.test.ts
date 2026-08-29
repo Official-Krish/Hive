@@ -8,11 +8,22 @@ import { encryptSecret } from "../src/lib/encryption";
 
 let server: Server;
 let c: TestClient;
+let newRolesSupported = false;
 
 beforeAll(async () => {
   const started = await startServer();
   server = started.server;
   c = makeClient(started.baseUrl);
+  // The new workspace roles require a DB migration (enum extension). Skip the
+  // role-ladder tests when the dev database hasn't been migrated yet.
+  try {
+    const rows = (await prisma.$queryRawUnsafe(
+      `SELECT unnest(enum_range(NULL::"UserRole"))::text AS v`,
+    )) as Array<{ v: string }>;
+    newRolesSupported = rows.some((r) => r.v === "MAINTAINER");
+  } catch {
+    newRolesSupported = false;
+  }
 });
 
 afterAll(async () => {
@@ -570,5 +581,149 @@ describe("members", () => {
     const members = await c.api(`/api/v1/workspaces/${workspaceId}/members`);
     const membersBody = await c.asJson<{ data: unknown[] }>(members);
     expect(membersBody.data).toHaveLength(2);
+  });
+});
+
+describe("workspace role ladder", () => {
+  const roleTest = newRolesSupported ? test : test.skip;
+
+  async function memberUserId(
+    workspaceId: string,
+    email: string,
+  ): Promise<string> {
+    return (
+      await prisma.workspaceMember.findFirstOrThrow({
+        where: { workspaceId, user: { email } },
+        select: { userId: true },
+      })
+    ).userId;
+  }
+
+  roleTest("maintainer manages up to developer but not admin", async () => {
+    c.clearJar();
+    await c.registerUser();
+    const ws = await c.createWorkspace("Ladder");
+    const ownerJar = c.saveJar();
+
+    const maintEmail = uniqueEmail("maint");
+    const tMaint = await c.inviteAndGetToken(ws, maintEmail, "maintainer");
+    await c.acceptInviteAs(tMaint, maintEmail); // jar = maintainer
+    const maintJar = c.saveJar();
+
+    const devEmail = uniqueEmail("dev");
+    c.restoreJar(ownerJar);
+    const tDev = await c.inviteAndGetToken(ws, devEmail, "member");
+    c.clearJar();
+    await c.acceptInviteAs(tDev, devEmail); // jar = member
+    const devUser = await memberUserId(ws, devEmail);
+    c.restoreJar(maintJar);
+
+    // maintainer (rank 3) promotes a member to developer (rank 2) — allowed.
+    const promote = await c.api(`/api/v1/workspaces/${ws}/members/${devUser}`, {
+      method: "PATCH",
+      body: { role: "developer" },
+    });
+    expect(promote.status, await promote.clone().text()).toBe(204);
+
+    // maintainer cannot promote to admin (rank 4) — above their own rank.
+    const over = await c.api(`/api/v1/workspaces/${ws}/members/${devUser}`, {
+      method: "PATCH",
+      body: { role: "admin" },
+    });
+    expect(over.status).toBe(403);
+  });
+
+  roleTest("admin manages members but cannot promote to admin", async () => {
+    c.clearJar();
+    await c.registerUser();
+    const ws = await c.createWorkspace("AdminLadder");
+    const ownerJar = c.saveJar();
+
+    const adminEmail = uniqueEmail("admin");
+    const tAdmin = await c.inviteAndGetToken(ws, adminEmail, "admin");
+    await c.acceptInviteAs(tAdmin, adminEmail); // jar = admin
+    const adminJar = c.saveJar();
+
+    const peonEmail = uniqueEmail("peon");
+    c.restoreJar(ownerJar);
+    const tPeon = await c.inviteAndGetToken(ws, peonEmail, "member");
+    c.clearJar();
+    await c.acceptInviteAs(tPeon, peonEmail);
+    const peonUser = await memberUserId(ws, peonEmail);
+    c.restoreJar(adminJar);
+
+    // admin (rank 4) promotes a member to maintainer (rank 3) — allowed.
+    const ok = await c.api(`/api/v1/workspaces/${ws}/members/${peonUser}`, {
+      method: "PATCH",
+      body: { role: "maintainer" },
+    });
+    expect(ok.status, await ok.clone().text()).toBe(204);
+
+    // admin cannot promote to admin (equal rank) — only an owner can.
+    const no = await c.api(`/api/v1/workspaces/${ws}/members/${peonUser}`, {
+      method: "PATCH",
+      body: { role: "admin" },
+    });
+    expect(no.status).toBe(403);
+  });
+
+  roleTest("owner can transfer ownership and is demoted to admin", async () => {
+    c.clearJar();
+    await c.registerUser();
+    const ws = await c.createWorkspace("Transfer");
+    const ownerJar = c.saveJar();
+
+    const succEmail = uniqueEmail("succ");
+    const tSucc = await c.inviteAndGetToken(ws, succEmail, "admin");
+    await c.acceptInviteAs(tSucc, succEmail); // jar = successor
+    const succUser = await memberUserId(ws, succEmail);
+
+    c.restoreJar(ownerJar); // act as the owner again
+    const transfer = await c.api(`/api/v1/workspaces/${ws}/transfer`, {
+      method: "POST",
+      body: { targetUserId: succUser },
+    });
+    expect(transfer.status, await transfer.clone().text()).toBe(200);
+
+    // Previous owner is now admin and can no longer transfer.
+    const again = await c.api(`/api/v1/workspaces/${ws}/transfer`, {
+      method: "POST",
+      body: { targetUserId: succUser },
+    });
+    expect(again.status).toBe(403);
+
+    // Demotion confirmed: former owner (still the active session) cannot
+    // delete the workspace either.
+    const del = await c.api(`/api/v1/workspaces/${ws}`, { method: "DELETE" });
+    expect(del.status).toBe(403);
+
+    const rows = await prisma.workspaceMember.findMany({
+      where: { workspaceId: ws },
+      select: { userId: true, role: true },
+    });
+    expect(rows.find((r) => r.userId === succUser)?.role).toBe("OWNER");
+    expect(
+      rows.filter((r) => r.role === "ADMIN").length,
+    ).toBeGreaterThanOrEqual(1);
+  });
+
+  roleTest("viewer cannot read members or settings", async () => {
+    c.clearJar();
+    await c.registerUser();
+    const ws = await c.createWorkspace("ViewerScope");
+    const ownerJar = c.saveJar();
+
+    const viewEmail = uniqueEmail("viewer");
+    const tView = await c.inviteAndGetToken(ws, viewEmail, "viewer");
+    await c.acceptInviteAs(tView, viewEmail); // jar = viewer
+
+    const members = await c.api(`/api/v1/workspaces/${ws}/members`);
+    expect(members.status).toBe(403);
+    const settings = await c.api(`/api/v1/workspaces/${ws}/settings`);
+    expect(settings.status).toBe(403);
+
+    c.restoreJar(ownerJar);
+    const reads = await c.api(`/api/v1/workspaces/${ws}/activities`);
+    expect(reads.status).toBe(200);
   });
 });

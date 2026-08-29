@@ -9,6 +9,7 @@ import type {
 import { ForbiddenError, NotFoundError } from "../../core/errors";
 import { slugify, uniqueSlug } from "../../lib/slug";
 import { roleFromString, roleToString } from "../../middleware/org";
+import type { Role } from "../../middleware/workspace";
 
 const planFromString = (plan: "free" | "team" | "enterprise"): PlanType => {
   switch (plan) {
@@ -78,7 +79,7 @@ export class OrgService {
 
   async update(
     orgId: string,
-    role: "owner" | "admin" | "member",
+    role: Role,
     input: UpdateOrgInput,
   ): Promise<OrgSummary> {
     const org = await prisma.organization.findUnique({
