@@ -155,7 +155,7 @@ export class TeamService {
       name: m.user.name,
       email: m.user.email,
       avatarUrl: m.user.avatarUrl,
-      role: roleToString(m.role),
+      role: roleToString(m.role) === "admin" ? "admin" : "member",
       joinedAt: m.createdAt.toISOString(),
     }));
   }

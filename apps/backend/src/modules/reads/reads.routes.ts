@@ -83,7 +83,7 @@ readsRouter.get(
 readsRouter.post(
   "/:workspaceId/alerts/:alertId/resolve",
   member,
-  requireWorkspaceRole("admin", "owner"),
+  requireWorkspaceRole("developer", "maintainer", "admin", "owner"),
   controller.resolveAlert,
 );
 readsRouter.get(

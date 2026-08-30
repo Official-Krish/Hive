@@ -6,6 +6,7 @@ import type {
   InviteCreated,
   InviteSummary,
   ReceivedInvite,
+  TransferOwnershipInput,
   UpdateMemberRoleInput,
   UpdateWorkspaceInput,
   WorkspaceMemberPublic,
@@ -22,7 +23,12 @@ import { generateRandomToken, hashToken } from "../../lib/crypto";
 import { decryptSecret } from "../../lib/encryption";
 import { GitHubClient, type GitHubRepoDetail } from "../../lib/github";
 import { slugify, uniqueSlug } from "../../lib/slug";
-import { roleFromString, roleToString } from "../../middleware/workspace";
+import {
+  roleFromString,
+  roleRank,
+  roleToString,
+  type Role,
+} from "../../middleware/workspace";
 
 const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -155,7 +161,7 @@ export class WorkspaceService {
     workspaceId: string,
     userId: string,
   ): Promise<{ secret: string }> {
-    await this.assertAdminOrOwner(workspaceId, userId);
+    await this.assertMinRank(workspaceId, userId, roleRank("admin"));
     const newSecret = generateRandomToken(16).toLowerCase();
     await prisma.workspace.update({
       where: { id: workspaceId },
@@ -169,7 +175,7 @@ export class WorkspaceService {
     userId: string,
     repositoryId: string,
   ): Promise<void> {
-    await this.assertAdminOrOwner(workspaceId, userId);
+    await this.assertMinRank(workspaceId, userId, roleRank("maintainer"));
     const ws = await prisma.workspace.findUnique({
       where: { id: workspaceId },
       select: { id: true },
@@ -183,7 +189,7 @@ export class WorkspaceService {
     userId: string,
     repositoryId: string,
   ): Promise<void> {
-    await this.assertAdminOrOwner(workspaceId, userId);
+    await this.assertMinRank(workspaceId, userId, roleRank("maintainer"));
     const repo = await prisma.repository.findFirst({
       where: { id: repositoryId, workspaceId },
       select: { id: true },
@@ -272,19 +278,20 @@ export class WorkspaceService {
     });
   }
 
-  private async assertAdminOrOwner(
+  private async assertMinRank(
     workspaceId: string,
     userId: string,
-  ): Promise<void> {
+    minRank: number,
+  ): Promise<Role> {
     const member = await prisma.workspaceMember.findUnique({
       where: { workspaceId_userId: { workspaceId, userId } },
+      select: { role: true },
     });
-    if (
-      !member ||
-      (member.role !== UserRole.OWNER && member.role !== UserRole.ADMIN)
-    ) {
+    const role = member ? roleToString(member.role) : "viewer";
+    if (!member || roleRank(role) < minRank) {
       throw new ForbiddenError("You don't have permission for this workspace");
     }
+    return role;
   }
 
   private maskSecret(secret: string): string {
@@ -294,7 +301,7 @@ export class WorkspaceService {
 
   async update(
     workspaceId: string,
-    role: "owner" | "admin" | "member",
+    role: Role,
     input: UpdateWorkspaceInput,
   ): Promise<WorkspaceSummary> {
     const workspace = await prisma.workspace.findUnique({
@@ -364,33 +371,65 @@ export class WorkspaceService {
 
   async changeMemberRole(
     workspaceId: string,
+    actorUserId: string,
     targetUserId: string,
     input: UpdateMemberRoleInput,
   ): Promise<void> {
+    const actor = await this.membershipRole(workspaceId, actorUserId);
     const target = await prisma.workspaceMember.findUnique({
       where: { workspaceId_userId: { workspaceId, userId: targetUserId } },
       select: { id: true, role: true },
     });
     if (!target) throw new NotFoundError("Member not found");
-    if (target.role === UserRole.OWNER) {
-      throw new ForbiddenError("Cannot change the workspace owner's role");
+
+    const desired = roleToString(roleFromString(input.role));
+    if (roleRank(actor) <= roleRank(desired)) {
+      throw new ForbiddenError("You can only assign a role below your own");
     }
+    if (roleRank(actor) <= roleRank(roleToString(target.role))) {
+      throw new ForbiddenError(
+        "You can only manage members below your own role",
+      );
+    }
+
     await prisma.workspaceMember.update({
       where: { id: target.id },
       data: { role: roleFromString(input.role) },
     });
   }
 
-  async removeMember(workspaceId: string, targetUserId: string): Promise<void> {
+  async removeMember(
+    workspaceId: string,
+    actorUserId: string,
+    targetUserId: string,
+  ): Promise<void> {
+    if (actorUserId === targetUserId) {
+      throw new ForbiddenError("You cannot remove yourself");
+    }
+    const actor = await this.membershipRole(workspaceId, actorUserId);
     const target = await prisma.workspaceMember.findUnique({
       where: { workspaceId_userId: { workspaceId, userId: targetUserId } },
       select: { id: true, role: true },
     });
     if (!target) throw new NotFoundError("Member not found");
-    if (target.role === UserRole.OWNER) {
-      throw new ForbiddenError("Cannot remove the workspace owner");
+    if (roleRank(actor) <= roleRank(roleToString(target.role))) {
+      throw new ForbiddenError(
+        "You can only remove members below your own role",
+      );
     }
     await prisma.workspaceMember.delete({ where: { id: target.id } });
+  }
+
+  private async membershipRole(
+    workspaceId: string,
+    userId: string,
+  ): Promise<Role> {
+    const member = await prisma.workspaceMember.findUnique({
+      where: { workspaceId_userId: { workspaceId, userId } },
+      select: { role: true },
+    });
+    if (!member) throw new ForbiddenError("Not a member of this workspace");
+    return roleToString(member.role);
   }
 
   async invite(
@@ -404,13 +443,21 @@ export class WorkspaceService {
     });
     if (!workspace) throw new NotFoundError("Workspace not found");
 
+    const actor = await this.membershipRole(workspaceId, actorUserId);
+    const desired = input.role ?? "member";
+    if (roleRank(actor) <= roleRank(desired)) {
+      throw new ForbiddenError(
+        "You can only invite people to a role below your own",
+      );
+    }
+
     const token = generateRandomToken(24);
     const invite = await prisma.invite.create({
       data: {
         orgId: workspace.orgId,
         workspaceId,
         email: input.email.toLowerCase(),
-        role: input.role === "admin" ? UserRole.ADMIN : UserRole.MEMBER,
+        role: roleFromString(desired),
         tokenHash: hashToken(token),
         invitedById: actorUserId,
         expiresAt: new Date(Date.now() + INVITE_TTL_MS),
@@ -598,6 +645,50 @@ export class WorkspaceService {
     ]);
 
     return this.get(workspaceId, userId);
+  }
+
+  async transferOwnership(
+    workspaceId: string,
+    actorUserId: string,
+    input: TransferOwnershipInput,
+  ): Promise<WorkspaceSummary> {
+    const actor = await prisma.workspaceMember.findUnique({
+      where: { workspaceId_userId: { workspaceId, userId: actorUserId } },
+      select: { role: true },
+    });
+    if (!actor || actor.role !== UserRole.OWNER) {
+      throw new ForbiddenError(
+        "Only the workspace owner can transfer ownership",
+      );
+    }
+    if (actorUserId === input.targetUserId) {
+      throw new ForbiddenError("You already own this workspace");
+    }
+
+    const target = await prisma.workspaceMember.findUnique({
+      where: {
+        workspaceId_userId: { workspaceId, userId: input.targetUserId },
+      },
+      select: { id: true, role: true },
+    });
+    if (!target)
+      throw new NotFoundError("Target user is not a workspace member");
+    if (target.role === UserRole.OWNER) {
+      throw new ForbiddenError("That user is already the owner");
+    }
+
+    await prisma.$transaction([
+      prisma.workspaceMember.update({
+        where: { id: target.id },
+        data: { role: UserRole.OWNER },
+      }),
+      prisma.workspaceMember.update({
+        where: { workspaceId_userId: { workspaceId, userId: actorUserId } },
+        data: { role: UserRole.ADMIN },
+      }),
+    ]);
+
+    return this.get(workspaceId, actorUserId);
   }
 
   summarize(workspace: WorkspaceWithCount, role: UserRole): WorkspaceSummary {

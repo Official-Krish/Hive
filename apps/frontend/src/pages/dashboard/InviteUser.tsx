@@ -49,12 +49,48 @@ export function InviteUser() {
   });
 
   const manageable = (workspaces ?? []).filter(
-    (w) => w.role === "owner" || w.role === "admin",
+    (w) => w.role === "owner" || w.role === "admin" || w.role === "maintainer",
   );
+
+  const ROLE_RANK: Record<string, number> = {
+    viewer: 0,
+    member: 1,
+    developer: 2,
+    maintainer: 3,
+    admin: 4,
+    owner: 5,
+  };
+  const INVITE_ROLES = [
+    "member",
+    "developer",
+    "maintainer",
+    "admin",
+    "viewer",
+  ] as const;
+  type InviteRole = (typeof INVITE_ROLES)[number];
+  const ROLE_DESC: Record<InviteRole, string> = {
+    member: "Works in the office",
+    developer: "Contributes code and resolves alerts",
+    maintainer: "Manages people & repositories",
+    admin: "Full management, no ownership",
+    viewer: "Read-only observer",
+  };
 
   const [workspaceId, setWorkspaceId] = useState(preSelected);
   const [githubLogin, setGithubLogin] = useState("");
-  const [role, setRole] = useState<"member" | "admin">("member");
+  const [role, setRole] = useState<InviteRole>("member");
+
+  const selected = manageable.find((w) => w.id === workspaceId);
+  const actorRank = selected ? (ROLE_RANK[selected.role] ?? 1) : 0;
+  const selectable = INVITE_ROLES.filter(
+    (r) => (ROLE_RANK[r] ?? 0) < actorRank,
+  );
+
+  // Keep the chosen role within what this user is allowed to grant.
+  useEffect(() => {
+    if (selectable.length === 0) return;
+    if (!selectable.includes(role)) setRole(selectable[0]!);
+  }, [selectable, role]);
 
   // Pre-select the workspace from the query param if it's one we manage.
   useEffect(() => {
@@ -82,8 +118,6 @@ export function InviteUser() {
     workspaceId.length > 0 &&
     githubLogin.trim().length > 0 &&
     !mutation.isPending;
-
-  const selected = manageable.find((w) => w.id === workspaceId);
 
   return (
     <div>
@@ -193,7 +227,7 @@ export function InviteUser() {
                   role="radiogroup"
                   aria-label="Role"
                 >
-                  {(["member", "admin"] as const).map((r) => (
+                  {selectable.map((r) => (
                     <button
                       key={r}
                       type="button"
@@ -216,9 +250,7 @@ export function InviteUser() {
                           (role === r ? "text-neutral-300" : "text-neutral-500")
                         }
                       >
-                        {r === "member"
-                          ? "Works in the office"
-                          : "Invites & manages people"}
+                        {ROLE_DESC[r]}
                       </span>
                     </button>
                   ))}

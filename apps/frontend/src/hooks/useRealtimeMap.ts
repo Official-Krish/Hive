@@ -30,7 +30,7 @@ export interface MapPosition {
   roomId: string | null;
 }
 
-const DEFAULT_RADIUS = 80;
+const DEFAULT_RADIUS = 10;
 const MOVE_THROTTLE_MS = 50;
 
 function blankMember(developerId: string): MapAvatar {
@@ -188,12 +188,24 @@ export function useRealtimeMap(
         setAvatars(next);
       }),
       socket.on("presence.changed", (event) => {
-        const current = avatarsRef.current.get(event.developerId);
-        if (!current) return;
         const next = new Map(avatarsRef.current);
-        next.set(event.developerId, { ...current, status: event.status });
+        if (event.status === "offline") {
+          // A departed member is gone from the office: drop them entirely so
+          // proximity (voice/video) and the 3D scene stop tracking them.
+          next.delete(event.developerId);
+        } else {
+          const current = avatarsRef.current.get(event.developerId);
+          if (!current) return;
+          next.set(event.developerId, {
+            ...current,
+            status: event.status,
+            // Custom label rides on the same event; null clears it.
+            label: event.label ?? current.label,
+          });
+        }
         avatarsRef.current = next;
         setAvatars(next);
+        recomputeNear();
       }),
       socket.on("avatar.moved", (event) => {
         const current = avatarsRef.current.get(event.developerId);

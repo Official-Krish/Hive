@@ -3,7 +3,9 @@ import { FiArrowLeft, FiSend, FiUsers } from "react-icons/fi";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useChat } from "@/hooks/useChat";
+import type { MapAvatar } from "@/hooks/useRealtimeMap";
 import type { RealtimeClient } from "@/lib/realtime";
+import type { ConversationSummary } from "@hive/types";
 
 const PANEL =
   "overflow-hidden rounded-2xl bg-[#f4f2ed]/97 ring-1 ring-black/[0.09] " +
@@ -24,6 +26,7 @@ interface ChatPanelProps {
   workspaceId: string;
   myUserId: string;
   client: RealtimeClient | null;
+  presence: ReadonlyMap<string, MapAvatar>;
   onClose: () => void;
 }
 
@@ -31,6 +34,7 @@ export function ChatPanel({
   workspaceId,
   myUserId,
   client,
+  presence,
   onClose,
 }: ChatPanelProps) {
   const chat = useChat(workspaceId, myUserId, client, true);
@@ -66,13 +70,25 @@ export function ChatPanel({
 
   // Workspace members directory for group creation.
   useEffect(() => {
-    if (!newGroupOpen || !client || chat.conversations.length > 0) return;
-    void chat.refreshList();
+    if (!newGroupOpen || !client) return;
+    void chat.refreshMembers();
   }, [newGroupOpen, client, chat]);
 
   function openConversation(id: string) {
     setActiveId(id);
     chat.openThread(id);
+  }
+
+  async function openDirect(userId: string) {
+    const existing = byPartner.get(userId);
+    if (existing) {
+      openConversation(existing.id);
+      return;
+    }
+    const { http } = await import("@/lib/http");
+    const conv = await http.chat.create(workspaceId, { memberIds: [userId] });
+    await chat.refreshList();
+    openConversation(conv.id);
   }
 
   function send() {
@@ -101,18 +117,53 @@ export function ChatPanel({
     }
   }
 
-  // Directory of possible members = union of known conversation members
-  // minus me (workspace roster lives server-side; this keeps v1 dependency-free).
-  const directory = useMemo(() => {
-    const byId = new Map<
-      string,
-      { userId: string; name: string; avatarUrl: string | null }
-    >();
+  // All workspace members (server roster) — used for the DM list and the
+  // group-composer member picker, so everyone is reachable from the start.
+  const directory = useMemo(
+    () =>
+      chat.members
+        .filter((m) => m.userId !== myUserId)
+        .map((m) => ({
+          userId: m.userId,
+          name: m.name,
+          avatarUrl: m.avatarUrl,
+        })),
+    [chat.members, myUserId],
+  );
+
+  // DM conversations indexed by the other party, so roster rows can show the
+  // matching thread (preview, time, unread badge) or a "start a chat" state.
+  const byPartner = useMemo(() => {
+    const map = new Map<string, ConversationSummary>();
     for (const c of chat.conversations)
-      for (const m of c.members)
-        if (m.userId !== myUserId) byId.set(m.userId, m);
-    return [...byId.values()];
+      if (!c.isGroup) {
+        const other = c.members.find((m) => m.userId !== myUserId);
+        if (other) map.set(other.userId, c);
+      }
+    return map;
   }, [chat.conversations, myUserId]);
+
+  // Roster rows merged with live presence + their DM thread; online first,
+  // then most-recently active.
+  const roster = useMemo(() => {
+    const rows = directory.map((m) => {
+      const conv = byPartner.get(m.userId) ?? null;
+      const status = presence.get(m.userId)?.status ?? "offline";
+      return { ...m, status, conv };
+    });
+    rows.sort((a, b) => {
+      const aOn = a.status !== "offline" ? 1 : 0;
+      const bOn = b.status !== "offline" ? 1 : 0;
+      if (aOn !== bOn) return bOn - aOn;
+      return (b.conv?.updatedAt ?? "").localeCompare(a.conv?.updatedAt ?? "");
+    });
+    return rows;
+  }, [directory, byPartner, presence]);
+
+  const groups = useMemo(
+    () => chat.conversations.filter((c) => c.isGroup),
+    [chat.conversations],
+  );
 
   return (
     <div
@@ -167,7 +218,7 @@ export function ChatPanel({
             value={groupName}
             onChange={(e) => setGroupName(e.target.value)}
             placeholder="Group name…"
-            className="w-full rounded-lg border border-black/[0.09] bg-white px-2.5 py-1.5 text-[12.5px] outline-none focus:border-neutral-900/40"
+            className="w-full rounded-lg border border-black/[0.09] text-neutral-700 bg-white px-2.5 py-1.5 text-[12.5px] outline-none focus:border-neutral-900/40"
           />
           <div className="max-h-32 space-y-1 overflow-y-auto">
             {directory.map((m) => (
@@ -191,7 +242,7 @@ export function ChatPanel({
             ))}
             {directory.length === 0 && (
               <p className="px-1 text-[11.5px] italic text-neutral-500">
-                Start a DM first — members appear here.
+                No other members in this workspace yet.
               </p>
             )}
           </div>
@@ -212,89 +263,66 @@ export function ChatPanel({
           ref={listRef}
           className="flex-1 divide-y divide-black/[0.05] overflow-y-auto"
         >
-          {chat.conversations.length === 0 && (
+          {roster.length === 0 && (
             <li className="px-4 py-6 text-center text-[12.5px] italic text-neutral-500">
-              No conversations yet. Open someone's profile on the map and say hi
-              — or create a group above.
+              No other members in this workspace yet.
             </li>
           )}
-          {chat.conversations.map((c) => {
-            const other = c.members.find((m) => m.userId !== myUserId);
-            const displayName = c.isGroup
-              ? (c.title ?? "Group")
-              : (other?.name ?? "DM");
-            const isTyping = Object.keys(chat.typing[c.id] ?? {}).length > 0;
+          {roster.map((row) => {
+            const typing = row.conv
+              ? Object.keys(chat.typing[row.conv.id] ?? {}).length > 0
+              : false;
             return (
-              <li key={c.id}>
-                <button
-                  type="button"
-                  onClick={() => openConversation(c.id)}
-                  className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-black/[0.035]"
-                >
-                  <span className="relative">
-                    <span
-                      className={cn(
-                        "flex size-9 items-center justify-center rounded-full bg-neutral-900/[0.06] font-serif text-[14px] text-neutral-700 ring-1 ring-black/[0.07]",
-                      )}
-                    >
-                      {(c.isGroup
-                        ? (c.title ?? "#").charAt(0).toUpperCase()
-                        : (other?.name ?? "?").charAt(0).toUpperCase()
-                      ).toUpperCase()}
-                    </span>
-                    {other && (
-                      <span
-                        className={cn(
-                          "absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full ring-2 ring-[#f4f2ed]",
-                          STATUS_DOT[other.status] ?? "bg-neutral-300",
-                        )}
-                      />
-                    )}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="flex items-center justify-between gap-2">
-                      <span
-                        className={cn(
-                          "truncate text-[13px]",
-                          c.unreadCount > 0
-                            ? "font-bold text-neutral-900"
-                            : "font-medium text-neutral-800",
-                        )}
-                      >
-                        {displayName}
-                      </span>
-                      {c.lastMessage && (
-                        <span className="flex-shrink-0 text-[10px] tabular-nums text-neutral-400">
-                          {timeLabel(c.lastMessage.createdAt)}
-                        </span>
-                      )}
-                    </span>
-                    <span className="mt-0.5 flex items-center justify-between gap-2">
-                      <span
-                        className={cn(
-                          "truncate text-[11.5px]",
-                          isTyping
-                            ? "italic text-emerald-700"
-                            : c.unreadCount > 0
-                              ? "font-semibold text-neutral-900"
-                              : "text-neutral-500",
-                        )}
-                      >
-                        {isTyping
-                          ? "typing…"
-                          : (c.lastMessage?.body ?? "Say hello")}
-                      </span>
-                      {c.unreadCount > 0 && (
-                        <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-emerald-600 px-1 text-[9.5px] font-bold text-white">
-                          {c.unreadCount}
-                        </span>
-                      )}
-                    </span>
-                  </span>
-                </button>
-              </li>
+              <ConversationListItem
+                key={row.userId}
+                initial={row.name.charAt(0).toUpperCase()}
+                name={row.name}
+                dotColor={STATUS_DOT[row.status] ?? "bg-neutral-300"}
+                time={
+                  row.conv?.lastMessage
+                    ? timeLabel(row.conv.lastMessage.createdAt)
+                    : undefined
+                }
+                preview={
+                  typing
+                    ? "typing…"
+                    : (row.conv?.lastMessage?.body ?? "Say hello")
+                }
+                unread={row.conv?.unreadCount ?? 0}
+                isTyping={typing}
+                onClick={() => void openDirect(row.userId)}
+              />
             );
           })}
+          {groups.length > 0 && [
+            <li
+              key="groups-hdr"
+              className="px-4 py-1.5 text-[9px] font-semibold uppercase tracking-[0.16em] text-neutral-400"
+            >
+              Groups
+            </li>,
+            ...groups.map((c) => {
+              const typing = Object.keys(chat.typing[c.id] ?? {}).length > 0;
+              return (
+                <ConversationListItem
+                  key={c.id}
+                  initial={(c.title ?? "#").charAt(0).toUpperCase()}
+                  name={c.title ?? "Group"}
+                  time={
+                    c.lastMessage
+                      ? timeLabel(c.lastMessage.createdAt)
+                      : undefined
+                  }
+                  preview={
+                    typing ? "typing…" : (c.lastMessage?.body ?? "Say hello")
+                  }
+                  unread={c.unreadCount}
+                  isTyping={typing}
+                  onClick={() => openConversation(c.id)}
+                />
+              );
+            }),
+          ]}
         </ul>
       ) : (
         <>
@@ -365,7 +393,7 @@ export function ChatPanel({
               placeholder="Type a message…"
               autoFocus
               maxLength={4000}
-              className="min-w-0 flex-1 rounded-xl border border-black/[0.09] bg-white px-3 py-2 text-[13px] outline-none transition-colors focus:border-neutral-900/40"
+              className="min-w-0 flex-1 rounded-xl border border-black/[0.09] bg-white px-3 py-2 text-[13px] text-neutral-700 outline-none transition-colors focus:border-neutral-900/40"
             />
             <button
               type="submit"
@@ -392,4 +420,87 @@ function timeLabel(iso: string): string {
       minute: "2-digit",
     });
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+/** WhatsApp-style row: avatar + status dot, name/time, preview + unread badge. */
+function ConversationListItem({
+  initial,
+  name,
+  dotColor,
+  time,
+  preview,
+  unread,
+  isTyping,
+  onClick,
+}: {
+  initial: string;
+  name: string;
+  dotColor?: string;
+  time?: string;
+  preview: string;
+  unread: number;
+  isTyping: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={onClick}
+        className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-black/[0.035]"
+      >
+        <span className="relative">
+          <span className="flex size-9 items-center justify-center rounded-full bg-neutral-900/[0.06] font-serif text-[14px] text-neutral-700 ring-1 ring-black/[0.07]">
+            {initial}
+          </span>
+          {dotColor && (
+            <span
+              className={cn(
+                "absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full ring-2 ring-[#f4f2ed]",
+                dotColor,
+              )}
+            />
+          )}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="flex items-center justify-between gap-2">
+            <span
+              className={cn(
+                "truncate text-[13px]",
+                unread > 0
+                  ? "font-bold text-neutral-900"
+                  : "font-medium text-neutral-800",
+              )}
+            >
+              {name}
+            </span>
+            {time && (
+              <span className="flex-shrink-0 text-[10px] tabular-nums text-neutral-400">
+                {time}
+              </span>
+            )}
+          </span>
+          <span className="mt-0.5 flex items-center justify-between gap-2">
+            <span
+              className={cn(
+                "truncate text-[11.5px]",
+                isTyping
+                  ? "italic text-emerald-700"
+                  : unread > 0
+                    ? "font-semibold text-neutral-900"
+                    : "text-neutral-500",
+              )}
+            >
+              {preview}
+            </span>
+            {unread > 0 && (
+              <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-emerald-600 px-1 text-[9.5px] font-bold text-white">
+                {unread > 99 ? "99+" : unread}
+              </span>
+            )}
+          </span>
+        </span>
+      </button>
+    </li>
+  );
 }

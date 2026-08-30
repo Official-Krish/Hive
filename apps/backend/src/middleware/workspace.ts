@@ -3,10 +3,27 @@ import { prisma, UserRole } from "@hive/db";
 import { ForbiddenError } from "../core/errors";
 import { getAuth } from "./authenticate";
 
+export type Role =
+  "owner" | "admin" | "maintainer" | "developer" | "member" | "viewer";
+
+/** Strict hierarchy rank. A role may manage any role strictly below it. */
+export const ROLE_RANK: Record<Role, number> = {
+  owner: 5,
+  admin: 4,
+  maintainer: 3,
+  developer: 2,
+  member: 1,
+  viewer: 0,
+};
+
+export function roleRank(role: Role): number {
+  return ROLE_RANK[role];
+}
+
 export interface WorkspaceMembership {
   workspaceId: string;
   userId: string;
-  role: "owner" | "admin" | "member";
+  role: Role;
 }
 
 /**
@@ -39,9 +56,7 @@ export function requireWorkspaceMember(): RequestHandler {
   };
 }
 
-export function requireWorkspaceRole(
-  ...roles: Array<"owner" | "admin" | "member">
-): RequestHandler {
+export function requireWorkspaceRole(...roles: Role[]): RequestHandler {
   return (req, res, next) => {
     const membership = res.locals.membership as WorkspaceMembership | undefined;
     if (!membership || !roles.includes(membership.role)) {
@@ -59,24 +74,36 @@ export function getMembership(res: Response): WorkspaceMembership {
   return membership;
 }
 
-export function roleToString(role: UserRole): WorkspaceMembership["role"] {
+export function roleToString(role: UserRole): Role {
   switch (role) {
     case UserRole.OWNER:
       return "owner";
     case UserRole.ADMIN:
       return "admin";
+    case UserRole.MAINTAINER:
+      return "maintainer";
+    case UserRole.DEVELOPER:
+      return "developer";
     case UserRole.MEMBER:
       return "member";
+    case UserRole.VIEWER:
+      return "viewer";
   }
 }
 
-export function roleFromString(role: "owner" | "admin" | "member"): UserRole {
+export function roleFromString(role: Role): UserRole {
   switch (role) {
     case "owner":
       return UserRole.OWNER;
     case "admin":
       return UserRole.ADMIN;
+    case "maintainer":
+      return UserRole.MAINTAINER;
+    case "developer":
+      return UserRole.DEVELOPER;
     case "member":
       return UserRole.MEMBER;
+    case "viewer":
+      return UserRole.VIEWER;
   }
 }

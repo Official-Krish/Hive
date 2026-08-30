@@ -573,17 +573,17 @@ export interface UpdateWorkspaceInput {
 }
 
 export interface UpdateMemberRoleInput {
-  role: string;
+  role: "admin" | "maintainer" | "developer" | "member" | "viewer";
 }
 
 export interface CreateInviteInput {
   email: string;
-  role?: string;
+  role?: "admin" | "maintainer" | "developer" | "member" | "viewer";
 }
 
 export interface CreateGithubInviteInput {
   githubLogin: string;
-  role?: "member" | "admin";
+  role?: "admin" | "maintainer" | "developer" | "member" | "viewer";
 }
 
 export interface RegisterDeviceInput {
@@ -1058,6 +1058,15 @@ export const http = {
 
   models: {
     list: (): Promise<ModelSummary[]> => request("/api/v1/models"),
+  },
+
+  livekit: {
+    token: (
+      workspaceId: string,
+    ): Promise<{ url: string; token: string; room: string }> =>
+      request(`/api/v1/workspaces/${workspaceId}/livekit/token`, {
+        method: "POST",
+      }),
   },
 
   /* ── chat ── */

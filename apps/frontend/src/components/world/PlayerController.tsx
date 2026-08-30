@@ -22,6 +22,8 @@ interface PlayerControllerProps {
   stepUp?: number;
   /** Called every frame with the player's current XZ position (for realtime). */
   onRealtimeMove?: (x: number, z: number, roomId: string | null) => void;
+  /** Locks keyboard movement (e.g. while a modal is open). */
+  disabled?: boolean;
 }
 
 // --- Movement tuning --------------------------------------------------------
@@ -56,6 +58,7 @@ export function PlayerController({
   groundAt,
   stepUp = 0.6,
   onRealtimeMove,
+  disabled = false,
 }: PlayerControllerProps) {
   const internalGroupRef = useRef<THREE.Group>(null);
   const groupRef = playerRef || internalGroupRef;
@@ -78,6 +81,10 @@ export function PlayerController({
   // Camera yaw kept in a ref so useFrame always sees the latest without re-subscribing.
   const yawRef = useRef(cameraYaw);
   yawRef.current = cameraYaw;
+
+  // Modal-open lock: ref so useFrame sees the latest value without re-subscribing.
+  const disabledRef = useRef(disabled);
+  disabledRef.current = disabled;
 
   // Keyboard state.
   const keys = useRef<Record<string, boolean>>({});
@@ -130,12 +137,15 @@ export function PlayerController({
     const k = keys.current;
 
     // --- Input → camera-relative direction ---------------------------------
+    const blocked = disabledRef.current;
     let f = 0;
     let r = 0;
-    if (k["KeyW"] || k["ArrowUp"]) f += 1;
-    if (k["KeyS"] || k["ArrowDown"]) f -= 1;
-    if (k["KeyD"] || k["ArrowRight"]) r += 1;
-    if (k["KeyA"] || k["ArrowLeft"]) r -= 1;
+    if (!blocked) {
+      if (k["KeyW"] || k["ArrowUp"]) f += 1;
+      if (k["KeyS"] || k["ArrowDown"]) f -= 1;
+      if (k["KeyD"] || k["ArrowRight"]) r += 1;
+      if (k["KeyA"] || k["ArrowLeft"]) r -= 1;
+    }
 
     const yaw = yawRef.current;
     const fwdX = -Math.sin(yaw);
@@ -197,7 +207,7 @@ export function PlayerController({
     // the stair ramp tread-by-tread and the upper deck once they're on it.
     const support = groundAt ? groundAt(nextX, nextZ, feetY) : 0;
 
-    if (groundedRef.current && k["Space"]) {
+    if (!blocked && groundedRef.current && k["Space"]) {
       vyRef.current = JUMP_V;
       groundedRef.current = false;
       jumpSeqRef.current += 1;

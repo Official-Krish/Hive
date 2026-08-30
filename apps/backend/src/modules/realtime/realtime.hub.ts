@@ -13,7 +13,7 @@ import { hashToken } from "../../lib/crypto";
 import { verifyAccessToken } from "../../lib/jwt";
 import { DeviceService } from "../devices/devices.service";
 import { RealtimeService } from "./realtime.service";
-import { deviceBus, realtimeBus } from "./realtime.bus";
+import { deviceBus, presenceBus, realtimeBus } from "./realtime.bus";
 
 export interface RealtimeClientData {
   userId: string;
@@ -78,6 +78,9 @@ export class RealtimeHub {
       this.sendToDevice(deviceId, event),
     );
     deviceBus.setOnlineChecker((deviceId) => this.isDeviceOnline(deviceId));
+    presenceBus.setCounter((workspaceId) =>
+      this.onlineMemberCount(workspaceId),
+    );
 
     return this;
   }
@@ -86,6 +89,7 @@ export class RealtimeHub {
     realtimeBus.setPublisher(null);
     deviceBus.setSender(null);
     deviceBus.setOnlineChecker(null);
+    presenceBus.setCounter(null);
     this.clients.clear();
     this.deviceSockets.clear();
     if (this.server) {
@@ -110,6 +114,15 @@ export class RealtimeHub {
 
   subscriberCount(workspaceId: string): number {
     return this.server?.subscriberCount(realtimeChannel(workspaceId)) ?? 0;
+  }
+
+  /** Distinct members currently connected to a workspace's world. */
+  onlineMemberCount(workspaceId: string): number {
+    const ids = new Set<string>();
+    for (const client of this.clients.values()) {
+      if (client.workspaceId === workspaceId) ids.add(client.userId);
+    }
+    return ids.size;
   }
 
   private async onFetch(

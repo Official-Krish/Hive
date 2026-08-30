@@ -250,23 +250,34 @@ cd apps/collector && cargo test
 
 ## Roles & permissions
 
-All memberships share the same three roles, defined by the `UserRole` enum in
-`packages/db/prisma/schema.prisma`:
+Memberships are defined by the `UserRole` enum in
+`packages/db/prisma/schema.prisma`. **Organizations** and **Teams** use the
+three base roles — `owner`, `admin`, `member` — while **Workspaces** use an
+extended ladder:
 
-| Role     | Capabilities                                                              |
-| -------- | ------------------------------------------------------------------------- |
-| `owner`  | Full control of the scope, including destructive ownership actions.       |
-| `admin`  | Day-to-day management (settings, members, invites) but **not** ownership. |
-| `member` | Read access and standard participation.                                   |
+| Role         | Rank | Capabilities                                                                  |
+| ------------ | :--: | ----------------------------------------------------------------------------- |
+| `owner`      |  5   | Full control, including transferring ownership and deleting the workspace.    |
+| `admin`      |  4   | Day-to-day management (settings, members, invites, privacy) but no ownership. |
+| `maintainer` |  3   | Manages members & repositories, installs the GitHub App, invites below them.  |
+| `developer`  |  2   | Contributes and resolves alerts; read access to all workspace data.           |
+| `member`     |  1   | Read access and standard participation.                                       |
+| `viewer`     |  0   | Read-only observer; cannot see member list, settings, or repo config.         |
+
+**You can only grant or manage a role strictly below your own.** An `owner` can
+do everything; an `admin` cannot manage other admins or the owner; a
+`maintainer` can manage up to `developer`; and so on down the ladder.
 
 **Membership is independent per scope.** A user has a role in an _Organization_,
 a role in each _Workspace_ they belong to, and a role in each _Team_. The three
 are separate — an org owner is not automatically a workspace owner, and vice
 versa. (Inviting a user to a workspace also upserts an `OrganizationMember` at
-the same role, which is why roles usually align.) Any authenticated user may
-**create** a workspace (`POST /api/v1/workspaces`, no membership required).
+`owner`/`admin`/`member` — the workspace ladder never leaks into org roles.)
+Any authenticated user may **create** a workspace (`POST /api/v1/workspaces`,
+no membership required).
 
-Role strings are returned lower-cased by the API (`owner` / `admin` / `member`).
+Role strings are returned lower-cased by the API
+(`owner` / `admin` / `maintainer` / `developer` / `member` / `viewer`).
 
 ### Organization roles
 
@@ -283,21 +294,30 @@ the org owner's role nor the owner themselves can be changed or removed.
 
 ### Workspace roles
 
-| Action                                      | owner | admin | member |
-| ------------------------------------------- | :---: | :---: | :----: |
-| Read API (activities, sessions, repos, PRs, |  ✅   |  ✅   |   ✅   |
-| metrics, alerts, tasks, test runs, map)     |       |       |        |
-| View workspace settings (secret, repos,     |  ✅   |  ✅   |   ❌   |
-| members, invites)                           |       |       |        |
-| Update workspace (name / description)       |  ✅   |  ✅   |   ❌   |
-| Rotate webhook secret, link / unlink repos  |  ✅   |  ✅   |   ❌   |
-| Create / revoke invites                     |  ✅   |  ✅   |   ❌   |
-| Change a member's role, remove a member     |  ✅   |  ✅   |   ❌   |
-| Install / manage the GitHub App             |  ✅   |  ✅   |   ❌   |
-| Delete the workspace                        |  ✅   |  ❌   |   ❌   |
+| Action                                      | owner | admin | maintainer | developer | member | viewer |
+| ------------------------------------------- | :---: | :---: | :--------: | :-------: | :----: | :----: |
+| Read API (activities, sessions, repos, PRs, |  ✅   |  ✅   |     ✅     |    ✅     |   ✅   |  ✅*   |
+| metrics, alerts, tasks, test runs, map)     |       |       |            |           |        |        |
+| View member list                            |  ✅   |  ✅   |     ✅     |    ✅     |   ✅   |   ❌   |
+| View workspace settings (secret, repos,     |  ✅   |  ✅   |     ✅     |    ❌     |   ❌   |   ❌   |
+| members, invites)                           |       |       |            |           |        |        |
+| Update workspace (name / description)       |  ✅   |  ✅   |     ✅     |    ❌     |   ❌   |   ❌   |
+| Rotate webhook secret                       |  ✅   |  ✅   |     ❌     |    ❌     |   ❌   |   ❌   |
+| Link / unlink repos, install GitHub App     |  ✅   |  ✅   |     ✅     |    ❌     |   ❌   |   ❌   |
+| Create / revoke invites (below own role)    |  ✅   |  ✅   |     ✅     |    ❌     |   ❌   |   ❌   |
+| Change a member's role, remove a member     |  ✅   |  ✅   |     ✅     |    ❌     |   ❌   |   ❌   |
+| Resolve alerts                              |  ✅   |  ✅   |     ✅     |    ✅     |   ❌   |   ❌   |
+| Manage privacy settings                     |  ✅   |  ✅   |     ❌     |    ❌     |   ❌   |   ❌   |
+| Transfer ownership                          |  ✅   |  ❌   |     ❌     |    ❌     |   ❌   |   ❌   |
+| Delete the workspace                        |  ✅   |  ❌   |     ❌     |    ❌     |   ❌   |   ❌   |
+
+\* `viewer` may read the public activity / map surface but not member, settings,
+repo, or invite data.
 
 Self-protection: the workspace owner's role can neither be changed nor removed;
-admins may change or remove themselves and any other non-owner.
+a member can only be managed by someone strictly above them, and you cannot
+remove yourself. `owner` is exclusive — transferring ownership demotes the
+previous owner to `admin`.
 
 ### Team roles (org-scoped)
 

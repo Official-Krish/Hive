@@ -2,11 +2,12 @@ import type { RequestHandler, Response } from "express";
 import { prisma, UserRole } from "@hive/db";
 import { ForbiddenError } from "../core/errors";
 import { getAuth } from "./authenticate";
+import type { Role } from "./workspace";
 
 export interface OrgMembership {
   orgId: string;
   userId: string;
-  role: "owner" | "admin" | "member";
+  role: Role;
 }
 
 /**
@@ -37,9 +38,7 @@ export function requireOrgMember(): RequestHandler {
   };
 }
 
-export function requireOrgRole(
-  ...roles: Array<"owner" | "admin" | "member">
-): RequestHandler {
+export function requireOrgRole(...roles: Role[]): RequestHandler {
   return (req, res, next) => {
     const membership = res.locals.orgMembership as OrgMembership | undefined;
     if (!membership || !roles.includes(membership.role)) {
@@ -57,24 +56,30 @@ export function getOrgMembership(res: Response): OrgMembership {
   return membership;
 }
 
-export function roleToString(role: UserRole): OrgMembership["role"] {
+export function roleToString(role: UserRole): Role {
   switch (role) {
     case UserRole.OWNER:
       return "owner";
     case UserRole.ADMIN:
       return "admin";
+    case UserRole.MAINTAINER:
+    case UserRole.DEVELOPER:
     case UserRole.MEMBER:
+    case UserRole.VIEWER:
       return "member";
   }
 }
 
-export function roleFromString(role: "owner" | "admin" | "member"): UserRole {
+export function roleFromString(role: Role): UserRole {
   switch (role) {
     case "owner":
       return UserRole.OWNER;
     case "admin":
       return UserRole.ADMIN;
+    case "maintainer":
+    case "developer":
     case "member":
+    case "viewer":
       return UserRole.MEMBER;
   }
 }
