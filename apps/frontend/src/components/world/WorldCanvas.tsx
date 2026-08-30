@@ -8,7 +8,7 @@ import { Preload } from "@react-three/drei";
 import * as THREE from "three";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { FiArrowLeft, FiMessageSquare } from "react-icons/fi";
+import { FiArrowLeft, FiMessageSquare, FiUsers } from "react-icons/fi";
 import { OfficeBuilding } from "./office/OfficeBuilding";
 import { OfficeLighting } from "./lighting/OfficeLighting";
 import { PlayerController } from "./PlayerController";
@@ -69,13 +69,23 @@ const STATUS_DOT: Record<string, string> = {
   offline: "bg-neutral-300",
 };
 
+const STATUS_LABEL: Record<string, string> = {
+  online: "Online",
+  away: "Away",
+  on_call: "On call",
+  busy: "Busy",
+  offline: "Offline",
+};
+
 /** Inline "set a custom label" row for the presence picker. */
 function CustomLabelRow({
   current,
   onApply,
+  onFocusChange,
 }: {
   current: string;
   onApply: (label: string) => void;
+  onFocusChange?: (focused: boolean) => void;
 }) {
   const [value, setValue] = useState("");
   return (
@@ -83,12 +93,14 @@ function CustomLabelRow({
       <input
         value={value}
         onChange={(e) => setValue(e.target.value)}
+        onFocus={() => onFocusChange?.(true)}
+        onBlur={() => onFocusChange?.(false)}
         onKeyDown={(e) => {
           if (e.key === "Enter" && value.trim()) onApply(value.trim());
         }}
         placeholder={current === "Online" ? "Custom status…" : current}
         maxLength={60}
-        className="w-full rounded-lg border border-black/[0.09] bg-white px-2.5 py-1.5 text-[12px] outline-none focus:border-neutral-900/40"
+        className="w-full rounded-lg text-neutral-700 border border-black/[0.09] bg-white px-2.5 py-1.5 text-[12px] outline-none focus:border-neutral-900/40"
       />
       {value.trim() && (
         <button
@@ -138,8 +150,10 @@ export function WorldCanvas({
   const playerModel = myAvatarModel ?? DEFAULT_AVATAR;
 
   const [chatOpen, setChatOpen] = useState(false);
-  const [notifOpen, setNotifOpen] = useState(false);
+  const [, setNotifOpen] = useState(false);
   const [statusMenu, setStatusMenu] = useState(false);
+  const [membersOpen, setMembersOpen] = useState(false);
+  const [statusInputFocused, setStatusInputFocused] = useState(false);
   const { client, avatars, nearIds, connectionStatus, setMyPosition } =
     useRealtimeMap(workspaceId, myUserId);
   const onlineCount = useMemo(
@@ -183,15 +197,39 @@ export function WorldCanvas({
   const myPresence = avatars.get(myUserId);
   const myStatusLabel =
     (myPresence?.label as string | undefined) ??
-    (
-      {
-        online: "Online",
-        away: "Away",
-        on_call: "On call",
-        busy: "Busy",
-      } as Record<string, string>
-    )[myPresence?.status ?? "online"] ??
+    STATUS_LABEL[myPresence?.status ?? "online"] ??
     "Online";
+
+  // Members directory: full workspace roster stamped with live presence.
+  const roster = useMemo(() => {
+    const rank = (s?: string) =>
+      s === "online"
+        ? 0
+        : s === "on_call"
+          ? 1
+          : s === "busy"
+            ? 2
+            : s === "away"
+              ? 3
+              : 4;
+    return chat.members
+      .map((m) => {
+        const live = avatars.get(m.userId);
+        return {
+          userId: m.userId,
+          name: m.name,
+          status: live?.status ?? "offline",
+          label: live?.label ?? null,
+          isMe: m.userId === myUserId,
+        };
+      })
+      .sort(
+        (a, b) =>
+          (a.isMe === b.isMe ? 0 : a.isMe ? -1 : 1) ||
+          rank(a.status) - rank(b.status) ||
+          a.name.localeCompare(b.name),
+      );
+  }, [chat.members, avatars, myUserId]);
 
   // Office ticker: pushes, PRs and test pulses across the workspace.
   interface FeedItem {
@@ -317,6 +355,63 @@ export function WorldCanvas({
             onOpenChange={setNotifOpen}
           />
 
+          {/* Members directory */}
+          <button
+            type="button"
+            onClick={() => {
+              void chat.refreshMembers();
+              setMembersOpen((v) => !v);
+            }}
+            title="Members — who's in this workplace"
+            className={`${CHIP} relative px-3 py-2 transition-colors hover:bg-white/70`}
+          >
+            <FiUsers className="size-4 text-neutral-700" />
+            {onlineCount > 0 && (
+              <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-emerald-600 px-1 text-[9.5px] font-bold text-white ring-2 ring-[#faf9f6]">
+                {onlineCount}
+              </span>
+            )}
+          </button>
+
+          {membersOpen && (
+            <div className="fixed top-16 right-4 z-30 flex max-h-[calc(100vh-6rem)] w-80 flex-col overflow-hidden rounded-2xl bg-[#f4f2ed]/95 shadow-[inset_0_1px_0_rgba(255,255,255,0.7),0_24px_48px_-20px_rgba(28,25,18,0.5)] ring-1 ring-black/[0.09] backdrop-blur-md">
+              <div className="flex items-end justify-between border-b border-black/[0.06] px-4 pb-2 pt-3">
+                <span className={EYEBROW}>Members</span>
+                <span className="text-[10.5px] font-medium text-neutral-500">
+                  {onlineCount} online · {roster.length} total
+                </span>
+              </div>
+              <div className="flex flex-col overflow-y-auto p-2">
+                {roster.map((row) => (
+                  <div
+                    key={row.userId}
+                    className="flex items-center gap-2.5 rounded-lg px-2.5 py-1.5"
+                  >
+                    <span
+                      className={cn(
+                        "h-2 w-2 shrink-0 rounded-full",
+                        STATUS_DOT[row.status] ?? "bg-neutral-300",
+                      )}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <span className="block truncate text-[12.5px] font-medium text-neutral-900">
+                        {row.name}
+                        {row.isMe && (
+                          <span className="ml-1.5 font-normal text-neutral-400">
+                            (you)
+                          </span>
+                        )}
+                      </span>
+                      <span className="block truncate text-[10.5px] text-neutral-500">
+                        {row.label ?? STATUS_LABEL[row.status] ?? row.status}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Chat toggle */}
           <button
             type="button"
@@ -391,6 +486,7 @@ export function WorldCanvas({
                 ))}
                 <CustomLabelRow
                   current={myStatusLabel}
+                  onFocusChange={setStatusInputFocused}
                   onApply={(label) => {
                     client?.sendPresence(
                       (myPresence?.status as
@@ -436,13 +532,9 @@ export function WorldCanvas({
         </div>
       </div>
 
-      {/* Office ticker — pushes / PRs / test pulses */}
-      {feed.length > 0 && (
-        <div
-          className={`pointer-events-none absolute left-1/2 z-10 flex -translate-x-1/2 flex-col items-center gap-1.5 ${
-            nearIds.size > 0 ? "bottom-20" : "bottom-4"
-          }`}
-        >
+      {/* Office ticker — pushes / PRs / test pulses (hidden while a call is active) */}
+      {feed.length > 0 && nearIds.size === 0 && (
+        <div className="pointer-events-none absolute bottom-4 left-1/2 z-10 flex -translate-x-1/2 flex-col items-center gap-1.5">
           {feed.slice(0, 3).map((f, i) => (
             <div
               key={f.key}
@@ -495,9 +587,11 @@ export function WorldCanvas({
           spawn={SPAWN}
           modelUrl={playerModel}
           name={meName}
-          status="Online"
-          badgeColor="bg-emerald-400"
-          disabled={chatOpen}
+          status={myStatusLabel}
+          badgeColor={
+            STATUS_DOT[myPresence?.status ?? "online"] ?? "bg-emerald-500"
+          }
+          disabled={chatOpen || statusInputFocused}
           onRoomChange={handleRoomChange}
           roomAt={roomAt}
           groundAt={supportAt}
@@ -544,27 +638,10 @@ export function WorldCanvas({
         </div>
       )}
 
-      {/* Proximity voice/video — only when near other members */}
+      {/* Proximity voice/video — only when near other members.
+          Bottom-center column: video tiles above the mic/camera controls. */}
       {nearIds.size > 0 && (
-        <div className="pointer-events-none fixed inset-x-0 bottom-5 z-30 flex justify-center">
-          <div className="pointer-events-auto">
-            <CallControls
-              micOn={call.micOn}
-              cameraOn={call.cameraOn}
-              toggleMic={call.toggleMic}
-              toggleCamera={call.toggleCamera}
-            />
-          </div>
-        </div>
-      )}
-
-      {nearIds.size > 0 && (
-        <div
-          className={cn(
-            "pointer-events-none absolute top-20 z-20 flex flex-col items-end gap-2",
-            chatOpen || notifOpen ? "right-[28rem]" : "right-4",
-          )}
-        >
+        <div className="pointer-events-none fixed inset-x-0 bottom-5 z-30 flex flex-col items-center gap-2">
           <div className="pointer-events-auto">
             <CallStage
               room={call.room}
@@ -574,15 +651,23 @@ export function WorldCanvas({
             />
           </div>
           {call.error && onlineCount >= 2 && (
-            <div className="rounded-full bg-rose-50/95 px-3 py-1.5 text-[11px] font-medium text-rose-700 ring-1 ring-rose-500/30">
+            <div className="pointer-events-none rounded-full bg-rose-50/95 px-3 py-1.5 text-[11px] font-medium text-rose-700 ring-1 ring-rose-500/30">
               Voice unavailable
             </div>
           )}
           {call.mediaError && onlineCount >= 2 && (
-            <div className="rounded-full bg-rose-50/95 px-3 py-1.5 text-[11px] font-medium text-rose-700 ring-1 ring-rose-500/30">
+            <div className="pointer-events-none rounded-full bg-rose-50/95 px-3 py-1.5 text-[11px] font-medium text-rose-700 ring-1 ring-rose-500/30">
               {call.mediaError}
             </div>
           )}
+          <div className="pointer-events-auto">
+            <CallControls
+              micOn={call.micOn}
+              cameraOn={call.cameraOn}
+              toggleMic={call.toggleMic}
+              toggleCamera={call.toggleCamera}
+            />
+          </div>
         </div>
       )}
     </div>

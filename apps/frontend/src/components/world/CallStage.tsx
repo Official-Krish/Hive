@@ -26,25 +26,28 @@ function VideoTile({
       const pub = [
         ...room.localParticipant.videoTrackPublications.values(),
       ].find((p) => p.track);
-      if (pub?.track) {
-        pub.track.attach(videoEl);
-        cleanup.push(() => pub.track!.detach(videoEl));
+      const track = pub?.track;
+      if (track) {
+        track.attach(videoEl);
+        cleanup.push(() => track.detach(videoEl));
       }
     };
     const attachRemote = (p: RemoteParticipant) => {
       const videoPub = [...p.videoTrackPublications.values()].find(
-        (p) => p.track,
+        (x) => x.track,
       );
-      if (videoPub?.track) {
-        videoPub.track.attach(videoEl);
-        cleanup.push(() => videoPub.track!.detach(videoEl));
+      const videoTrack = videoPub?.track;
+      if (videoTrack) {
+        videoTrack.attach(videoEl);
+        cleanup.push(() => videoTrack.detach(videoEl));
       }
       const audioPub = [...p.audioTrackPublications.values()].find(
-        (p) => p.track,
+        (x) => x.track,
       );
-      if (audioPub?.track && audioEl) {
-        audioPub.track.attach(audioEl);
-        cleanup.push(() => audioPub.track!.detach(audioEl));
+      const audioTrack = audioPub?.track;
+      if (audioTrack && audioEl) {
+        audioTrack.attach(audioEl);
+        cleanup.push(() => audioTrack.detach(audioEl));
       }
     };
 
@@ -187,7 +190,7 @@ export function CallStage({
   const ids = [...nearIds];
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-row gap-2">
       <VideoTile
         room={room}
         identity="__local__"

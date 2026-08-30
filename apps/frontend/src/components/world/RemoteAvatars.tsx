@@ -19,7 +19,8 @@ function safeModelUrl(url: string | null | undefined): string {
 const STATUS_COLOR: Record<string, string> = {
   online: "bg-emerald-400",
   away: "bg-amber-400",
-  offline: "bg-slate-500",
+  on_call: "bg-sky-400",
+  busy: "bg-rose-500",
 };
 
 interface RemoteAvatarsProps {
@@ -31,10 +32,11 @@ interface RemoteAvatarsProps {
 }
 
 /**
- * Renders every ONLINE remote avatar in the workspace at its current 2D
- * (x, z) position. Offline/away members are hidden — someone who never joined
- * should not stand frozen in the office. Nameplates carry context pills:
- * needs-you beacon, project tag, fresh test result, and nearby token spend.
+ * Renders every member who is actually in the workplace at their current 2D
+ * (x, z) position — online, away, on a call, or busy. Only truly absent
+ * (offline) members are hidden: someone who stepped away but is still present
+ * stays standing there. The nameplate dot always reflects their live presence
+ * color, so a status change is visible to everyone else in real time.
  */
 export function RemoteAvatars({
   avatars,
@@ -56,7 +58,7 @@ export function RemoteAvatars({
   const entries: Array<[string, MapAvatar]> = [];
   for (const [id, a] of avatars) {
     if (id === myUserId) continue;
-    if (a.status !== "online") continue;
+    if (a.status === "offline") continue;
     entries.push([id, a]);
   }
 
@@ -130,10 +132,7 @@ export function RemoteAvatars({
                   name={avatar.name || "Member"}
                   status={avatar.status ?? "online"}
                   badgeColor={
-                    needsYou
-                      ? "bg-amber-400"
-                      : (STATUS_COLOR[avatar.status ?? "online"] ??
-                        "bg-sky-500")
+                    STATUS_COLOR[avatar.status ?? "online"] ?? "bg-emerald-400"
                   }
                   position={[0, 0, 0]}
                 />
@@ -144,9 +143,7 @@ export function RemoteAvatars({
                 name={avatar.name || "Member"}
                 status={avatar.status ?? "online"}
                 badgeColor={
-                  needsYou
-                    ? "bg-amber-400"
-                    : (STATUS_COLOR[avatar.status ?? "online"] ?? "bg-sky-500")
+                  STATUS_COLOR[avatar.status ?? "online"] ?? "bg-emerald-400"
                 }
                 position={[0, 0, 0]}
                 meta={meta}
