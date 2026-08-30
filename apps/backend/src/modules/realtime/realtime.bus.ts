@@ -45,3 +45,22 @@ export const deviceBus = {
 let currentPublisher: RealtimePublisher | null = null;
 let currentDeviceSender: DeviceSender | null = null;
 let currentDeviceChecker: DeviceOnlineChecker | null = null;
+
+/**
+ * Online member registry. The RealtimeHub registers a counter on start so
+ * non-WS code (e.g. the LiveKit token endpoint) can ask how many distinct
+ * members are currently connected to a workspace's world without a hub
+ * reference. Returns 0 when the hub is not running (e.g. under `bun test`).
+ */
+export type OnlineCounter = (workspaceId: string) => number;
+
+export const presenceBus = {
+  setCounter(counter: OnlineCounter | null): void {
+    currentCounter = counter;
+  },
+  onlineCount(workspaceId: string): number {
+    return currentCounter?.(workspaceId) ?? 0;
+  },
+};
+
+let currentCounter: OnlineCounter | null = null;

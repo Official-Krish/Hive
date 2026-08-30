@@ -15,8 +15,10 @@ import {
   requireWorkspaceRole,
 } from "../../middleware/workspace";
 import { WorkspaceController } from "./workspaces.controller";
+import { LivekitController } from "../livekit/livekit.controller";
 
 const controller = new WorkspaceController();
+const livekitController = new LivekitController();
 
 export const workspacesRouter = Router();
 
@@ -121,6 +123,12 @@ workspacesRouter.delete(
   requireWorkspaceMember(),
   requireWorkspaceRole("maintainer", "admin", "owner"),
   controller.revokeInvite,
+);
+
+workspacesRouter.post(
+  "/:workspaceId/livekit/token",
+  requireWorkspaceMember(),
+  livekitController.token,
 );
 
 export const invitesRouter = Router();
