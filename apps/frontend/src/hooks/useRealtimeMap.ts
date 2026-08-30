@@ -30,7 +30,7 @@ export interface MapPosition {
   roomId: string | null;
 }
 
-const DEFAULT_RADIUS = 80;
+const DEFAULT_RADIUS = 10;
 const MOVE_THROTTLE_MS = 50;
 
 function blankMember(developerId: string): MapAvatar {

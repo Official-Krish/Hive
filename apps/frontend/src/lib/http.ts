@@ -1060,6 +1060,15 @@ export const http = {
     list: (): Promise<ModelSummary[]> => request("/api/v1/models"),
   },
 
+  livekit: {
+    token: (
+      workspaceId: string,
+    ): Promise<{ url: string; token: string; room: string }> =>
+      request(`/api/v1/workspaces/${workspaceId}/livekit/token`, {
+        method: "POST",
+      }),
+  },
+
   /* ── chat ── */
   chat: {
     list: (workspaceId: string): Promise<ConversationSummary[]> =>

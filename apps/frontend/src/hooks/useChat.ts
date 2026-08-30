@@ -1,9 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { http } from "@/lib/http";
-import type {
-  ChatMessageDto,
-  ConversationSummary,
-} from "@hive/types";
+import { http, type WorkspaceMemberPublic } from "@/lib/http";
+import type { ChatMessageDto, ConversationSummary } from "@hive/types";
 import type { RealtimeClient } from "@/lib/realtime";
 
 const TYPING_TTL_MS = 4_000;
@@ -23,12 +20,9 @@ export function useChat(
   client: RealtimeClient | null,
   open: boolean,
 ) {
-  const [conversations, setConversations] = useState<ConversationSummary[]>(
-    [],
-  );
-  const [threads, setThreads] = useState<Record<string, ChatMessageDto[]>>(
-    {},
-  );
+  const [conversations, setConversations] = useState<ConversationSummary[]>([]);
+  const [members, setMembers] = useState<WorkspaceMemberPublic[]>([]);
+  const [threads, setThreads] = useState<Record<string, ChatMessageDto[]>>({});
   const [typing, setTyping] = useState<Record<string, Record<string, number>>>(
     {},
   );
@@ -43,6 +37,15 @@ export function useChat(
       setConversations(list);
     } catch {
       /* offline — panel shows retry on next tick */
+    }
+  }, [workspaceId]);
+
+  const refreshMembers = useCallback(async () => {
+    if (!workspaceId) return;
+    try {
+      setMembers(await http.workspaces.members.list(workspaceId));
+    } catch {
+      /* offline */
     }
   }, [workspaceId]);
 
@@ -61,7 +64,9 @@ export function useChat(
   const markRead = useCallback(
     async (conversationId: string) => {
       setConversations((prev) =>
-        prev.map((c) => (c.id === conversationId ? { ...c, unreadCount: 0 } : c)),
+        prev.map((c) =>
+          c.id === conversationId ? { ...c, unreadCount: 0 } : c,
+        ),
       );
       try {
         await http.chat.markRead(workspaceId, conversationId);
@@ -106,9 +111,13 @@ export function useChat(
   // Initial + periodic list sync (covers missed events while socket was down).
   useEffect(() => {
     void refreshList();
-    const t = setInterval(() => void refreshList(), 30_000);
+    void refreshMembers();
+    const t = setInterval(() => {
+      void refreshList();
+      void refreshMembers();
+    }, 30_000);
     return () => clearInterval(t);
-  }, [refreshList]);
+  }, [refreshList, refreshMembers]);
 
   // Live events.
   useEffect(() => {
@@ -205,10 +214,12 @@ export function useChat(
 
   return {
     conversations,
+    members,
     threads,
     typing,
     totalUnread,
     refreshList,
+    refreshMembers,
     loadThread,
     openThread,
     send,

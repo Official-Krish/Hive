@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, type ReactNode } from "react";
+import { useState, useMemo, useRef, useEffect, type ReactNode } from "react";
 import {
   FiAlertTriangle,
   FiAtSign,
@@ -16,12 +16,6 @@ import { cn } from "@/lib/utils";
 import { useGitHubNotifications } from "@/hooks/useGitHubNotifications";
 import type { RealtimeClient } from "@/lib/realtime";
 import { formatDistanceToNow } from "date-fns";
-
-const PANEL =
-  "absolute right-0 top-full mt-2 z-30 w-96 max-h-[500px] overflow-hidden " +
-  "rounded-2xl bg-[#faf9f6] ring-1 ring-black/[0.08] " +
-  "shadow-[inset_0_1px_0_rgba(255,255,255,0.7),0_24px_48px_-16px_rgba(28,25,18,0.4)] " +
-  "backdrop-blur-sm";
 
 const HEADER =
   "flex items-center justify-between border-b border-black/[0.07] px-4 py-2.5 " +
@@ -46,15 +40,23 @@ interface GitHubNotificationBellProps {
   workspaceId: string;
   client: RealtimeClient | null;
   onClose?: () => void;
+  /** Fires whenever the dropdown opens/closes so the host can dodge it. */
+  onOpenChange?: (open: boolean) => void;
 }
 
 export function GitHubNotificationBell({
   workspaceId,
   client,
   onClose,
+  onOpenChange,
 }: GitHubNotificationBellProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    onOpenChange?.(open);
+  }, [open, onOpenChange]);
+
   const { notifications, unreadCount, markAsRead, markAllAsRead } =
     useGitHubNotifications({
       workspaceId,
@@ -113,7 +115,7 @@ export function GitHubNotificationBell({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className={`relative ${PANEL} px-3 py-2 transition-colors hover:bg-white/70`}
+        className="relative grid size-9 place-items-center rounded-full bg-[#f4f2ed]/95 text-neutral-700 ring-1 ring-black/[0.09] shadow-[inset_0_1px_0_rgba(255,255,255,0.7),0_8px_20px_-12px_rgba(28,25,18,0.35)] backdrop-blur-sm transition-colors hover:bg-white/70"
         aria-label="GitHub notifications"
       >
         <Bell className="size-5 text-neutral-700" />

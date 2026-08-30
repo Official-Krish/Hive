@@ -1,5 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Canvas, useThree } from "@react-three/fiber";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Canvas,
+  events as createPointerEvents,
+  useThree,
+} from "@react-three/fiber";
 import { Preload } from "@react-three/drei";
 import * as THREE from "three";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -19,12 +23,15 @@ import {
 } from "./office/layout";
 import { AVATARS } from "./AvatarConfig";
 import { useRealtimeMap } from "@/hooks/useRealtimeMap";
+import { useLiveKitCall } from "@/hooks/useLiveKitCall";
 import { useNearbyTokens } from "@/hooks/useNearbyTokens";
 import { http } from "@/lib/http";
 import RemoteAvatars from "./RemoteAvatars";
 import { MemberDetailPopup } from "./MapHud";
 import { ChatPanel } from "./ChatPanel";
 import { GitHubNotificationBell } from "./GitHubNotificationBell";
+import { CallStage } from "./CallStage";
+import { CallControls } from "./CallControls";
 import { cn } from "@/lib/utils";
 import { useChat } from "@/hooks/useChat";
 
@@ -39,6 +46,20 @@ const CHIP =
   "backdrop-blur-sm";
 const EYEBROW =
   "text-[9px] font-semibold uppercase tracking-[0.16em] text-neutral-400 leading-none";
+
+/* r3f v9.7 `events.connect(target)` can fire with a null container during a
+   Provider remount when the tree churns (upstream #3754). Unlike `disconnect`
+   it is unguarded, so we no-op null targets — the next real connect re-attaches
+   listeners cleanly, instead of unmounting the whole app with a TypeError. */
+const safePointerEvents: typeof createPointerEvents = (store) => {
+  const manager = createPointerEvents(store);
+  const connect = manager.connect?.bind(manager);
+  manager.connect = (target) => {
+    if (!target) return;
+    connect?.(target);
+  };
+  return manager;
+};
 
 const STATUS_DOT: Record<string, string> = {
   online: "bg-emerald-500",
@@ -117,9 +138,17 @@ export function WorldCanvas({
   const playerModel = myAvatarModel ?? DEFAULT_AVATAR;
 
   const [chatOpen, setChatOpen] = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
   const [statusMenu, setStatusMenu] = useState(false);
   const { client, avatars, nearIds, connectionStatus, setMyPosition } =
     useRealtimeMap(workspaceId, myUserId);
+  const onlineCount = useMemo(
+    () =>
+      [...avatars.values()].filter((a) => a.status && a.status !== "offline")
+        .length,
+    [avatars],
+  );
+  const call = useLiveKitCall(workspaceId, myUserId, nearIds, onlineCount);
   const nearbyTokens = useNearbyTokens(workspaceId, client, nearIds);
   const chat = useChat(workspaceId, myUserId, client, chatOpen);
 
@@ -282,7 +311,11 @@ export function WorldCanvas({
 
         <div className="pointer-events-auto ml-auto flex items-center gap-2">
           {/* GitHub notifications */}
-          <GitHubNotificationBell workspaceId={workspaceId} client={client} />
+          <GitHubNotificationBell
+            workspaceId={workspaceId}
+            client={client}
+            onOpenChange={setNotifOpen}
+          />
 
           {/* Chat toggle */}
           <button
@@ -405,25 +438,31 @@ export function WorldCanvas({
 
       {/* Office ticker — pushes / PRs / test pulses */}
       {feed.length > 0 && (
-        <div className="pointer-events-none absolute bottom-4 left-1/2 z-10 flex -translate-x-1/2 flex-col items-center gap-1.5">
+        <div
+          className={`pointer-events-none absolute left-1/2 z-10 flex -translate-x-1/2 flex-col items-center gap-1.5 ${
+            nearIds.size > 0 ? "bottom-20" : "bottom-4"
+          }`}
+        >
           {feed.slice(0, 3).map((f, i) => (
             <div
               key={f.key}
-              className={`${CHIP} px-3.5 py-1.5 text-[11px] font-medium text-neutral-700 ${
+              className={`${CHIP} max-w-[400px] px-3.5 py-1.5 text-[11px] font-medium text-neutral-700 ${
                 i === 0 ? "opacity-100" : i === 1 ? "opacity-70" : "opacity-45"
               }`}
               style={{ transform: `scale(${1 - i * 0.04})` }}
             >
-              <span
-                className={`h-1.5 w-1.5 rounded-full ${
-                  f.tone === "test"
-                    ? "bg-sky-500"
-                    : f.tone === "pr"
-                      ? "bg-violet-500"
-                      : "bg-emerald-500"
-                }`}
-              />
-              <span className="whitespace-nowrap">{f.text}</span>
+              <span className="shrink-0">
+                <span
+                  className={`h-1.5 w-1.5 rounded-full ${
+                    f.tone === "test"
+                      ? "bg-sky-500"
+                      : f.tone === "pr"
+                        ? "bg-violet-500"
+                        : "bg-emerald-500"
+                  }`}
+                />
+              </span>
+              <span className="min-w-0 truncate">{f.text}</span>
             </div>
           ))}
         </div>
@@ -441,6 +480,7 @@ export function WorldCanvas({
           toneMapping: THREE.ACESFilmicToneMapping,
           toneMappingExposure: 1.05,
         }}
+        events={safePointerEvents}
         className="w-full h-full"
       >
         <color attach="background" args={["#cdd8e3"]} />
@@ -457,6 +497,7 @@ export function WorldCanvas({
           name={meName}
           status="Online"
           badgeColor="bg-emerald-400"
+          disabled={chatOpen}
           onRoomChange={handleRoomChange}
           roomAt={roomAt}
           groundAt={supportAt}
@@ -497,8 +538,51 @@ export function WorldCanvas({
             workspaceId={workspaceId}
             myUserId={myUserId}
             client={client}
+            presence={avatars}
             onClose={() => setChatOpen(false)}
           />
+        </div>
+      )}
+
+      {/* Proximity voice/video — only when near other members */}
+      {nearIds.size > 0 && (
+        <div className="pointer-events-none fixed inset-x-0 bottom-5 z-30 flex justify-center">
+          <div className="pointer-events-auto">
+            <CallControls
+              micOn={call.micOn}
+              cameraOn={call.cameraOn}
+              toggleMic={call.toggleMic}
+              toggleCamera={call.toggleCamera}
+            />
+          </div>
+        </div>
+      )}
+
+      {nearIds.size > 0 && (
+        <div
+          className={cn(
+            "pointer-events-none absolute top-20 z-20 flex flex-col items-end gap-2",
+            chatOpen || notifOpen ? "right-[28rem]" : "right-4",
+          )}
+        >
+          <div className="pointer-events-auto">
+            <CallStage
+              room={call.room}
+              nearIds={nearIds}
+              myUserId={myUserId}
+              nameOf={(id) => avatars.get(id)?.name ?? id}
+            />
+          </div>
+          {call.error && onlineCount >= 2 && (
+            <div className="rounded-full bg-rose-50/95 px-3 py-1.5 text-[11px] font-medium text-rose-700 ring-1 ring-rose-500/30">
+              Voice unavailable
+            </div>
+          )}
+          {call.mediaError && onlineCount >= 2 && (
+            <div className="rounded-full bg-rose-50/95 px-3 py-1.5 text-[11px] font-medium text-rose-700 ring-1 ring-rose-500/30">
+              {call.mediaError}
+            </div>
+          )}
         </div>
       )}
     </div>
