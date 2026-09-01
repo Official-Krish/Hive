@@ -31,6 +31,10 @@ export interface MapPosition {
 }
 
 const DEFAULT_RADIUS = 10;
+/** Enter/exit hysteresis band (m). Once near, a peer stays near until it
+ *  drifts beyond enter + HYSTERESIS, so boundary flapping can't churn
+ *  voice/video subscriptions or presence indicators. */
+const PROXIMITY_HYSTERESIS = 4;
 const MOVE_THROTTLE_MS = 50;
 
 function blankMember(developerId: string): MapAvatar {
@@ -90,18 +94,34 @@ export function useRealtimeMap(
   const radiusRef = useRef(options.radius ?? DEFAULT_RADIUS);
   const myIdRef = useRef(myUserId);
   const lastSendRef = useRef(0);
+  const nearLockRef = useRef<Set<string>>(new Set());
 
   radiusRef.current = options.radius ?? DEFAULT_RADIUS;
   myIdRef.current = myUserId;
 
   const recomputeNear = useCallback(() => {
     const me = myPosRef.current;
+    const enter = radiusRef.current;
+    const exit = enter + PROXIMITY_HYSTERESIS;
+    const lock = nearLockRef.current;
     const near = new Set<string>();
     for (const [id, avatar] of avatarsRef.current) {
       if (id === myIdRef.current) continue;
-      const dx = avatar.x - me.x;
-      const dy = avatar.y - me.y;
-      if (Math.hypot(dx, dy) <= radiusRef.current) near.add(id);
+      const d = Math.hypot(avatar.x - me.x, avatar.y - me.y);
+      if (d <= enter) {
+        // First contact — acquire and keep through the grace band.
+        near.add(id);
+        lock.add(id);
+      } else if (d <= exit && lock.has(id)) {
+        // Inside the grace band and already acquired — stay near.
+        near.add(id);
+      } else {
+        lock.delete(id);
+      }
+    }
+    // Drop locks for members who left the map entirely (offline/removed).
+    for (const id of [...lock]) {
+      if (!avatarsRef.current.has(id)) lock.delete(id);
     }
     setNearIds(near);
   }, []);

@@ -18,6 +18,9 @@ export interface LiveKitCallState {
 /* Token TTL is 6h; refresh ~10 min before expiry so long calls don't drop. */
 const TOKEN_TTL_MS = 6 * 60 * 60 * 1000;
 const TOKEN_REFRESH_MS = TOKEN_TTL_MS - 10 * 60 * 1000;
+/* Exit grace before muting camera/mic after a peer leaves proximity, so a
+   boundary blip or quick depart-and-return can't flip the indicators. */
+const EXIT_GRACE_MS = 1200;
 
 const safe = (p: Promise<unknown>): void => {
   p.catch(() => {});
@@ -44,6 +47,8 @@ export function useLiveKitCall(
 
   const nearKey = [...nearIds].sort().join(",");
   nearKeyRef.current = nearKey;
+  const nearRef = useRef(false);
+  nearRef.current = nearKey !== "";
 
   // Only connect when at least two members are online, and only flip the
   // "should connect" intent when that threshold is crossed — not on every
@@ -147,29 +152,47 @@ export function useLiveKitCall(
 
   // Publishing, driven by proximity. Track receive is default (auto-subscribe),
   // so there is no SFU permission gate that could silently black out a remote.
+  // Enter is instant; exit is deferred by a short grace window so a momentary
+  // presence blip at the boundary (or a quick depart-and-return) can't flip
+  // the camera/mic and their indicators.
   useEffect(() => {
     const r = roomRef.current;
     if (!r || r.state !== ConnectionState.Connected) return;
 
-    const ids = nearKey ? nearKey.split(",") : [];
+    const near = nearKey !== "";
+    let timer: ReturnType<typeof setTimeout> | null = null;
 
-    const near = ids.length > 0;
-    const cam = near && cameraIntent.current;
-    const mic = near && micIntent.current;
-    safe(
-      r.localParticipant
-        .setCameraEnabled(cam)
-        .then(() => setMediaError(null))
-        .catch(() => setMediaError("Allow camera/microphone to talk")),
-    );
-    safe(
-      r.localParticipant
-        .setMicrophoneEnabled(mic)
-        .then(() => setMediaError(null))
-        .catch(() => setMediaError("Allow camera/microphone to talk")),
-    );
-    setCameraOn(cam);
-    setMicOn(mic);
+    const apply = () => {
+      const shouldPublish = nearRef.current;
+      const cam = shouldPublish && cameraIntent.current;
+      const mic = shouldPublish && micIntent.current;
+      safe(
+        r.localParticipant
+          .setCameraEnabled(cam)
+          .then(() => setMediaError(null))
+          .catch(() => setMediaError("Allow camera/microphone to talk")),
+      );
+      safe(
+        r.localParticipant
+          .setMicrophoneEnabled(mic)
+          .then(() => setMediaError(null))
+          .catch(() => setMediaError("Allow camera/microphone to talk")),
+      );
+      setCameraOn(cam);
+      setMicOn(mic);
+    };
+
+    if (near) {
+      apply();
+    } else {
+      timer = setTimeout(() => {
+        if (!nearRef.current) apply();
+      }, EXIT_GRACE_MS);
+    }
+
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
   }, [nearKey, room, connected]);
 
   const toggleMic = useCallback(() => {
