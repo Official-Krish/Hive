@@ -7,6 +7,7 @@ import {
   type DeviceControl,
   type RealtimeClientMessage,
   type RealtimeEvent,
+  type WhiteboardStroke,
 } from "@hive/types";
 import { ACCESS_COOKIE } from "../../lib/cookies";
 import { hashToken } from "../../lib/crypto";
@@ -48,6 +49,8 @@ export class RealtimeHub {
   private readonly devices = new DeviceService();
   private readonly clients = new Map<Socket, RealtimeClientData>();
   private readonly deviceSockets = new Map<Socket, DeviceSocketData>();
+  /** Per-board whiteboard stroke history (in-memory relay for late joiners). */
+  private readonly whiteboardHistory = new Map<string, WhiteboardStroke[]>();
   private server: WsServer | null = null;
 
   constructor(private readonly options: RealtimeHubOptions) {}
@@ -383,6 +386,59 @@ export class RealtimeHub {
           timestamp,
         };
         this.publishToWorkspace(workspaceId, event);
+        break;
+      }
+      case "social.bump": {
+        // Relay-only: a member signals they're idling at the water cooler.
+        const event: RealtimeEvent = {
+          type: "social.bump",
+          workspaceId,
+          developerId: client.userId,
+          roomId: parsed.roomId,
+          timestamp,
+        };
+        this.publishToWorkspace(workspaceId, event);
+        break;
+      }
+      case "whiteboard.stroke": {
+        const MAX_STROKES_PER_BOARD = 200;
+        const board = this.whiteboardHistory.get(parsed.boardId) ?? [];
+        board.push(parsed.stroke);
+        if (board.length > MAX_STROKES_PER_BOARD) {
+          board.splice(0, board.length - MAX_STROKES_PER_BOARD);
+        }
+        this.whiteboardHistory.set(parsed.boardId, board);
+        const event: RealtimeEvent = {
+          type: "whiteboard.stroke",
+          workspaceId,
+          boardId: parsed.boardId,
+          stroke: parsed.stroke,
+          timestamp,
+        };
+        this.publishToWorkspace(workspaceId, event);
+        break;
+      }
+      case "whiteboard.clear": {
+        this.whiteboardHistory.delete(parsed.boardId);
+        const event: RealtimeEvent = {
+          type: "whiteboard.clear",
+          workspaceId,
+          boardId: parsed.boardId,
+          clearedBy: client.userId,
+          timestamp,
+        };
+        this.publishToWorkspace(workspaceId, event);
+        break;
+      }
+      case "whiteboard.history.request": {
+        const event: RealtimeEvent = {
+          type: "whiteboard.history",
+          workspaceId,
+          boardId: parsed.boardId,
+          strokes: this.whiteboardHistory.get(parsed.boardId) ?? [],
+          timestamp,
+        };
+        ws.send(JSON.stringify(event));
         break;
       }
     }

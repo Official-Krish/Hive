@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import Avatar, { type PlayerMotion } from "./Avatar";
+import { CoffeeCup } from "./CoffeeCup";
 import type { AABB } from "./office/layout";
 
 interface PlayerControllerProps {
@@ -24,6 +25,8 @@ interface PlayerControllerProps {
   onRealtimeMove?: (x: number, z: number, roomId: string | null) => void;
   /** Locks keyboard movement (e.g. while a modal is open). */
   disabled?: boolean;
+  /** When true, the avatar holds a coffee cup (inherits position + heading). */
+  coffee?: boolean;
 }
 
 // --- Movement tuning --------------------------------------------------------
@@ -59,6 +62,7 @@ export function PlayerController({
   stepUp = 0.6,
   onRealtimeMove,
   disabled = false,
+  coffee = false,
 }: PlayerControllerProps) {
   const internalGroupRef = useRef<THREE.Group>(null);
   const groupRef = playerRef || internalGroupRef;
@@ -287,6 +291,7 @@ export function PlayerController({
         status={status}
         badgeColor={badgeColor}
       />
+      {coffee && <CoffeeCup />}
     </group>
   );
 }

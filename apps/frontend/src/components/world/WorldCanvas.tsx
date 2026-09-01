@@ -25,6 +25,7 @@ import { AVATARS } from "./AvatarConfig";
 import { useRealtimeMap } from "@/hooks/useRealtimeMap";
 import { useLiveKitCall } from "@/hooks/useLiveKitCall";
 import { useNearbyTokens } from "@/hooks/useNearbyTokens";
+import { useInteractions } from "@/hooks/useInteractions";
 import { http } from "@/lib/http";
 import RemoteAvatars from "./RemoteAvatars";
 import { MemberDetailPopup } from "./MapHud";
@@ -32,14 +33,31 @@ import { ChatPanel } from "./ChatPanel";
 import { GitHubNotificationBell } from "./GitHubNotificationBell";
 import { CallStage } from "./CallStage";
 import { CallControls } from "./CallControls";
+import { WorkspaceModal } from "./WorkspaceModal";
+import { WhiteboardModal } from "./WhiteboardModal";
 import { cn } from "@/lib/utils";
 import { useChat } from "@/hooks/useChat";
+import {
+  Coffee,
+  Droplets,
+  Monitor,
+  PenLine,
+  type LucideIcon,
+} from "lucide-react";
+import type { Interactable, InteractableIcon } from "./interactions";
 
 const DEFAULT_AVATAR =
   AVATARS.male[0]?.model ?? "/avatars/male/hive_male_01.glb";
 
 /* HUD material — the console's bone-paper instruments, tuned for the pale
    sky. Shared by every floating control so the frame reads as one system. */
+const INTERACTABLE_ICONS: Record<InteractableIcon, LucideIcon> = {
+  coffee: Coffee,
+  water: Droplets,
+  monitor: Monitor,
+  board: PenLine,
+};
+
 const CHIP =
   "inline-flex items-center gap-2.5 rounded-full bg-[#f4f2ed]/95 ring-1 ring-black/[0.09] " +
   "shadow-[inset_0_1px_0_rgba(255,255,255,0.7),0_12px_28px_-16px_rgba(28,25,18,0.5)] " +
@@ -235,7 +253,7 @@ export function WorldCanvas({
   interface FeedItem {
     key: string;
     text: string;
-    tone: "push" | "pr" | "test";
+    tone: "push" | "pr" | "test" | "bump";
     at: number;
   }
   const [feed, setFeed] = useState<FeedItem[]>([]);
@@ -243,23 +261,100 @@ export function WorldCanvas({
   avatarsRef.current = avatars;
   const feedSeq = useRef(0);
 
+  const pushFeed = useCallback((text: string, tone: FeedItem["tone"]) => {
+    setFeed((prev) =>
+      [
+        {
+          key: `${Date.now()}-${++feedSeq.current}`,
+          text,
+          tone,
+          at: Date.now(),
+        },
+        ...prev,
+      ].slice(0, 4),
+    );
+  }, []);
+
+  // Short-lived "speech bubble" texts pinned above remote avatars.
+  const [bumpBubbles, setBumpBubbles] = useState<Record<string, string>>({});
+  const addBubble = useCallback((id: string, text: string) => {
+    setBumpBubbles((prev) => ({ ...prev, [id]: text }));
+    window.setTimeout(() => {
+      setBumpBubbles((prev) => {
+        if (!(id in prev)) return prev;
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+    }, 5000);
+  }, []);
+
+  // Player world position (feet height included) for proximity interactions.
+  const [playerPos, setPlayerPos] = useState<[number, number, number]>([
+    SPAWN[0],
+    SPAWN[1],
+    SPAWN[2],
+  ]);
+  const [coffeeActive, setCoffeeActive] = useState(false);
+  const [toast, setToast] = useState<React.ReactNode | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [workspaceOpen, setWorkspaceOpen] = useState(false);
+  const [whiteboardId, setWhiteboardId] = useState<string | null>(null);
+
+  const showToast = useCallback((node: React.ReactNode) => {
+    setToast(node);
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => setToast(null), 2600);
+  }, []);
+
+  const handleInteract = useCallback(
+    (it: Interactable) => {
+      switch (it.kind) {
+        case "coffee": {
+          setCoffeeActive(true);
+          showToast(
+            <span className="inline-flex items-center gap-1.5">
+              <Coffee className="size-3.5" />
+              +10 energy — freshly roasted
+            </span>,
+          );
+          window.setTimeout(() => setCoffeeActive(false), 4500);
+          break;
+        }
+        case "cooler": {
+          client?.sendBump(currentRoom || null);
+          pushFeed("You're at the water cooler", "bump");
+          break;
+        }
+        case "monitor":
+          setWorkspaceOpen(true);
+          break;
+        case "whiteboard":
+          setWhiteboardId(it.id);
+          break;
+      }
+    },
+    [client, currentRoom, myUserId, addBubble, pushFeed, showToast],
+  );
+
+  const interaction = useInteractions({
+    pos: playerPos,
+    blocked:
+      chatOpen ||
+      statusInputFocused ||
+      membersOpen ||
+      statusMenu ||
+      openMemberId !== null ||
+      workspaceOpen ||
+      whiteboardId !== null,
+    onPress: handleInteract,
+  });
+
   useEffect(() => {
     if (!client) return;
     const nameOf = (id: string) =>
       avatarsRef.current.get(id)?.name ?? "Someone";
-    const push = (text: string, tone: FeedItem["tone"]) => {
-      setFeed((prev) =>
-        [
-          {
-            key: `${Date.now()}-${++feedSeq.current}`,
-            text,
-            tone,
-            at: Date.now(),
-          },
-          ...prev,
-        ].slice(0, 4),
-      );
-    };
+    const push = pushFeed;
     const offs = [
       client.on("repo.push", (e) =>
         push(
@@ -278,6 +373,16 @@ export function WorldCanvas({
           "test",
         ),
       ),
+      client.on("social.bump", (e) => {
+        if (e.developerId === myUserId) return;
+        addBubble(e.developerId, "At the water cooler");
+        push(
+          `${nameOf(e.developerId)} is at the water cooler${
+            e.roomId ? ` · ${e.roomId}` : ""
+          }`,
+          "bump",
+        );
+      }),
     ];
     const prune = setInterval(
       () => setFeed((prev) => prev.filter((f) => Date.now() - f.at < 60_000)),
@@ -287,7 +392,7 @@ export function WorldCanvas({
       offs.forEach((off) => off());
       clearInterval(prune);
     };
-  }, [client]);
+  }, [client, myUserId, pushFeed, addBubble]);
 
   return (
     <div className="relative w-full h-screen overflow-hidden font-sans select-none">
@@ -502,6 +607,36 @@ export function WorldCanvas({
         </div>
       </div>
 
+      {/* Interaction hint + toast (bottom-left, above the movement legend) */}
+      {!workspaceOpen && !whiteboardId && (interaction.near || toast) && (
+        <div className="pointer-events-none absolute bottom-20 left-4 z-10 flex flex-col items-start gap-1.5">
+          {interaction.near &&
+            (() => {
+              const Icon = INTERACTABLE_ICONS[interaction.near.icon];
+              return (
+                <div className={`${CHIP} px-3.5 py-2`}>
+                  <kbd className="rounded-md bg-white px-1.5 py-0.5 font-mono text-[10px] font-semibold text-neutral-800 ring-1 ring-black/[0.09] shadow-[0_1px_0_rgba(28,25,18,0.18)]">
+                    E
+                  </kbd>
+                  <Icon className="size-3.5 shrink-0" />
+                  <span className="text-[12px] font-semibold text-neutral-800">
+                    {interaction.near.prompt}
+                  </span>
+                </div>
+              );
+            })()}
+          {toast && (
+            <div
+              className={`${CHIP} border-amber-500/30 bg-amber-50/95 px-3.5 py-1.5`}
+            >
+              <span className="text-[11.5px] font-semibold text-amber-800">
+                {toast}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Controls legend */}
       <div className="absolute bottom-4 left-4 z-10 pointer-events-none">
         <div
@@ -550,7 +685,9 @@ export function WorldCanvas({
                       ? "bg-sky-500"
                       : f.tone === "pr"
                         ? "bg-violet-500"
-                        : "bg-emerald-500"
+                        : f.tone === "bump"
+                          ? "bg-amber-500"
+                          : "bg-emerald-500"
                   }`}
                 />
               </span>
@@ -593,16 +730,19 @@ export function WorldCanvas({
           }
           disabled={chatOpen || statusInputFocused}
           onRoomChange={handleRoomChange}
+          onPositionUpdate={(pos) => setPlayerPos(pos)}
           roomAt={roomAt}
           groundAt={supportAt}
           stepUp={STEP_UP}
           onRealtimeMove={handleRealtimeMove}
+          coffee={coffeeActive}
         />
 
         <RemoteAvatars
           avatars={avatars}
           myUserId={myUserId}
           pills={nearbyTokens}
+          bubbles={bumpBubbles}
           onAvatarClick={(id) => setOpenMemberId(id)}
         />
 
@@ -636,6 +776,25 @@ export function WorldCanvas({
             onClose={() => setChatOpen(false)}
           />
         </div>
+      )}
+
+      {/* Desk monitor — "open workspace" */}
+      {workspaceOpen && (
+        <WorkspaceModal
+          workspaceId={workspaceId}
+          myUserId={myUserId}
+          client={client}
+          onClose={() => setWorkspaceOpen(false)}
+        />
+      )}
+
+      {/* Whiteboard — shared canvas for the board you pressed E on */}
+      {whiteboardId && (
+        <WhiteboardModal
+          boardId={whiteboardId}
+          client={client}
+          onClose={() => setWhiteboardId(null)}
+        />
       )}
 
       {/* Proximity voice/video — only when near other members.

@@ -39,6 +39,18 @@ export const realtimeMemberSchema = z.object({
 });
 export type RealtimeMember = z.infer<typeof realtimeMemberSchema>;
 
+export const whiteboardPointSchema = z.object({
+  x: z.number(),
+  y: z.number(),
+});
+export const whiteboardStrokeSchema = z.object({
+  strokeId: z.string().min(1).max(80),
+  color: z.string().min(1).max(32),
+  width: z.number().min(0.5).max(64),
+  points: z.array(whiteboardPointSchema).min(2).max(4096),
+});
+export type WhiteboardStroke = z.infer<typeof whiteboardStrokeSchema>;
+
 export const realtimeEventSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("hello"),
@@ -163,6 +175,34 @@ export const realtimeEventSchema = z.discriminatedUnion("type", [
     }),
     timestamp: z.number(),
   }),
+  z.object({
+    type: z.literal("social.bump"),
+    workspaceId: z.string(),
+    developerId: z.string(),
+    roomId: z.string().max(100).nullable(),
+    timestamp: z.number(),
+  }),
+  z.object({
+    type: z.literal("whiteboard.stroke"),
+    workspaceId: z.string(),
+    boardId: z.string().min(1).max(120),
+    stroke: whiteboardStrokeSchema,
+    timestamp: z.number(),
+  }),
+  z.object({
+    type: z.literal("whiteboard.clear"),
+    workspaceId: z.string(),
+    boardId: z.string().min(1).max(120),
+    clearedBy: z.string(),
+    timestamp: z.number(),
+  }),
+  z.object({
+    type: z.literal("whiteboard.history"),
+    workspaceId: z.string(),
+    boardId: z.string().min(1).max(120),
+    strokes: z.array(whiteboardStrokeSchema).max(200),
+    timestamp: z.number(),
+  }),
 ]);
 
 export type RealtimeEvent = z.infer<typeof realtimeEventSchema>;
@@ -197,6 +237,23 @@ export const realtimeClientMessageSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("github.notification.read"),
     notificationId: z.string().min(1),
+  }),
+  z.object({
+    type: z.literal("social.bump"),
+    roomId: z.string().min(1).max(100).nullable(),
+  }),
+  z.object({
+    type: z.literal("whiteboard.stroke"),
+    boardId: z.string().min(1).max(120),
+    stroke: whiteboardStrokeSchema,
+  }),
+  z.object({
+    type: z.literal("whiteboard.clear"),
+    boardId: z.string().min(1).max(120),
+  }),
+  z.object({
+    type: z.literal("whiteboard.history.request"),
+    boardId: z.string().min(1).max(120),
   }),
 ]);
 

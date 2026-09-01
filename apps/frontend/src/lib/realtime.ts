@@ -27,6 +27,10 @@ export type RealtimeEventMap = {
     RealtimeEvent,
     { type: "github.notification" }
   >;
+  "social.bump": Extract<RealtimeEvent, { type: "social.bump" }>;
+  "whiteboard.stroke": Extract<RealtimeEvent, { type: "whiteboard.stroke" }>;
+  "whiteboard.clear": Extract<RealtimeEvent, { type: "whiteboard.clear" }>;
+  "whiteboard.history": Extract<RealtimeEvent, { type: "whiteboard.history" }>;
 };
 
 type EventHandler<K extends keyof RealtimeEventMap> = (
@@ -149,6 +153,30 @@ export class RealtimeClient {
       type: "github.notification.read",
       notificationId,
     });
+  }
+
+  sendBump(roomId: string | null) {
+    return this.send({ type: "social.bump", roomId });
+  }
+
+  sendWhiteboardStroke(
+    boardId: string,
+    stroke: {
+      strokeId: string;
+      color: string;
+      width: number;
+      points: Array<{ x: number; y: number }>;
+    },
+  ): boolean {
+    return this.send({ type: "whiteboard.stroke", boardId, stroke });
+  }
+
+  sendWhiteboardClear(boardId: string): boolean {
+    return this.send({ type: "whiteboard.clear", boardId });
+  }
+
+  requestWhiteboardHistory(boardId: string): boolean {
+    return this.send({ type: "whiteboard.history.request", boardId });
   }
 
   private open(): void {
