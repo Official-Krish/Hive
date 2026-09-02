@@ -49,22 +49,31 @@ export class RealtimeService {
     workspaceId: string,
     status: PresenceStatus,
     label?: string | null,
-  ): Promise<void> {
-    await prisma.presence.upsert({
+    workingOn?: string | null,
+  ): Promise<{
+    status: PresenceStatus;
+    customLabel: string | null;
+    workingOn: string | null;
+  }> {
+    const row = await prisma.presence.upsert({
       where: { userId_workspaceId: { userId, workspaceId } },
       create: {
         userId,
         workspaceId,
         status,
         customLabel: label ?? null,
+        workingOn: workingOn ?? null,
         lastSeenAt: new Date(),
       },
       update: {
         status,
         customLabel: label ?? null,
+        ...(workingOn !== undefined ? { workingOn: workingOn ?? null } : {}),
         lastSeenAt: new Date(),
       },
+      select: { status: true, customLabel: true, workingOn: true },
     });
+    return row;
   }
 
   /** True when the user participates in the conversation AND it belongs to
@@ -135,7 +144,12 @@ export class RealtimeService {
       }),
       prisma.presence.findMany({
         where: { workspaceId },
-        select: { userId: true, status: true, customLabel: true },
+        select: {
+          userId: true,
+          status: true,
+          customLabel: true,
+          workingOn: true,
+        },
       }),
       // Latest agent session per member — drives the "needs you" beacon and
       // the project tag on the map.
@@ -178,6 +192,7 @@ export class RealtimeService {
           ? (session.repository.githubFullName ?? session.repository.name)
           : null,
         label: presence?.customLabel ?? null,
+        workingOn: presence?.workingOn ?? null,
         status,
         position: avatar
           ? { x: avatar.x, y: avatar.y, roomId: avatar.roomId }

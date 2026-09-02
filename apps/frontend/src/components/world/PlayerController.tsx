@@ -98,7 +98,17 @@ export function PlayerController({
   const hudAccum = useRef(0);
 
   useEffect(() => {
+    const inEditable = () => {
+      const el = document.activeElement as HTMLElement | null;
+      if (!el) return false;
+      return (
+        el.tagName === "INPUT" ||
+        el.tagName === "TEXTAREA" ||
+        el.isContentEditable
+      );
+    };
     const down = (e: KeyboardEvent) => {
+      if (inEditable()) return;
       keys.current[e.code] = true;
       if (e.code === "Space") e.preventDefault(); // don't scroll the page
     };

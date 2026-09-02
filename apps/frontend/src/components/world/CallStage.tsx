@@ -1,5 +1,5 @@
-import { useEffect, useReducer, useRef } from "react";
-import { FiMic, FiMicOff } from "react-icons/fi";
+import { useEffect, useReducer, useRef, useState } from "react";
+import { FiMaximize, FiMic, FiMicOff, FiX } from "react-icons/fi";
 import { Room, RoomEvent, Track, type RemoteParticipant } from "livekit-client";
 
 function VideoTile({
@@ -151,10 +151,12 @@ function ScreenTile({
   participant,
   label,
   version,
+  onExpand,
 }: {
   participant: RemoteParticipant;
   label: string;
   version: number;
+  onExpand: () => void;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
 
@@ -173,7 +175,12 @@ function ScreenTile({
   }, [participant, version]);
 
   return (
-    <div className="relative w-96 overflow-hidden rounded-xl bg-neutral-900 ring-1 ring-black/10">
+    <button
+      type="button"
+      onClick={onExpand}
+      title="Open full screen"
+      className="group relative w-96 overflow-hidden rounded-xl bg-neutral-900 ring-1 ring-black/10 transition-shadow hover:ring-indigo-400"
+    >
       <video
         ref={videoRef}
         autoPlay
@@ -183,6 +190,69 @@ function ScreenTile({
       <span className="absolute bottom-1.5 left-2 rounded-md bg-black/55 px-1.5 py-0.5 text-[10px] font-medium text-white">
         Screen — {label}
       </span>
+      <span className="absolute right-1.5 top-1.5 grid size-7 place-items-center rounded-lg bg-black/45 text-white opacity-0 transition-opacity group-hover:opacity-100">
+        <FiMaximize className="size-3.5" />
+      </span>
+    </button>
+  );
+}
+
+/** Full-window viewer for a remote screen share, with an exit button. */
+function ScreenFocusModal({
+  participant,
+  label,
+  version,
+  onClose,
+}: {
+  participant: RemoteParticipant | undefined;
+  label: string;
+  version: number;
+  onClose: () => void;
+}) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    const videoEl = videoRef.current;
+    if (!videoEl || !participant) return;
+    const track = participant
+      .getTrackPublications()
+      .find((x) => x.source === Track.Source.ScreenShare && x.track)?.track;
+    if (!track) return;
+    track.attach(videoEl);
+    return () => {
+      track.detach(videoEl);
+    };
+  }, [participant, version]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 z-40 flex flex-col bg-black/95">
+      <div className="flex items-center justify-between gap-3 px-4 py-2.5">
+        <span className="text-[12.5px] font-semibold text-white">
+          Screen — {label}
+        </span>
+        <button
+          type="button"
+          onClick={onClose}
+          title="Exit full screen (Esc)"
+          className="flex items-center gap-2 rounded-lg bg-white/10 px-3 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-white/20"
+        >
+          <FiX className="size-4" /> Exit
+        </button>
+      </div>
+      <video
+        ref={videoRef}
+        autoPlay
+        playsInline
+        className="h-full w-full object-contain"
+      />
     </div>
   );
 }
@@ -199,6 +269,7 @@ export function CallStage({
   nameOf?: (id: string) => string;
 }) {
   const [version, bump] = useReducer((v: number) => v + 1, 0);
+  const [expanded, setExpanded] = useState<string | null>(null);
 
   useEffect(() => {
     if (!room) return;
@@ -222,6 +293,25 @@ export function CallStage({
       room.off(RoomEvent.ConnectionStateChanged, handler);
     };
   }, [room]);
+
+  // Close the full-screen viewer automatically if the share is gone (stopped,
+  // unsubscribed, or the participant left).
+  useEffect(() => {
+    if (!room || !expanded) return;
+    const stillSharing = [...room.remoteParticipants.values()].some(
+      (p) =>
+        p.identity === expanded &&
+        p
+          .getTrackPublications()
+          .some(
+            (x) =>
+              x.source === Track.Source.ScreenShare &&
+              x.track &&
+              x.isSubscribed,
+          ),
+    );
+    if (!stillSharing) setExpanded(null);
+  }, [room, expanded, version]);
 
   if (!room) return null;
 
@@ -268,9 +358,23 @@ export function CallStage({
               participant={p}
               label={labelFor(p.identity)}
               version={version}
+              onExpand={() => setExpanded(p.identity)}
             />
           ))}
         </div>
+      )}
+
+      {expanded && (
+        <ScreenFocusModal
+          key={expanded}
+          participant={
+            room.getParticipantByIdentity(expanded) as
+              RemoteParticipant | undefined
+          }
+          label={labelFor(expanded)}
+          version={version}
+          onClose={() => setExpanded(null)}
+        />
       )}
     </div>
   );

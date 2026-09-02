@@ -692,6 +692,7 @@ model Presence {
   workspaceId String
   status      PresenceStatus @default(OFFLINE)
   customLabel String?
+  workingOn   String?
   activityId  String?        @unique
   position    Json?
   lastSeenAt  DateTime       @default(now())

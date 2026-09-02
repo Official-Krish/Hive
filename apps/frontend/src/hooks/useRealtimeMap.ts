@@ -12,6 +12,8 @@ export interface MapAvatar {
   mapAvatarModel: string | null;
   /** User-set presence label (e.g. "Shipping"), null when unset. */
   label: string | null;
+  /** User-set "currently working on" text, null when unset. */
+  workingOn: string | null;
   /** Live status of their current/latest agent session (null when none). */
   sessionStatus: string | null;
   /** Repo (owner/name) of their current/latest agent session. */
@@ -45,6 +47,7 @@ function blankMember(developerId: string): MapAvatar {
     mapAvatarModel: null,
     sessionStatus: null,
     label: null,
+    workingOn: null,
     project: null,
     status: "online",
     x: 0,
@@ -175,6 +178,7 @@ export function useRealtimeMap(
             sessionStatus: member.sessionStatus,
             project: member.project,
             label: member.label ?? null,
+            workingOn: member.workingOn ?? null,
             status: member.status,
             x: member.position?.x ?? 0,
             y: member.position?.y ?? 0,
@@ -220,7 +224,11 @@ export function useRealtimeMap(
             ...current,
             status: event.status,
             // Custom label rides on the same event; null clears it.
-            label: event.label ?? current.label,
+            label: "label" in event ? (event.label ?? null) : current.label,
+            workingOn:
+              "workingOn" in event
+                ? (event.workingOn ?? null)
+                : current.workingOn,
           });
         }
         avatarsRef.current = next;
@@ -238,6 +246,7 @@ export function useRealtimeMap(
           sessionStatus: current?.sessionStatus ?? null,
           project: current?.project ?? null,
           label: current?.label ?? null,
+          workingOn: current?.workingOn ?? null,
           lastTest: current?.lastTest,
           status: current?.status ?? "online",
           x: event.x,

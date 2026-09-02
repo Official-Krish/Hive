@@ -47,6 +47,7 @@ import {
   Droplets,
   Monitor,
   PenLine,
+  Zap,
   type LucideIcon,
 } from "lucide-react";
 import type { Interactable, InteractableIcon } from "./interactions";
@@ -102,15 +103,23 @@ const STATUS_LABEL: Record<string, string> = {
   offline: "Offline",
 };
 
-/** Inline "set a custom label" row for the presence picker. */
-function CustomLabelRow({
-  current,
+/** Inline "set a value" row for the presence picker: custom label and
+ *  "working on" both use this; a Set button appears on text, a Clear button
+ *  when a value is currently set. */
+function InlineTextRow({
+  placeholder,
+  button,
   onApply,
   onFocusChange,
+  onClear,
+  showClear,
 }: {
-  current: string;
-  onApply: (label: string) => void;
+  placeholder: string;
+  button: (value: string) => string;
+  onApply: (value: string) => void;
   onFocusChange?: (focused: boolean) => void;
+  onClear?: () => void;
+  showClear?: boolean;
 }) {
   const [value, setValue] = useState("");
   return (
@@ -123,18 +132,31 @@ function CustomLabelRow({
         onKeyDown={(e) => {
           if (e.key === "Enter" && value.trim()) onApply(value.trim());
         }}
-        placeholder={current === "Online" ? "Custom status…" : current}
+        placeholder={placeholder}
         maxLength={60}
         className="w-full rounded-lg text-neutral-700 border border-black/[0.09] bg-white px-2.5 py-1.5 text-[12px] outline-none focus:border-neutral-900/40"
       />
-      {value.trim() && (
-        <button
-          type="button"
-          onClick={() => onApply(value.trim())}
-          className="mt-1 w-full rounded-lg bg-neutral-950 py-1 text-[11.5px] font-semibold text-white hover:bg-neutral-800"
-        >
-          Set "{value.trim().slice(0, 24)}"
-        </button>
+      {(value.trim() || showClear) && (
+        <div className="mt-1 flex items-stretch gap-1">
+          {value.trim() && (
+            <button
+              type="button"
+              onClick={() => onApply(value.trim())}
+              className="flex-1 rounded-lg bg-neutral-950 py-1 text-[11.5px] font-semibold text-white hover:bg-neutral-800"
+            >
+              {button(value.trim())}
+            </button>
+          )}
+          {showClear && onClear && !value.trim() && (
+            <button
+              type="button"
+              onClick={onClear}
+              className="flex-1 rounded-lg bg-black/[0.06] py-1 text-[11.5px] font-semibold text-neutral-600 hover:bg-black/[0.1]"
+            >
+              Clear
+            </button>
+          )}
+        </div>
       )}
     </div>
   );
@@ -294,6 +316,7 @@ export function WorldCanvas({
           name: m.name,
           status: live?.status ?? "offline",
           label: live?.label ?? null,
+          workingOn: live?.workingOn ?? null,
           isMe: m.userId === myUserId,
         };
       })
@@ -316,6 +339,7 @@ export function WorldCanvas({
   const avatarsRef = useRef(avatars);
   avatarsRef.current = avatars;
   const feedSeq = useRef(0);
+  const workingOnSeenRef = useRef<Map<string, string>>(new Map());
 
   const pushFeed = useCallback((text: string, tone: FeedItem["tone"]) => {
     setFeed((prev) =>
@@ -443,6 +467,19 @@ export function WorldCanvas({
         if (e.status === "focusing") {
           push(`${nameOf(e.developerId)} is focusing`, "focusing");
         }
+        if (
+          e.workingOn &&
+          workingOnSeenRef.current.get(e.developerId) !== e.workingOn
+        ) {
+          workingOnSeenRef.current.set(e.developerId, e.workingOn);
+          push(
+            `${nameOf(e.developerId)} is working on ${e.workingOn}`,
+            "focusing",
+          );
+        }
+        if (!e.workingOn && workingOnSeenRef.current.has(e.developerId)) {
+          workingOnSeenRef.current.delete(e.developerId);
+        }
       }),
     ];
     const prune = setInterval(
@@ -569,7 +606,12 @@ export function WorldCanvas({
                         )}
                       </span>
                       <span className="block truncate text-[10.5px] text-neutral-500">
-                        {row.label ?? STATUS_LABEL[row.status] ?? row.status}
+                        {row.label && row.workingOn
+                          ? `${row.label} · ${row.workingOn}`
+                          : (row.workingOn ??
+                            row.label ??
+                            STATUS_LABEL[row.status] ??
+                            row.status)}
                       </span>
                     </div>
                   </div>
@@ -616,12 +658,16 @@ export function WorldCanvas({
                   · {myPresence.label}
                 </span>
               )}
+              {myPresence?.workingOn && (
+                <span className="inline-flex max-w-[150px] items-center gap-1 truncate text-[11px] font-medium text-violet-600">
+                  <Zap className="size-3 shrink-0" />
+                  <span className="truncate">{myPresence.workingOn}</span>
+                </span>
+              )}
             </button>
 
             {statusMenu && (
-              <div
-                className={`${CHIP} absolute right-0 top-full z-20 mt-2 flex w-56 flex-col items-stretch gap-0.5 p-2`}
-              >
+              <div className="absolute right-0 top-full z-20 mt-2 flex w-56 flex-col items-stretch gap-0.5 rounded-xl bg-[#f4f2ed]/95 p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.7),0_24px_48px_-20px_rgba(28,25,18,0.5)] ring-1 ring-black/[0.09] backdrop-blur-md">
                 {(
                   [
                     ["online", "Online"],
@@ -651,8 +697,13 @@ export function WorldCanvas({
                     {label}
                   </button>
                 ))}
-                <CustomLabelRow
-                  current={myStatusLabel}
+                <InlineTextRow
+                  placeholder={
+                    myStatusLabel === "Online"
+                      ? "Custom status…"
+                      : myStatusLabel
+                  }
+                  button={(v) => `Set "${v.slice(0, 24)}"`}
                   onFocusChange={setStatusInputFocused}
                   onApply={(label) => {
                     client?.sendPresence(
@@ -663,6 +714,32 @@ export function WorldCanvas({
                     );
                     setStatusMenu(false);
                   }}
+                />
+                <InlineTextRow
+                  placeholder="Working on…"
+                  button={(v) => `Working on "${v.slice(0, 24)}"`}
+                  onFocusChange={setStatusInputFocused}
+                  onApply={(workingOn) => {
+                    client?.sendPresence(
+                      (myPresence?.status as
+                        "online" | "away" | "on_call" | "busy" | "focusing") ??
+                        "online",
+                      myPresence?.label ?? undefined,
+                      workingOn,
+                    );
+                    setStatusMenu(false);
+                  }}
+                  onClear={() => {
+                    client?.sendPresence(
+                      (myPresence?.status as
+                        "online" | "away" | "on_call" | "busy" | "focusing") ??
+                        "online",
+                      myPresence?.label ?? undefined,
+                      null,
+                    );
+                    setStatusMenu(false);
+                  }}
+                  showClear={!!myPresence?.workingOn}
                 />
               </div>
             )}

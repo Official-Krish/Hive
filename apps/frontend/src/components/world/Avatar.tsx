@@ -33,7 +33,7 @@ interface AvatarProps {
   /** Small context pills stacked under the name (project, tests, tokens…). */
   meta?: Array<{
     text: string;
-    tone?: "amber" | "green" | "red" | "neutral";
+    tone?: "amber" | "green" | "red" | "violet" | "neutral";
     icon?: ReactNode;
   }>;
 }
@@ -42,6 +42,7 @@ const META_TONE: Record<string, string> = {
   amber: "bg-amber-400/95 text-neutral-900",
   green: "bg-emerald-400/95 text-neutral-900",
   red: "bg-rose-500/95 text-white",
+  violet: "bg-violet-500/95 text-white",
   neutral: "bg-black/40 text-white/80",
 };
 
@@ -272,7 +273,7 @@ export default function Avatar({
             <span className={`h-1 w-1 rounded-full ${badgeColor}`} />
             <span>{name}</span>
           </div>
-          {meta?.slice(0, 3).map((m, i) => (
+          {meta?.slice(0, 4).map((m, i) => (
             <div
               key={i}
               className={`flex items-center gap-[3px] whitespace-nowrap rounded-full px-1.5 py-[1.5px] text-[8.5px] font-semibold leading-none tabular-nums shadow-sm select-none ${

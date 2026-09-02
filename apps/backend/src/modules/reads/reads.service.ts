@@ -701,7 +701,7 @@ export class ReadsService {
     if (!developer) throw new NotFoundError("Developer not found");
     const presenceInfo = await prisma.presence.findFirst({
       where: { userId: developerId, workspaceId },
-      select: { status: true, customLabel: true },
+      select: { status: true, customLabel: true, workingOn: true },
     });
 
     const activeSession = await prisma.agentSession.findFirst({
@@ -861,6 +861,7 @@ export class ReadsService {
         presences: undefined,
         status: presenceInfo ? presenceInfo.status.toLowerCase() : "offline",
         label: presenceInfo?.customLabel ?? null,
+        workingOn: presenceInfo?.workingOn ?? null,
       } as MapOverlay["developer"],
       project: session?.repository
         ? (session.repository.githubFullName ?? session.repository.name)

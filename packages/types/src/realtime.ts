@@ -59,6 +59,8 @@ export const realtimeMemberSchema = z.object({
   project: z.string().nullable(),
   /** User-set presence label (e.g. "Shipping 🚀"), null when unset. */
   label: z.string().nullable(),
+  /** User-set "currently working on" (e.g. "LiveKit integration"). */
+  workingOn: z.string().max(60).nullable(),
   status: presenceStatusSchema,
   position: avatarPositionSchema.nullable(),
 });
@@ -92,6 +94,8 @@ export const realtimeEventSchema = z.discriminatedUnion("type", [
     status: presenceStatusSchema,
     /** Optional user-set label, e.g. "Shipping 🚀" or "On call w/ acme". */
     label: z.string().max(60).nullable().optional(),
+    /** Optional user-set "currently working on" text. */
+    workingOn: z.string().max(60).nullable().optional(),
     timestamp: z.number(),
   }),
   z.object({
@@ -270,6 +274,8 @@ export const realtimeClientMessageSchema = z.discriminatedUnion("type", [
     status: z.enum(["online", "away", "on_call", "busy", "focusing"]),
     /** Optional user-set label shown next to their name. */
     label: z.string().min(1).max(60).optional(),
+    /** Optional user-set "currently working on" text; null clears it. */
+    workingOn: z.string().min(1).max(60).nullable().optional(),
   }),
   z.object({
     type: z.literal("chat.send"),

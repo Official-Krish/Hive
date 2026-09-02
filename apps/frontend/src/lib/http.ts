@@ -505,6 +505,7 @@ export interface MapOverlay {
     /** Presence (world overlay only). */
     status?: string | null;
     label?: string | null;
+    workingOn?: string | null;
   };
   /** Repo (owner/name) of their current/latest agent session. */
   project?: string | null;

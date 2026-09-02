@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Check, X } from "lucide-react";
+import { Check, X, Zap } from "lucide-react";
 import { useMapOverlay } from "@/hooks/useRealtimeMap";
 import { type MapOverlay } from "@/lib/http";
 import { timeAgo } from "@/components/dashboard/primitives";
@@ -136,6 +136,16 @@ function MemberModalInner({
       <div className="space-y-5 px-5 py-4 text-[13px] text-neutral-800">
         {overlay.isLoading && !data && (
           <div className="py-2 text-neutral-500">Loading activity…</div>
+        )}
+
+        {data?.developer.workingOn && (
+          <section>
+            <div className={LABEL}>Working on</div>
+            <div className="mt-1 flex items-center gap-1.5 font-medium text-neutral-900">
+              <Zap className="size-3.5 shrink-0 text-violet-500" />
+              <span className="min-w-0">{data.developer.workingOn}</span>
+            </div>
+          </section>
         )}
 
         {data?.project && (

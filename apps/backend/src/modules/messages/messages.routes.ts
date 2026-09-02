@@ -164,7 +164,12 @@ async function listConversations(
       const memberIds = c.participants.map((cp) => cp.user.id);
       const presenceRows = await prisma.presence.findMany({
         where: { workspaceId, userId: { in: memberIds } },
-        select: { userId: true, status: true, customLabel: true },
+        select: {
+          userId: true,
+          status: true,
+          customLabel: true,
+          workingOn: true,
+        },
       });
       const presenceByUser = new Map(presenceRows.map((r) => [r.userId, r]));
       const members = c.participants.map((cp) => {
@@ -175,6 +180,7 @@ async function listConversations(
           avatarUrl: cp.user.avatarUrl,
           status: (presence?.status ?? PresenceStatus.OFFLINE).toLowerCase(),
           label: presence?.customLabel ?? null,
+          workingOn: presence?.workingOn ?? null,
         };
       });
       return {

@@ -130,11 +130,13 @@ export class RealtimeClient {
   sendPresence(
     status: "online" | "away" | "on_call" | "busy" | "focusing",
     label?: string,
+    workingOn?: string | null,
   ): boolean {
     return this.send({
       type: "presence.update",
       status,
       ...(label ? { label } : {}),
+      ...(workingOn !== undefined ? { workingOn } : {}),
     });
   }
 

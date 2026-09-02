@@ -27,7 +27,7 @@ function connectRawWs(
   cookie: string,
 ): Promise<RawWs> {
   return new Promise((resolve, reject) => {
-    let buffer = Buffer.alloc(0);
+    let buffer: Buffer = Buffer.alloc(0);
     let upgraded = false;
     let waiters: Array<{
       type: string;
@@ -107,7 +107,7 @@ function connectRawWs(
                 0x80 | payload.length,
                 ...randomBytes(4),
                 ...payload,
-              ]),
+              ]) as unknown as Uint8Array<ArrayBufferLike>,
             );
             break;
           case 0x8:
@@ -115,7 +115,7 @@ function connectRawWs(
             break;
         }
       }
-      buffer = buffer.subarray(cursor);
+      buffer = buffer.subarray(cursor) as unknown as Buffer;
     };
 
     const key = randomBytes(16).toString("base64");
@@ -134,13 +134,16 @@ function connectRawWs(
       );
     });
 
-    socket.on("data", (chunk) => {
-      buffer = Buffer.concat([buffer, chunk]);
+    socket.on("data", (chunk: Buffer) => {
+      buffer = Buffer.concat([
+        buffer,
+        chunk,
+      ] as unknown as Uint8Array<ArrayBufferLike>[]) as unknown as Buffer;
       if (!upgraded) {
         const headerEnd = buffer.indexOf("\r\n\r\n");
         if (headerEnd === -1) return;
         const header = buffer.subarray(0, headerEnd).toString("utf8");
-        buffer = buffer.subarray(headerEnd + 4);
+        buffer = buffer.subarray(headerEnd + 4) as unknown as Buffer;
         const accept = header
           .split("\r\n")
           .find((l) => l.toLowerCase().startsWith("sec-websocket-accept:"))

@@ -75,9 +75,17 @@ export function RemoteAvatars({
 
         const meta: Array<{
           text: string;
-          tone?: "amber" | "green" | "red" | "neutral";
+          tone?: "amber" | "green" | "red" | "violet" | "neutral";
           icon?: React.ReactNode;
         }> = [];
+        // The work chip is the floater's headline: "currently working on…"
+        if (avatar.workingOn) {
+          meta.push({
+            text: avatar.workingOn,
+            tone: "violet",
+            icon: <Zap className="size-2.5" />,
+          });
+        }
         if (bubbles?.[id]) {
           meta.push({
             text: bubbles[id],

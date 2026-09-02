@@ -27,6 +27,7 @@ export interface ConversationSummary {
     avatarUrl: string | null;
     status: string;
     label: string | null;
+    workingOn: string | null;
   }>;
   lastMessage: { body: string; senderId: string; createdAt: string } | null;
   unreadCount: number;

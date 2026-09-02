@@ -329,18 +329,21 @@ export class RealtimeHub {
                   ? PresenceStatus.FOCUSING
                   : PresenceStatus.ONLINE;
         const label = parsed.label ?? null;
-        await this.service.updatePresence(
+        const workingOn = "workingOn" in parsed ? parsed.workingOn : undefined;
+        const row = await this.service.updatePresence(
           client.userId,
           workspaceId,
           status,
           label,
+          workingOn,
         );
         const event: RealtimeEvent = {
           type: "presence.changed",
           workspaceId,
           developerId: client.userId,
           status: parsed.status,
-          label,
+          label: row.customLabel,
+          workingOn: row.workingOn,
           timestamp,
         };
         this.publishToWorkspace(workspaceId, event);

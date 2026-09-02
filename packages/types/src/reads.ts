@@ -82,6 +82,8 @@ export interface DeveloperRef {
   /** Presence status + optional custom label (world overlay only). */
   status?: string | null;
   label?: string | null;
+  /** User-set "currently working on" text, when presence recorded one. */
+  workingOn?: string | null;
 }
 
 export interface RepositoryRef {
