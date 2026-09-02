@@ -5,8 +5,33 @@ export const presenceStatusSchema = z.enum([
   "away",
   "on_call",
   "busy",
+  "focusing",
   "offline",
 ]);
+
+export const pairSessionMemberSchema = z.object({
+  userId: z.string(),
+  name: z.string(),
+});
+
+export const pairSessionSchema = z.object({
+  id: z.string(),
+  roomId: z.string(),
+  status: z.enum(["pending", "active", "ended"]),
+  repositoryId: z.string().nullable(),
+  members: z.array(pairSessionMemberSchema).min(2).max(2),
+  startedBy: z.string(),
+  startedAt: z.string(),
+  endedAt: z.string().nullable(),
+});
+export type PairSession = z.infer<typeof pairSessionSchema>;
+
+export const pairSessionCreateSchema = z.object({
+  roomId: z.string().min(1).max(100),
+  repositoryId: z.string().min(1).max(120).nullable().optional(),
+  members: z.array(z.string()).min(2).max(2),
+});
+export type PairSessionCreate = z.infer<typeof pairSessionCreateSchema>;
 
 /**
  * Realtime events sent from the server to clients over WebSocket.
@@ -203,6 +228,29 @@ export const realtimeEventSchema = z.discriminatedUnion("type", [
     strokes: z.array(whiteboardStrokeSchema).max(200),
     timestamp: z.number(),
   }),
+  z.object({
+    type: z.literal("focus.invite"),
+    workspaceId: z.string(),
+    fromId: z.string(),
+    toId: z.string(),
+    action: z.enum(["invite", "accept", "decline", "end"]),
+    timestamp: z.number(),
+  }),
+  z.object({
+    type: z.literal("pair.session"),
+    workspaceId: z.string(),
+    session: pairSessionSchema,
+    timestamp: z.number(),
+  }),
+  z.object({
+    type: z.literal("pair.cursor"),
+    workspaceId: z.string(),
+    sessionId: z.string(),
+    developerId: z.string(),
+    x: z.number().min(0).max(1),
+    y: z.number().min(0).max(1),
+    timestamp: z.number(),
+  }),
 ]);
 
 export type RealtimeEvent = z.infer<typeof realtimeEventSchema>;
@@ -219,7 +267,7 @@ export const realtimeClientMessageSchema = z.discriminatedUnion("type", [
   }),
   z.object({
     type: z.literal("presence.update"),
-    status: z.enum(["online", "away", "on_call", "busy"]),
+    status: z.enum(["online", "away", "on_call", "busy", "focusing"]),
     /** Optional user-set label shown next to their name. */
     label: z.string().min(1).max(60).optional(),
   }),
@@ -254,6 +302,17 @@ export const realtimeClientMessageSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("whiteboard.history.request"),
     boardId: z.string().min(1).max(120),
+  }),
+  z.object({
+    type: z.literal("focus.invite"),
+    toId: z.string().min(1),
+    action: z.enum(["invite", "accept", "decline", "end"]),
+  }),
+  z.object({
+    type: z.literal("pair.cursor"),
+    sessionId: z.string().min(1),
+    x: z.number().min(0).max(1),
+    y: z.number().min(0).max(1),
   }),
 ]);
 

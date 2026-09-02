@@ -48,6 +48,7 @@ model User {
   sentMessages            Message[]
   conversationsCreated    Conversation[]          @relation("ConversationCreator")
   githubNotifications     GitHubNotification[]
+  pairSessionMembers      PairSessionMember[]
 }
 
 model Organization {
@@ -87,6 +88,7 @@ model Workspace {
   maps              WorkspaceMap[]
   conversations     Conversation[]
   presences         Presence[]
+  pairSessions      PairSession[]
   privacySetting    PrivacySetting?
   invites           Invite[]
   githubInstallations GitHubInstallation[]
@@ -320,6 +322,7 @@ model Repository {
   agentSessions  AgentSession[]
   testRuns       TestRun[]
   issues         Issue[]
+  pairSessions   PairSession[]
 
   @@unique([workspaceId, name])
 }
@@ -700,6 +703,42 @@ model Presence {
   @@unique([userId, workspaceId])
 }
 
+enum PairSessionStatus {
+  PENDING
+  ACTIVE
+  ENDED
+}
+
+model PairSession {
+  id           String            @id @default(cuid())
+  workspaceId  String
+  roomId       String
+  status       PairSessionStatus @default(ACTIVE)
+  repositoryId String?
+  startedBy    String
+  startedAt    DateTime          @default(now())
+  endedAt      DateTime?
+
+  workspace  Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  repository Repository?        @relation(fields: [repositoryId], references: [id], onDelete: SetNull)
+  members    PairSessionMember[]
+
+  @@index([workspaceId, status])
+  @@index([workspaceId, startedAt])
+}
+
+model PairSessionMember {
+  id            String @id @default(cuid())
+  pairSessionId String
+  userId        String
+  name          String
+
+  pairSession PairSession @relation(fields: [pairSessionId], references: [id], onDelete: Cascade)
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([pairSessionId, userId])
+}
+
 model PrivacySetting {
   id                     String   @id @default(cuid())
   workspaceId            String   @unique
@@ -943,6 +982,7 @@ enum PresenceStatus {
   AWAY
   ON_CALL
   BUSY
+  FOCUSING
   OFFLINE
 }
 

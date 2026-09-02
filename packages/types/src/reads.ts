@@ -97,7 +97,8 @@ export interface MapRead {
     userId: string;
     name: string;
     avatarUrl: string | null;
-    status: "online" | "away" | "on_call" | "busy" | "offline" | null;
+    status:
+      "online" | "away" | "on_call" | "busy" | "focusing" | "offline" | null;
     position: { x: number; y: number; roomId: string | null } | null;
   }>;
 }

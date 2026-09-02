@@ -325,7 +325,9 @@ export class RealtimeHub {
               ? PresenceStatus.ON_CALL
               : parsed.status === "busy"
                 ? PresenceStatus.BUSY
-                : PresenceStatus.ONLINE;
+                : parsed.status === "focusing"
+                  ? PresenceStatus.FOCUSING
+                  : PresenceStatus.ONLINE;
         const label = parsed.label ?? null;
         await this.service.updatePresence(
           client.userId,
@@ -439,6 +441,31 @@ export class RealtimeHub {
           timestamp,
         };
         ws.send(JSON.stringify(event));
+        break;
+      }
+      case "focus.invite": {
+        const event: RealtimeEvent = {
+          type: "focus.invite",
+          workspaceId,
+          fromId: client.userId,
+          toId: parsed.toId,
+          action: parsed.action,
+          timestamp,
+        };
+        this.publishToWorkspace(workspaceId, event);
+        break;
+      }
+      case "pair.cursor": {
+        const event: RealtimeEvent = {
+          type: "pair.cursor",
+          workspaceId,
+          sessionId: parsed.sessionId,
+          developerId: client.userId,
+          x: parsed.x,
+          y: parsed.y,
+          timestamp,
+        };
+        this.publishToWorkspace(workspaceId, event);
         break;
       }
     }

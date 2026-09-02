@@ -147,6 +147,46 @@ function VideoTile({
   );
 }
 
+function ScreenTile({
+  participant,
+  label,
+  version,
+}: {
+  participant: RemoteParticipant;
+  label: string;
+  version: number;
+}) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    const videoEl = videoRef.current;
+    if (!videoEl) return;
+    const pub = participant
+      .getTrackPublications()
+      .find((x) => x.source === Track.Source.ScreenShare && x.track);
+    const track = pub?.track;
+    if (!track) return;
+    track.attach(videoEl);
+    return () => {
+      track.detach(videoEl);
+    };
+  }, [participant, version]);
+
+  return (
+    <div className="relative w-96 overflow-hidden rounded-xl bg-neutral-900 ring-1 ring-black/10">
+      <video
+        ref={videoRef}
+        autoPlay
+        playsInline
+        className="aspect-video w-full object-contain"
+      />
+      <span className="absolute bottom-1.5 left-2 rounded-md bg-black/55 px-1.5 py-0.5 text-[10px] font-medium text-white">
+        Screen — {label}
+      </span>
+    </div>
+  );
+}
+
 export function CallStage({
   room,
   nearIds,
@@ -189,23 +229,49 @@ export function CallStage({
     id === myUserId ? "You" : (nameOf?.(id) ?? id);
   const ids = [...nearIds];
 
+  // Any remote actively sharing their screen (other than my own video feed).
+  const shares = [...room.remoteParticipants.values()].filter((p) =>
+    p
+      .getTrackPublications()
+      .some(
+        (x) =>
+          x.source === Track.Source.ScreenShare && x.track && x.isSubscribed,
+      ),
+  );
+
   return (
-    <div className="flex flex-row gap-2">
-      <VideoTile
-        room={room}
-        identity="__local__"
-        label="You"
-        version={version}
-      />
-      {ids.map((id) => (
+    <div className="flex flex-col items-center gap-2">
+      <div className="flex flex-row gap-2">
         <VideoTile
-          key={id}
           room={room}
-          identity={id}
-          label={labelFor(id)}
+          identity="__local__"
+          label="You"
           version={version}
         />
-      ))}
+        {ids.map((id) =>
+          shares.some((p) => p.identity === id) ? null : (
+            <VideoTile
+              key={id}
+              room={room}
+              identity={id}
+              label={labelFor(id)}
+              version={version}
+            />
+          ),
+        )}
+      </div>
+      {shares.length > 0 && (
+        <div className="flex flex-row gap-2">
+          {shares.map((p) => (
+            <ScreenTile
+              key={p.identity}
+              participant={p}
+              label={labelFor(p.identity)}
+              version={version}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

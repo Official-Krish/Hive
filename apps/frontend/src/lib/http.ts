@@ -2,6 +2,8 @@ import type {
   ChatMessageDto,
   ConversationSummary,
   GitHubNotificationsResponse,
+  PairSession,
+  PairSessionCreate,
 } from "@hive/types";
 import { API_BASE_URL } from "./config";
 
@@ -1067,6 +1069,27 @@ export const http = {
       request(`/api/v1/workspaces/${workspaceId}/livekit/token`, {
         method: "POST",
       }),
+  },
+
+  /* ── pair sessions ── */
+  pairSessions: {
+    active: (workspaceId: string): Promise<{ session: PairSession | null }> =>
+      request(`/api/v1/workspaces/${workspaceId}/pair-sessions/active`),
+
+    create: (
+      workspaceId: string,
+      input: PairSessionCreate,
+    ): Promise<{ session: PairSession }> =>
+      request(`/api/v1/workspaces/${workspaceId}/pair-sessions`, {
+        method: "POST",
+        body: input,
+      }),
+
+    end: (workspaceId: string, sessionId: string): Promise<{ session: null }> =>
+      request(
+        `/api/v1/workspaces/${workspaceId}/pair-sessions/${sessionId}/end`,
+        { method: "PATCH" },
+      ),
   },
 
   /* ── chat ── */

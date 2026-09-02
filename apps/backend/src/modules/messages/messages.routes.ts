@@ -129,11 +129,6 @@ async function listConversations(
                   id: true,
                   name: true,
                   avatarUrl: true,
-                  presences: {
-                    where: { workspaceId },
-                    select: { status: true, customLabel: true },
-                    take: 1,
-                  },
                 },
               },
             },
@@ -165,15 +160,23 @@ async function listConversations(
           createdAt: { gt: p.lastReadAt ?? new Date(0) },
         },
       });
-      const members = c.participants.map((cp) => ({
-        userId: cp.user.id,
-        name: cp.user.name,
-        avatarUrl: cp.user.avatarUrl,
-        status: (
-          cp.user.presences[0]?.status ?? PresenceStatus.OFFLINE
-        ).toLowerCase(),
-        label: cp.user.presences[0]?.customLabel ?? null,
-      }));
+      // Presence for each participant so the UI can show a live status dot.
+      const memberIds = c.participants.map((cp) => cp.user.id);
+      const presenceRows = await prisma.presence.findMany({
+        where: { workspaceId, userId: { in: memberIds } },
+        select: { userId: true, status: true, customLabel: true },
+      });
+      const presenceByUser = new Map(presenceRows.map((r) => [r.userId, r]));
+      const members = c.participants.map((cp) => {
+        const presence = presenceByUser.get(cp.user.id);
+        return {
+          userId: cp.user.id,
+          name: cp.user.name,
+          avatarUrl: cp.user.avatarUrl,
+          status: (presence?.status ?? PresenceStatus.OFFLINE).toLowerCase(),
+          label: presence?.customLabel ?? null,
+        };
+      });
       return {
         id: c.id,
         title: c.title,

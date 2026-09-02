@@ -696,15 +696,13 @@ export class ReadsService {
         name: true,
         email: true,
         avatarUrl: true,
-        presences: {
-          where: { workspaceId },
-          select: { status: true, customLabel: true },
-          take: 1,
-        },
       },
     });
     if (!developer) throw new NotFoundError("Developer not found");
-    const presenceInfo = developer.presences[0];
+    const presenceInfo = await prisma.presence.findFirst({
+      where: { userId: developerId, workspaceId },
+      select: { status: true, customLabel: true },
+    });
 
     const activeSession = await prisma.agentSession.findFirst({
       where: {
@@ -861,9 +859,7 @@ export class ReadsService {
       developer: {
         ...developer,
         presences: undefined,
-        status: presenceInfo
-          ? presenceInfo.status.toLowerCase()
-          : "offline",
+        status: presenceInfo ? presenceInfo.status.toLowerCase() : "offline",
         label: presenceInfo?.customLabel ?? null,
       } as MapOverlay["developer"],
       project: session?.repository

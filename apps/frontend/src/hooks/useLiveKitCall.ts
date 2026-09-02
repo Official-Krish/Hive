@@ -2,6 +2,17 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ConnectionState, Room, RoomEvent } from "livekit-client";
 import { ApiError, http } from "@/lib/http";
 
+export interface LiveKitCallOptions {
+  /** Dev ids whose remote audio stays audible while `muteRemote` is on. */
+  volumePeers?: ReadonlySet<string>;
+  /** Mute every remote participant except those in `volumePeers` (focus rooms). */
+  muteRemote?: boolean;
+  /** Suppress my published mic/camera (focus until a partner accepts). */
+  suppressPublish?: boolean;
+  /** Force-publish my tracks regardless of proximity (active pair session). */
+  forcePublish?: boolean;
+}
+
 export interface LiveKitCallState {
   connected: boolean;
   connecting: boolean;
@@ -9,8 +20,10 @@ export interface LiveKitCallState {
   mediaError: string | null;
   micOn: boolean;
   cameraOn: boolean;
+  sharing: boolean;
   toggleMic: () => void;
   toggleCamera: () => void;
+  toggleShare: () => void;
   room: Room | null;
   visibleIds: ReadonlySet<string>;
 }
@@ -31,18 +44,34 @@ export function useLiveKitCall(
   myUserId: string,
   nearIds: ReadonlySet<string>,
   onlineCount: number,
+  options: LiveKitCallOptions = {},
 ): LiveKitCallState {
+  const { volumePeers, muteRemote, suppressPublish, forcePublish } = options;
+  const mute = Boolean(muteRemote);
+  const suppress = Boolean(suppressPublish);
+  const force = Boolean(forcePublish);
   const [connected, setConnected] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mediaError, setMediaError] = useState<string | null>(null);
   const [micOn, setMicOn] = useState(false);
   const [cameraOn, setCameraOn] = useState(false);
+  const [sharing, setSharing] = useState(false);
   const [room, setRoom] = useState<Room | null>(null);
 
   const roomRef = useRef<Room | null>(null);
   const micIntent = useRef(true);
   const cameraIntent = useRef(true);
+  const screenIntent = useRef(false);
+  const sharingRef = useRef(false);
+  const volumePeersRef = useRef(volumePeers);
+  volumePeersRef.current = volumePeers;
+  const muteRemoteRef = useRef(mute);
+  muteRemoteRef.current = mute;
+  const suppressRef = useRef(suppress);
+  suppressRef.current = suppress;
+  const forceRef = useRef(force);
+  forceRef.current = force;
   const nearKeyRef = useRef("");
 
   const nearKey = [...nearIds].sort().join(",");
@@ -163,7 +192,8 @@ export function useLiveKitCall(
     let timer: ReturnType<typeof setTimeout> | null = null;
 
     const apply = () => {
-      const shouldPublish = nearRef.current;
+      const shouldPublish =
+        (nearRef.current || forceRef.current) && !suppressRef.current;
       const cam = shouldPublish && cameraIntent.current;
       const mic = shouldPublish && micIntent.current;
       safe(
@@ -195,9 +225,23 @@ export function useLiveKitCall(
     };
   }, [nearKey, room, connected]);
 
+  // Focus rooms: any peer standing inside a focus pod stays muted on my side
+  // unless they're my accepted focus partner. Set per-participant volume based
+  // on the current mute policy so only `volumePeers` are audible.
+  useEffect(() => {
+    const r = roomRef.current;
+    if (!r || r.state !== ConnectionState.Connected) return;
+    r.remoteParticipants.forEach((p) => {
+      const audible =
+        !muteRemoteRef.current || volumePeersRef.current?.has(p.identity);
+      p.setVolume(audible ? 1 : 0);
+    });
+  }, [room, connected, mute, volumePeers]);
+
   const toggleMic = useCallback(() => {
     micIntent.current = !micIntent.current;
-    const near = nearKeyRef.current !== "";
+    const near =
+      (nearKeyRef.current !== "" || forceRef.current) && !suppressRef.current;
     setMicOn(micIntent.current && near);
     const r = roomRef.current;
     if (r && r.state === ConnectionState.Connected && near) {
@@ -212,7 +256,8 @@ export function useLiveKitCall(
 
   const toggleCamera = useCallback(() => {
     cameraIntent.current = !cameraIntent.current;
-    const near = nearKeyRef.current !== "";
+    const near =
+      (nearKeyRef.current !== "" || forceRef.current) && !suppressRef.current;
     setCameraOn(cameraIntent.current && near);
     const r = roomRef.current;
     if (r && r.state === ConnectionState.Connected && near) {
@@ -225,6 +270,17 @@ export function useLiveKitCall(
     }
   }, []);
 
+  const toggleShare = useCallback(() => {
+    const next = !sharingRef.current;
+    sharingRef.current = next;
+    screenIntent.current = next;
+    setSharing(next);
+    const r = roomRef.current;
+    if (r && r.state === ConnectionState.Connected) {
+      safe(r.localParticipant.setScreenShareEnabled(next).catch(() => {}));
+    }
+  }, []);
+
   return {
     connected,
     connecting,
@@ -232,8 +288,10 @@ export function useLiveKitCall(
     mediaError,
     micOn,
     cameraOn,
+    sharing,
     toggleMic,
     toggleCamera,
+    toggleShare,
     room,
     visibleIds: nearIds,
   };

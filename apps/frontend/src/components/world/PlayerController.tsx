@@ -27,6 +27,8 @@ interface PlayerControllerProps {
   disabled?: boolean;
   /** When true, the avatar holds a coffee cup (inherits position + heading). */
   coffee?: boolean;
+  /** Hides the avatar + name tag (e.g. under a full-screen modal). */
+  hidden?: boolean;
 }
 
 // --- Movement tuning --------------------------------------------------------
@@ -63,6 +65,7 @@ export function PlayerController({
   onRealtimeMove,
   disabled = false,
   coffee = false,
+  hidden = false,
 }: PlayerControllerProps) {
   const internalGroupRef = useRef<THREE.Group>(null);
   const groupRef = playerRef || internalGroupRef;
@@ -284,14 +287,18 @@ export function PlayerController({
 
   return (
     <group ref={groupRef} position={spawn}>
-      <Avatar
-        modelUrl={modelUrl}
-        motionRef={motionRef}
-        name={name}
-        status={status}
-        badgeColor={badgeColor}
-      />
-      {coffee && <CoffeeCup />}
+      {!hidden && (
+        <>
+          <Avatar
+            modelUrl={modelUrl}
+            motionRef={motionRef}
+            name={name}
+            status={status}
+            badgeColor={badgeColor}
+          />
+          {coffee && <CoffeeCup />}
+        </>
+      )}
     </group>
   );
 }

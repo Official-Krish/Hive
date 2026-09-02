@@ -90,7 +90,12 @@ export class RealtimeService {
     workspaceId: string,
     senderId: string,
     body: string,
-  ): Promise<{ id: string; senderId: string; body: string; createdAt: Date } | null> {
+  ): Promise<{
+    id: string;
+    senderId: string;
+    body: string;
+    createdAt: Date;
+  } | null> {
     if (
       !(await this.isChatParticipant(conversationId, workspaceId, senderId))
     ) {
@@ -160,13 +165,9 @@ export class RealtimeService {
       const session = sessionByUser.get(membership.userId);
       // No Presence row means the developer has never joined the map —
       // report offline rather than assuming online.
-      const status = !presence
-        ? "offline"
-        : presence.status === PresenceStatus.AWAY
-          ? "away"
-          : presence.status === PresenceStatus.OFFLINE
-            ? "offline"
-            : "online";
+      const status = (
+        presence?.status ?? PresenceStatus.OFFLINE
+      ).toLowerCase() as RealtimeMember["status"];
       return {
         userId: membership.userId,
         name: membership.user.name,

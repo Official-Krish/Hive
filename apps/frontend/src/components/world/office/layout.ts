@@ -303,7 +303,8 @@ export const STAIR_GUARDS: Wall[] = [
 // PODS — glazed private rooms. Level 1 gets focus/huddle boxes, level 2 the
 // leadership suite (manager offices, corner office, boardroom).
 // ============================================================================
-export type PodKind = "manager" | "corner" | "board" | "huddle" | "focus";
+export type PodKind =
+  "manager" | "corner" | "board" | "huddle" | "focus" | "pair";
 
 export interface Pod {
   id: string;
@@ -317,24 +318,24 @@ export interface Pod {
 }
 
 export const PODS: Pod[] = [
-  // --- Level 1: huddle boxes in the lounge, focus rooms off the meeting wing
+  // --- Level 1: pair programming rooms in the lounge, focus rooms off the meeting wing
   {
-    id: "huddle-a",
-    name: "Huddle A",
+    id: "pair-1",
+    name: "Pair Programming A",
     level: 1,
     rect: [-33.4, -28.6, -8.4, -4.8],
     door: { side: "e", at: -6.6, width: 1.1 },
-    kind: "huddle",
-    accent: "#f59e0b",
+    kind: "pair",
+    accent: "#6366f1",
   },
   {
-    id: "huddle-b",
-    name: "Huddle B",
+    id: "pair-2",
+    name: "Pair Programming B",
     level: 1,
     rect: [-33.4, -28.6, -4.4, -0.8],
     door: { side: "e", at: -2.6, width: 1.1 },
-    kind: "huddle",
-    accent: "#f59e0b",
+    kind: "pair",
+    accent: "#6366f1",
   },
   {
     id: "focus-1",
@@ -590,6 +591,11 @@ export function roomAt(x: number, z: number, y = 0): string {
   }
   return "Hive Campus";
 }
+
+/** Maps a room name (from `roomAt`) to its pod kind, if any. */
+export const ROOM_KIND: Record<string, PodKind> = Object.fromEntries(
+  PODS.map((p) => [p.name, p.kind]),
+);
 
 // ============================================================================
 // STRUCTURE — columns
@@ -1191,7 +1197,11 @@ export const POD_DESKS: TransformData[] = PODS.filter(
 
 /** Boardroom / huddle tables, derived so they always sit inside their pod. */
 export const POD_TABLES: { pod: Pod; center: Vec3; size: Vec2 }[] = PODS.filter(
-  (p) => p.kind === "board" || p.kind === "huddle" || p.kind === "focus",
+  (p) =>
+    p.kind === "board" ||
+    p.kind === "huddle" ||
+    p.kind === "focus" ||
+    p.kind === "pair",
 ).map((p) => {
   const [x0, x1, z0, z1] = p.rect;
   const w = x1 - x0;
@@ -1244,7 +1254,7 @@ export const POD_LIGHTS: { position: Vec3; length: number; warm: boolean }[] =
     return {
       position: [(x0 + x1) / 2, base + POD_H - 0.12, (z0 + z1) / 2],
       length: Math.max(1.2, (x1 - x0) * 0.7),
-      warm: p.kind === "corner" || p.kind === "huddle",
+      warm: p.kind === "corner" || p.kind === "huddle" || p.kind === "pair",
     };
   });
 
