@@ -354,14 +354,14 @@ export interface RepositoryRef {
 export interface RepositorySummary {
   id: string;
   name: string;
+  url: string | null;
   provider: string;
   workspaceId: string;
   defaultBranch: string | null;
-  lastCommitSha: string | null;
   branchCount: number;
-  commitCount: number;
-  prCount: number;
-  updatedAt: string;
+  openPrCount: number;
+  lastSyncedAt: string | null;
+  createdAt: string;
 }
 
 export interface ActivitySummary {
@@ -396,13 +396,18 @@ export interface AgentSessionSummary {
 
 export interface PullRequestSummary {
   id: string;
+  repository: RepositoryRef;
   number: number;
   title: string;
-  state: string;
-  authorLogin: string | null;
-  repository: RepositoryRef;
+  status: string;
+  url: string | null;
+  authorName: string | null;
+  additions: number | null;
+  deletions: number | null;
   createdAt: string;
   updatedAt: string;
+  mergedAt: string | null;
+  closedAt: string | null;
 }
 
 export interface MetricSummary {
@@ -430,14 +435,27 @@ export interface TaskSummary {
   createdAt: string;
 }
 
+export interface TestRunDeveloper {
+  id: string;
+  name: string;
+  email: string;
+  avatarUrl: string | null;
+}
+
 export interface TestRunSummary {
   id: string;
   status: string;
-  totalTests: number | null;
-  passed: number | null;
-  failed: number | null;
+  command: string | null;
   durationMs: number | null;
+  totalTests: number | null;
+  passedTests: number | null;
+  failedTests: number | null;
+  skippedTests: number | null;
+  developer: TestRunDeveloper | null;
+  repository: RepositoryRef | null;
+  branch: string | null;
   startedAt: string;
+  endedAt: string | null;
 }
 
 export interface IssueSummary {
@@ -629,7 +647,7 @@ export interface IssueFilterParams extends PaginationParams {
 }
 
 export interface PrFilterParams extends PaginationParams {
-  state?: string;
+  status?: string;
 }
 
 export interface AlertFilterParams extends PaginationParams {

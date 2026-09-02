@@ -36,18 +36,22 @@ import { GitHubNotificationBell } from "./GitHubNotificationBell";
 import { CallStage } from "./CallStage";
 import { CallControls } from "./CallControls";
 import { WorkspaceModal } from "./WorkspaceModal";
+import { CiDashboardModal } from "./CiDashboardModal";
 import { WhiteboardModal } from "./WhiteboardModal";
 import { PairSessionModal } from "./PairSessionModal";
 import { PairModeBar } from "./PairModeBar";
 import { PeerCursorOverlay } from "./PeerCursorOverlay";
+import { Confetti, type ConfettiRef } from "@/components/ui/confetti";
 import { cn } from "@/lib/utils";
 import { useChat } from "@/hooks/useChat";
 import {
   Coffee,
   Droplets,
+  Gauge,
   Monitor,
   PenLine,
   Zap,
+  Trophy,
   type LucideIcon,
 } from "lucide-react";
 import type { Interactable, InteractableIcon } from "./interactions";
@@ -62,6 +66,7 @@ const INTERACTABLE_ICONS: Record<InteractableIcon, LucideIcon> = {
   water: Droplets,
   monitor: Monitor,
   board: PenLine,
+  ci: Gauge,
 };
 
 const CHIP =
@@ -332,7 +337,7 @@ export function WorldCanvas({
   interface FeedItem {
     key: string;
     text: string;
-    tone: "push" | "pr" | "test" | "bump" | "focusing";
+    tone: "push" | "pr" | "test" | "bump" | "focusing" | "merge";
     at: number;
   }
   const [feed, setFeed] = useState<FeedItem[]>([]);
@@ -340,6 +345,20 @@ export function WorldCanvas({
   avatarsRef.current = avatars;
   const feedSeq = useRef(0);
   const workingOnSeenRef = useRef<Map<string, string>>(new Map());
+  const confettiRef = useRef<ConfettiRef>(null);
+
+  const fireConfetti = useCallback(() => {
+    void confettiRef.current?.fire({
+      particleCount: 140,
+      spread: 75,
+      startVelocity: 42,
+      scalar: 1.05,
+      ticks: 220,
+      zIndex: 9999,
+      origin: { y: 0.7 },
+      colors: ["#f472b6", "#a78bfa", "#34d399", "#fbbf24", "#38bdf8"],
+    });
+  }, []);
 
   const pushFeed = useCallback((text: string, tone: FeedItem["tone"]) => {
     setFeed((prev) =>
@@ -379,6 +398,7 @@ export function WorldCanvas({
   const [toast, setToast] = useState<React.ReactNode | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
+  const [ciOpen, setCiOpen] = useState(false);
   const [whiteboardId, setWhiteboardId] = useState<string | null>(null);
 
   const showToast = useCallback((node: React.ReactNode) => {
@@ -409,6 +429,9 @@ export function WorldCanvas({
         case "monitor":
           setWorkspaceOpen(true);
           break;
+        case "ci":
+          setCiOpen(true);
+          break;
         case "whiteboard":
           setWhiteboardId(it.id);
           break;
@@ -426,6 +449,7 @@ export function WorldCanvas({
       statusMenu ||
       openMemberId !== null ||
       workspaceOpen ||
+      ciOpen ||
       whiteboardId !== null,
     onPress: handleInteract,
   });
@@ -442,9 +466,23 @@ export function WorldCanvas({
           "push",
         ),
       ),
-      client.on("pr.updated", (e) =>
-        push(`PR #${e.prNumber} ${e.status} · ${e.title}`, "pr"),
-      ),
+      client.on("pr.updated", (e) => {
+        if (e.status === "merged") {
+          const who = e.authorName
+            ? (e.authorId && avatarsRef.current.get(e.authorId)?.name) ||
+              e.authorName
+            : e.authorId && avatarsRef.current.get(e.authorId)?.name;
+          if (e.authorId && e.authorId === myUserId) {
+            push("You merged PR #" + e.prNumber, "merge");
+            fireConfetti();
+          } else {
+            const label = who ? `${who} — ` : "";
+            push(`${label}PR #${e.prNumber} merged`, "merge");
+          }
+        } else {
+          push(`PR #${e.prNumber} ${e.status} · ${e.title}`, "pr");
+        }
+      }),
       client.on("test.finished", (e) =>
         push(
           `${nameOf(e.developerId)} — tests ${e.passed ? "passed" : "failed"}${
@@ -490,7 +528,7 @@ export function WorldCanvas({
       offs.forEach((off) => off());
       clearInterval(prune);
     };
-  }, [client, myUserId, pushFeed, addBubble]);
+  }, [client, myUserId, pushFeed, addBubble, fireConfetti]);
 
   return (
     <div className="relative w-full h-screen overflow-hidden font-sans select-none">
@@ -748,34 +786,37 @@ export function WorldCanvas({
       </div>
 
       {/* Interaction hint + toast (bottom-left, above the movement legend) */}
-      {!workspaceOpen && !whiteboardId && (interaction.near || toast) && (
-        <div className="pointer-events-none absolute bottom-20 left-4 z-10 flex flex-col items-start gap-1.5">
-          {interaction.near &&
-            (() => {
-              const Icon = INTERACTABLE_ICONS[interaction.near.icon];
-              return (
-                <div className={`${CHIP} px-3.5 py-2`}>
-                  <kbd className="rounded-md bg-white px-1.5 py-0.5 font-mono text-[10px] font-semibold text-neutral-800 ring-1 ring-black/[0.09] shadow-[0_1px_0_rgba(28,25,18,0.18)]">
-                    E
-                  </kbd>
-                  <Icon className="size-3.5 shrink-0" />
-                  <span className="text-[12px] font-semibold text-neutral-800">
-                    {interaction.near.prompt}
-                  </span>
-                </div>
-              );
-            })()}
-          {toast && (
-            <div
-              className={`${CHIP} border-amber-500/30 bg-amber-50/95 px-3.5 py-1.5`}
-            >
-              <span className="text-[11.5px] font-semibold text-amber-800">
-                {toast}
-              </span>
-            </div>
-          )}
-        </div>
-      )}
+      {!workspaceOpen &&
+        !ciOpen &&
+        !whiteboardId &&
+        (interaction.near || toast) && (
+          <div className="pointer-events-none absolute bottom-20 left-4 z-10 flex flex-col items-start gap-1.5">
+            {interaction.near &&
+              (() => {
+                const Icon = INTERACTABLE_ICONS[interaction.near.icon];
+                return (
+                  <div className={`${CHIP} px-3.5 py-2`}>
+                    <kbd className="rounded-md bg-white px-1.5 py-0.5 font-mono text-[10px] font-semibold text-neutral-800 ring-1 ring-black/[0.09] shadow-[0_1px_0_rgba(28,25,18,0.18)]">
+                      E
+                    </kbd>
+                    <Icon className="size-3.5 shrink-0" />
+                    <span className="text-[12px] font-semibold text-neutral-800">
+                      {interaction.near.prompt}
+                    </span>
+                  </div>
+                );
+              })()}
+            {toast && (
+              <div
+                className={`${CHIP} border-amber-500/30 bg-amber-50/95 px-3.5 py-1.5`}
+              >
+                <span className="text-[11.5px] font-semibold text-amber-800">
+                  {toast}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
 
       {/* Controls legend */}
       <div className="absolute bottom-4 left-4 z-10 pointer-events-none">
@@ -819,19 +860,23 @@ export function WorldCanvas({
               style={{ transform: `scale(${1 - i * 0.04})` }}
             >
               <span className="shrink-0">
-                <span
-                  className={`h-1.5 w-1.5 rounded-full ${
-                    f.tone === "test"
-                      ? "bg-sky-500"
-                      : f.tone === "pr"
-                        ? "bg-violet-500"
-                        : f.tone === "bump"
-                          ? "bg-amber-500"
-                          : f.tone === "focusing"
-                            ? "bg-purple-500"
-                            : "bg-emerald-500"
-                  }`}
-                />
+                {f.tone === "merge" ? (
+                  <Trophy className="size-3 text-amber-500" />
+                ) : (
+                  <span
+                    className={`inline-block h-1.5 w-1.5 rounded-full ${
+                      f.tone === "test"
+                        ? "bg-sky-500"
+                        : f.tone === "pr"
+                          ? "bg-violet-500"
+                          : f.tone === "bump"
+                            ? "bg-amber-500"
+                            : f.tone === "focusing"
+                              ? "bg-purple-500"
+                              : "bg-emerald-500"
+                    }`}
+                  />
+                )}
               </span>
               <span className="min-w-0 truncate">{f.text}</span>
             </div>
@@ -1055,6 +1100,15 @@ export function WorldCanvas({
         />
       )}
 
+      {/* Engineering CI wall screen */}
+      {ciOpen && (
+        <CiDashboardModal
+          workspaceId={workspaceId}
+          client={client}
+          onClose={() => setCiOpen(false)}
+        />
+      )}
+
       {/* Whiteboard — shared canvas for the board you pressed E on */}
       {whiteboardId && (
         <WhiteboardModal
@@ -1098,6 +1152,13 @@ export function WorldCanvas({
           </div>
         </div>
       )}
+
+      {/* Merge celebration — fires only when one of MY pull requests merges. */}
+      <Confetti
+        ref={confettiRef}
+        manualstart
+        className="pointer-events-none fixed inset-0 z-[9999] h-full w-full"
+      />
     </div>
   );
 }

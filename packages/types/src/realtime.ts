@@ -187,6 +187,8 @@ export const realtimeEventSchema = z.discriminatedUnion("type", [
     prNumber: z.number(),
     title: z.string(),
     status: z.string(),
+    authorId: z.string().nullable().optional(),
+    authorName: z.string().nullable().optional(),
     timestamp: z.number(),
   }),
   z.object({

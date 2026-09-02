@@ -1,8 +1,9 @@
 import { DESKS, L2_DESKS, POD_DESKS, type Vec2 } from "./office/layout";
 
-export type InteractableKind = "coffee" | "cooler" | "monitor" | "whiteboard";
+export type InteractableKind =
+  "coffee" | "cooler" | "monitor" | "whiteboard" | "ci";
 
-export type InteractableIcon = "coffee" | "water" | "monitor" | "board";
+export type InteractableIcon = "coffee" | "water" | "monitor" | "board" | "ci";
 
 export interface Interactable {
   id: string;
@@ -51,6 +52,64 @@ const WHITEBOARD_SPOTS: Array<[number, number]> = [
   [-2.7, -13], // corridor west wall (south)
 ];
 
+/**
+ * Wall screens that host the "Build / CI" dashboard. Each entry is a standing
+ * point in front of the screen face. Engineering zone: the workspace west wall,
+ * the workspace divider, and the three AI-lab "mission-control" screens.
+ */
+const CI_SCREENS: Interactable[] = [
+  {
+    id: "ci-screen-westwall",
+    kind: "ci",
+    x: -32.2,
+    z: 6,
+    y: 0,
+    radius: 2.6,
+    prompt: "Engineering CI",
+    icon: "ci",
+  },
+  {
+    id: "ci-screen-divider",
+    kind: "ci",
+    x: -28,
+    z: 1.7,
+    y: 0,
+    radius: 2.6,
+    prompt: "Engineering CI",
+    icon: "ci",
+  },
+  {
+    id: "ci-screen-ailab-1",
+    kind: "ci",
+    x: 11,
+    z: -16.4,
+    y: 0,
+    radius: 3.6,
+    prompt: "Engineering CI",
+    icon: "ci",
+  },
+  {
+    id: "ci-screen-ailab-2",
+    kind: "ci",
+    x: 17.5,
+    z: -16.4,
+    y: 0,
+    radius: 3.6,
+    prompt: "Engineering CI",
+    icon: "ci",
+  },
+  {
+    id: "ci-screen-ailab-3",
+    kind: "ci",
+    x: 24,
+    z: -16.4,
+    y: 0,
+    radius: 3.6,
+    prompt: "Engineering CI",
+    icon: "ci",
+  },
+];
+
 /** Every desk gets a "workspace" monitor you can lean in and use. */
 function monitorSpots(): Interactable[] {
   return [...DESKS, ...L2_DESKS, ...POD_DESKS].map((d, i) => {
@@ -72,6 +131,7 @@ function monitorSpots(): Interactable[] {
 export const INTERACTABLES: Interactable[] = [
   COFFEE,
   COOLER,
+  ...CI_SCREENS,
   ...WHITEBOARD_SPOTS.map(([x, z], i): Interactable => ({
     id: `whiteboard-${i}`,
     kind: "whiteboard",

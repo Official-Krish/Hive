@@ -100,7 +100,7 @@ export function PairSessionModal({
                   <FiGithub className="size-3.5 shrink-0" />
                   <span className="truncate font-medium">{r.name}</span>
                 </span>
-                {r.prCount > 0 && (
+                {r.openPrCount > 0 && (
                   <span
                     className={cn(
                       "shrink-0 rounded-full px-1.5 py-0.5 text-[9.5px] font-semibold",
@@ -109,7 +109,7 @@ export function PairSessionModal({
                         : "bg-indigo-50 text-indigo-600",
                     )}
                   >
-                    {r.prCount} pr{r.prCount === 1 ? "" : "s"}
+                    {r.openPrCount} pr{r.openPrCount === 1 ? "" : "s"}
                   </span>
                 )}
               </button>
