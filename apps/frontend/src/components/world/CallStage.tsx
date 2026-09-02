@@ -1,5 +1,5 @@
-import { useEffect, useReducer, useRef } from "react";
-import { FiMic, FiMicOff } from "react-icons/fi";
+import { useEffect, useReducer, useRef, useState } from "react";
+import { FiMaximize, FiMic, FiMicOff, FiX } from "react-icons/fi";
 import { Room, RoomEvent, Track, type RemoteParticipant } from "livekit-client";
 
 function VideoTile({
@@ -147,6 +147,116 @@ function VideoTile({
   );
 }
 
+function ScreenTile({
+  participant,
+  label,
+  version,
+  onExpand,
+}: {
+  participant: RemoteParticipant;
+  label: string;
+  version: number;
+  onExpand: () => void;
+}) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    const videoEl = videoRef.current;
+    if (!videoEl) return;
+    const pub = participant
+      .getTrackPublications()
+      .find((x) => x.source === Track.Source.ScreenShare && x.track);
+    const track = pub?.track;
+    if (!track) return;
+    track.attach(videoEl);
+    return () => {
+      track.detach(videoEl);
+    };
+  }, [participant, version]);
+
+  return (
+    <button
+      type="button"
+      onClick={onExpand}
+      title="Open full screen"
+      className="group relative w-96 overflow-hidden rounded-xl bg-neutral-900 ring-1 ring-black/10 transition-shadow hover:ring-indigo-400"
+    >
+      <video
+        ref={videoRef}
+        autoPlay
+        playsInline
+        className="aspect-video w-full object-contain"
+      />
+      <span className="absolute bottom-1.5 left-2 rounded-md bg-black/55 px-1.5 py-0.5 text-[10px] font-medium text-white">
+        Screen — {label}
+      </span>
+      <span className="absolute right-1.5 top-1.5 grid size-7 place-items-center rounded-lg bg-black/45 text-white opacity-0 transition-opacity group-hover:opacity-100">
+        <FiMaximize className="size-3.5" />
+      </span>
+    </button>
+  );
+}
+
+/** Full-window viewer for a remote screen share, with an exit button. */
+function ScreenFocusModal({
+  participant,
+  label,
+  version,
+  onClose,
+}: {
+  participant: RemoteParticipant | undefined;
+  label: string;
+  version: number;
+  onClose: () => void;
+}) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    const videoEl = videoRef.current;
+    if (!videoEl || !participant) return;
+    const track = participant
+      .getTrackPublications()
+      .find((x) => x.source === Track.Source.ScreenShare && x.track)?.track;
+    if (!track) return;
+    track.attach(videoEl);
+    return () => {
+      track.detach(videoEl);
+    };
+  }, [participant, version]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 z-40 flex flex-col bg-black/95">
+      <div className="flex items-center justify-between gap-3 px-4 py-2.5">
+        <span className="text-[12.5px] font-semibold text-white">
+          Screen — {label}
+        </span>
+        <button
+          type="button"
+          onClick={onClose}
+          title="Exit full screen (Esc)"
+          className="flex items-center gap-2 rounded-lg bg-white/10 px-3 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-white/20"
+        >
+          <FiX className="size-4" /> Exit
+        </button>
+      </div>
+      <video
+        ref={videoRef}
+        autoPlay
+        playsInline
+        className="h-full w-full object-contain"
+      />
+    </div>
+  );
+}
+
 export function CallStage({
   room,
   nearIds,
@@ -159,6 +269,7 @@ export function CallStage({
   nameOf?: (id: string) => string;
 }) {
   const [version, bump] = useReducer((v: number) => v + 1, 0);
+  const [expanded, setExpanded] = useState<string | null>(null);
 
   useEffect(() => {
     if (!room) return;
@@ -183,29 +294,88 @@ export function CallStage({
     };
   }, [room]);
 
+  // Close the full-screen viewer automatically if the share is gone (stopped,
+  // unsubscribed, or the participant left).
+  useEffect(() => {
+    if (!room || !expanded) return;
+    const stillSharing = [...room.remoteParticipants.values()].some(
+      (p) =>
+        p.identity === expanded &&
+        p
+          .getTrackPublications()
+          .some(
+            (x) =>
+              x.source === Track.Source.ScreenShare &&
+              x.track &&
+              x.isSubscribed,
+          ),
+    );
+    if (!stillSharing) setExpanded(null);
+  }, [room, expanded, version]);
+
   if (!room) return null;
 
   const labelFor = (id: string) =>
     id === myUserId ? "You" : (nameOf?.(id) ?? id);
   const ids = [...nearIds];
 
+  // Any remote actively sharing their screen (other than my own video feed).
+  const shares = [...room.remoteParticipants.values()].filter((p) =>
+    p
+      .getTrackPublications()
+      .some(
+        (x) =>
+          x.source === Track.Source.ScreenShare && x.track && x.isSubscribed,
+      ),
+  );
+
   return (
-    <div className="flex flex-row gap-2">
-      <VideoTile
-        room={room}
-        identity="__local__"
-        label="You"
-        version={version}
-      />
-      {ids.map((id) => (
+    <div className="flex flex-col items-center gap-2">
+      <div className="flex flex-row gap-2">
         <VideoTile
-          key={id}
           room={room}
-          identity={id}
-          label={labelFor(id)}
+          identity="__local__"
+          label="You"
           version={version}
         />
-      ))}
+        {ids.map((id) =>
+          shares.some((p) => p.identity === id) ? null : (
+            <VideoTile
+              key={id}
+              room={room}
+              identity={id}
+              label={labelFor(id)}
+              version={version}
+            />
+          ),
+        )}
+      </div>
+      {shares.length > 0 && (
+        <div className="flex flex-row gap-2">
+          {shares.map((p) => (
+            <ScreenTile
+              key={p.identity}
+              participant={p}
+              label={labelFor(p.identity)}
+              version={version}
+              onExpand={() => setExpanded(p.identity)}
+            />
+          ))}
+        </div>
+      )}
+
+      {expanded && (
+        <ScreenFocusModal
+          key={expanded}
+          participant={
+            room.getParticipantByIdentity(expanded) as
+              RemoteParticipant | undefined
+          }
+          label={labelFor(expanded)}
+          version={version}
+          onClose={() => setExpanded(null)}
+        />
+      )}
     </div>
   );
 }

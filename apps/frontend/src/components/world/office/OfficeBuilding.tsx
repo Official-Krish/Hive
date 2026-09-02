@@ -4,6 +4,7 @@ import { Fittings } from "./Fittings";
 import { Courtyard } from "./Courtyard";
 import { Stairs } from "./Stairs";
 import { Level2 } from "./Level2";
+import { ChillSpace } from "./ChillSpace";
 
 /**
  * Full explorable environment, layered:
@@ -22,6 +23,7 @@ export function OfficeBuilding() {
       <Shell />
       <Fittings />
       <Furnishings />
+      <ChillSpace />
       <Stairs />
       <Level2 />
       <Courtyard />

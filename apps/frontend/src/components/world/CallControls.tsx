@@ -1,6 +1,7 @@
 import {
   FiMic,
   FiMicOff,
+  FiMonitor,
   FiSettings,
   FiVideo,
   FiVideoOff,
@@ -9,13 +10,17 @@ import {
 export function CallControls({
   micOn,
   cameraOn,
+  sharing,
   toggleMic,
   toggleCamera,
+  toggleShare,
 }: {
   micOn: boolean;
   cameraOn: boolean;
+  sharing: boolean;
   toggleMic: () => void;
   toggleCamera: () => void;
+  toggleShare: () => void;
 }) {
   return (
     <div className="flex items-center gap-1.5 rounded-full bg-[#f4f2ed]/95 px-2 py-1.5 shadow-[0_12px_28px_-16px_rgba(28,25,18,0.5)] ring-1 ring-black/[0.09] backdrop-blur-sm">
@@ -46,6 +51,18 @@ export function CallControls({
         ) : (
           <FiVideoOff className="size-4" />
         )}
+      </button>
+      <button
+        type="button"
+        onClick={toggleShare}
+        title={sharing ? "Stop sharing screen" : "Share screen"}
+        className={`grid size-9 place-items-center rounded-full transition-colors ${
+          sharing
+            ? "bg-emerald-600 text-white hover:bg-emerald-700"
+            : "bg-white text-neutral-700 hover:bg-neutral-50"
+        }`}
+      >
+        <FiMonitor className="size-4" />
       </button>
       <button
         type="button"

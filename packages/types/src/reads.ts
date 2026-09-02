@@ -82,6 +82,8 @@ export interface DeveloperRef {
   /** Presence status + optional custom label (world overlay only). */
   status?: string | null;
   label?: string | null;
+  /** User-set "currently working on" text, when presence recorded one. */
+  workingOn?: string | null;
 }
 
 export interface RepositoryRef {
@@ -97,7 +99,8 @@ export interface MapRead {
     userId: string;
     name: string;
     avatarUrl: string | null;
-    status: "online" | "away" | "on_call" | "busy" | "offline" | null;
+    status:
+      "online" | "away" | "on_call" | "busy" | "focusing" | "offline" | null;
     position: { x: number; y: number; roomId: string | null } | null;
   }>;
 }

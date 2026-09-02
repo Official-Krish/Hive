@@ -7,6 +7,7 @@ import {
   type DeviceControl,
   type RealtimeClientMessage,
   type RealtimeEvent,
+  type WhiteboardStroke,
 } from "@hive/types";
 import { ACCESS_COOKIE } from "../../lib/cookies";
 import { hashToken } from "../../lib/crypto";
@@ -48,6 +49,8 @@ export class RealtimeHub {
   private readonly devices = new DeviceService();
   private readonly clients = new Map<Socket, RealtimeClientData>();
   private readonly deviceSockets = new Map<Socket, DeviceSocketData>();
+  /** Per-board whiteboard stroke history (in-memory relay for late joiners). */
+  private readonly whiteboardHistory = new Map<string, WhiteboardStroke[]>();
   private server: WsServer | null = null;
 
   constructor(private readonly options: RealtimeHubOptions) {}
@@ -249,6 +252,23 @@ export class RealtimeHub {
         timestamp,
       };
       this.publishToWorkspace(client.workspaceId, online);
+
+      const chill = await this.service.getChillMedia(client.workspaceId);
+      if (chill) {
+        const media: RealtimeEvent = {
+          type: "chill.media.state",
+          workspaceId: client.workspaceId,
+          videoUrl: chill.videoUrl,
+          videoId: chill.videoId,
+          title: chill.title,
+          isPlaying: chill.isPlaying,
+          playheadMs: chill.playheadMs,
+          at: chill.at,
+          setByName: chill.setByName,
+          timestamp,
+        };
+        ws.send(JSON.stringify(media));
+      }
     } catch (err) {
       console.error(
         `[hive] realtime open failed for user ${client.userId}`,
@@ -322,20 +342,25 @@ export class RealtimeHub {
               ? PresenceStatus.ON_CALL
               : parsed.status === "busy"
                 ? PresenceStatus.BUSY
-                : PresenceStatus.ONLINE;
+                : parsed.status === "focusing"
+                  ? PresenceStatus.FOCUSING
+                  : PresenceStatus.ONLINE;
         const label = parsed.label ?? null;
-        await this.service.updatePresence(
+        const workingOn = "workingOn" in parsed ? parsed.workingOn : undefined;
+        const row = await this.service.updatePresence(
           client.userId,
           workspaceId,
           status,
           label,
+          workingOn,
         );
         const event: RealtimeEvent = {
           type: "presence.changed",
           workspaceId,
           developerId: client.userId,
           status: parsed.status,
-          label,
+          label: row.customLabel,
+          workingOn: row.workingOn,
           timestamp,
         };
         this.publishToWorkspace(workspaceId, event);
@@ -383,6 +408,170 @@ export class RealtimeHub {
           timestamp,
         };
         this.publishToWorkspace(workspaceId, event);
+        break;
+      }
+      case "social.bump": {
+        // Relay-only: a member signals they're idling at the water cooler.
+        const event: RealtimeEvent = {
+          type: "social.bump",
+          workspaceId,
+          developerId: client.userId,
+          roomId: parsed.roomId,
+          timestamp,
+        };
+        this.publishToWorkspace(workspaceId, event);
+        break;
+      }
+      case "whiteboard.stroke": {
+        const MAX_STROKES_PER_BOARD = 200;
+        const board = this.whiteboardHistory.get(parsed.boardId) ?? [];
+        board.push(parsed.stroke);
+        if (board.length > MAX_STROKES_PER_BOARD) {
+          board.splice(0, board.length - MAX_STROKES_PER_BOARD);
+        }
+        this.whiteboardHistory.set(parsed.boardId, board);
+        const event: RealtimeEvent = {
+          type: "whiteboard.stroke",
+          workspaceId,
+          boardId: parsed.boardId,
+          stroke: parsed.stroke,
+          timestamp,
+        };
+        this.publishToWorkspace(workspaceId, event);
+        break;
+      }
+      case "whiteboard.clear": {
+        this.whiteboardHistory.delete(parsed.boardId);
+        const event: RealtimeEvent = {
+          type: "whiteboard.clear",
+          workspaceId,
+          boardId: parsed.boardId,
+          clearedBy: client.userId,
+          timestamp,
+        };
+        this.publishToWorkspace(workspaceId, event);
+        break;
+      }
+      case "whiteboard.history.request": {
+        const event: RealtimeEvent = {
+          type: "whiteboard.history",
+          workspaceId,
+          boardId: parsed.boardId,
+          strokes: this.whiteboardHistory.get(parsed.boardId) ?? [],
+          timestamp,
+        };
+        ws.send(JSON.stringify(event));
+        break;
+      }
+      case "focus.invite": {
+        const event: RealtimeEvent = {
+          type: "focus.invite",
+          workspaceId,
+          fromId: client.userId,
+          toId: parsed.toId,
+          action: parsed.action,
+          timestamp,
+        };
+        this.publishToWorkspace(workspaceId, event);
+        break;
+      }
+      case "pair.cursor": {
+        const event: RealtimeEvent = {
+          type: "pair.cursor",
+          workspaceId,
+          sessionId: parsed.sessionId,
+          developerId: client.userId,
+          x: parsed.x,
+          y: parsed.y,
+          timestamp,
+        };
+        this.publishToWorkspace(workspaceId, event);
+        break;
+      }
+      case "chill.setUrl": {
+        let state;
+        try {
+          state = await this.service.setChillUrl(
+            workspaceId,
+            client.userId,
+            parsed.url,
+          );
+        } catch (err) {
+          // Invalid YouTube URL — notify the sender only.
+          const invalid: RealtimeEvent = {
+            type: "chill.media.state",
+            workspaceId,
+            videoUrl: null,
+            videoId: null,
+            title: null,
+            isPlaying: false,
+            playheadMs: 0,
+            at: Date.now(),
+            timestamp,
+          };
+          ws.send(JSON.stringify(invalid));
+          void err;
+          break;
+        }
+        const event: RealtimeEvent = {
+          type: "chill.media.state",
+          workspaceId,
+          videoUrl: state.videoUrl,
+          videoId: state.videoId,
+          title: state.title,
+          isPlaying: state.isPlaying,
+          playheadMs: state.playheadMs,
+          at: state.at,
+          setByName: state.setByName,
+          timestamp,
+        };
+        this.publishToWorkspace(workspaceId, event);
+        break;
+      }
+      case "chill.media.play":
+      case "chill.media.pause": {
+        const isPlaying = parsed.type === "chill.media.play";
+        const state = await this.service.setChillPlaying(
+          workspaceId,
+          isPlaying,
+        );
+        if (state) {
+          const event: RealtimeEvent = {
+            type: "chill.media.state",
+            workspaceId,
+            videoUrl: state.videoUrl,
+            videoId: state.videoId,
+            title: state.title,
+            isPlaying: state.isPlaying,
+            playheadMs: state.playheadMs,
+            at: state.at,
+            setByName: state.setByName,
+            timestamp,
+          };
+          this.publishToWorkspace(workspaceId, event);
+        }
+        break;
+      }
+      case "chill.media.seek": {
+        const state = await this.service.seekChill(
+          workspaceId,
+          parsed.playheadMs,
+        );
+        if (state) {
+          const event: RealtimeEvent = {
+            type: "chill.media.state",
+            workspaceId,
+            videoUrl: state.videoUrl,
+            videoId: state.videoId,
+            title: state.title,
+            isPlaying: state.isPlaying,
+            playheadMs: state.playheadMs,
+            at: state.at,
+            setByName: state.setByName,
+            timestamp,
+          };
+          this.publishToWorkspace(workspaceId, event);
+        }
         break;
       }
     }

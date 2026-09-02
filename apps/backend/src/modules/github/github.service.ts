@@ -56,6 +56,7 @@ interface GitHubPullRequestPayload {
     closed_at?: string | null;
     head?: { ref?: string | null };
     base?: { ref?: string | null };
+    user?: { id?: number; login?: string };
   };
 }
 
@@ -724,6 +725,17 @@ export class GitHubService {
     });
 
     if (repo.workspaceId) {
+      const author = pr.user
+        ? await prisma.gitHubAccount.findFirst({
+            where: {
+              OR: [
+                ...(pr.user.id ? [{ githubId: pr.user.id }] : []),
+                ...(pr.user.login ? [{ login: pr.user.login }] : []),
+              ],
+            },
+            select: { userId: true, login: true },
+          })
+        : null;
       const event: RealtimeEvent = {
         type: "pr.updated",
         workspaceId: repo.workspaceId,
@@ -732,6 +744,8 @@ export class GitHubService {
         prNumber: pr.number,
         title: upserted.title,
         status: upserted.status,
+        authorId: author?.userId ?? null,
+        authorName: author?.login ?? pr.user?.login ?? null,
         timestamp: Date.now(),
       };
       realtimeBus.publish(repo.workspaceId, event);

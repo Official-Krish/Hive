@@ -48,6 +48,8 @@ model User {
   sentMessages            Message[]
   conversationsCreated    Conversation[]          @relation("ConversationCreator")
   githubNotifications     GitHubNotification[]
+  pairSessionMembers      PairSessionMember[]
+  chillMediaSet           ChillMedia[]
 }
 
 model Organization {
@@ -87,6 +89,8 @@ model Workspace {
   maps              WorkspaceMap[]
   conversations     Conversation[]
   presences         Presence[]
+  pairSessions      PairSession[]
+  chillMedia        ChillMedia?
   privacySetting    PrivacySetting?
   invites           Invite[]
   githubInstallations GitHubInstallation[]
@@ -320,6 +324,7 @@ model Repository {
   agentSessions  AgentSession[]
   testRuns       TestRun[]
   issues         Issue[]
+  pairSessions   PairSession[]
 
   @@unique([workspaceId, name])
 }
@@ -689,6 +694,7 @@ model Presence {
   workspaceId String
   status      PresenceStatus @default(OFFLINE)
   customLabel String?
+  workingOn   String?
   activityId  String?        @unique
   position    Json?
   lastSeenAt  DateTime       @default(now())
@@ -698,6 +704,59 @@ model Presence {
   activity  Activity? @relation(fields: [activityId], references: [id], onDelete: SetNull)
 
   @@unique([userId, workspaceId])
+}
+
+enum PairSessionStatus {
+  PENDING
+  ACTIVE
+  ENDED
+}
+
+model PairSession {
+  id           String            @id @default(cuid())
+  workspaceId  String
+  roomId       String
+  status       PairSessionStatus @default(ACTIVE)
+  repositoryId String?
+  startedBy    String
+  startedAt    DateTime          @default(now())
+  endedAt      DateTime?
+
+  workspace  Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  repository Repository?        @relation(fields: [repositoryId], references: [id], onDelete: SetNull)
+  members    PairSessionMember[]
+
+  @@index([workspaceId, status])
+  @@index([workspaceId, startedAt])
+}
+
+model PairSessionMember {
+  id            String @id @default(cuid())
+  pairSessionId String
+  userId        String
+  name          String
+
+  pairSession PairSession @relation(fields: [pairSessionId], references: [id], onDelete: Cascade)
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([pairSessionId, userId])
+}
+
+model ChillMedia {
+  id          String   @id @default(cuid())
+  workspaceId String   @unique
+  videoUrl    String?
+  videoId     String?
+  title       String?
+  isPlaying   Boolean  @default(false)
+  playheadMs  Float    @default(0)
+  setById     String?
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  setBy     User?     @relation(fields: [setById], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId])
 }
 
 model PrivacySetting {
@@ -720,7 +779,6 @@ model PrivacySetting {
 model Conversation {
   id            String   @id @default(cuid())
   workspaceId   String
-  /// null = direct message between exactly two participants.
   title         String?
   createdById   String
   lastMessageAt DateTime?
@@ -943,6 +1001,7 @@ enum PresenceStatus {
   AWAY
   ON_CALL
   BUSY
+  FOCUSING
   OFFLINE
 }
 

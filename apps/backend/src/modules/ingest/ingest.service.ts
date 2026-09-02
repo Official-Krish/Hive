@@ -161,7 +161,7 @@ export class IngestService {
         await this.handleGitCommit(workspaceId, event);
         break;
       case "git.pull_request":
-        await this.handleGitPullRequest(workspaceId, event);
+        await this.handleGitPullRequest(workspaceId, userId, event);
         break;
       case "git.branch":
         await this.handleGitBranch(workspaceId, event);
@@ -452,6 +452,7 @@ export class IngestService {
 
   private async handleGitPullRequest(
     workspaceId: string,
+    userId: string,
     event: Extract<TelemetryEvent, { type: "git.pull_request" }>,
   ): Promise<void> {
     const repo = await this.resolveRepository(workspaceId, event.repository);
@@ -497,6 +498,8 @@ export class IngestService {
       prNumber: event.number,
       title: upserted.title,
       status: upserted.status,
+      authorId: userId,
+      authorName: null,
       timestamp: Date.now(),
     });
   }

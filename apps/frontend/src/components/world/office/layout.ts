@@ -245,9 +245,7 @@ export function supportAt(x: number, z: number, feetY: number): number {
   for (const r of RAMPS) {
     if (x < r.x0 || x > r.x1 || z < r.z0 || z > r.z1) continue;
     const t =
-      r.axis === "x"
-        ? (x - r.x0) / (r.x1 - r.x0)
-        : (z - r.z0) / (r.z1 - r.z0);
+      r.axis === "x" ? (x - r.x0) / (r.x1 - r.x0) : (z - r.z0) / (r.z1 - r.z0);
     const y = r.yAtMin + (r.yAtMax - r.yAtMin) * t;
     if (y <= limit && y > best) best = y;
   }
@@ -305,7 +303,8 @@ export const STAIR_GUARDS: Wall[] = [
 // PODS — glazed private rooms. Level 1 gets focus/huddle boxes, level 2 the
 // leadership suite (manager offices, corner office, boardroom).
 // ============================================================================
-export type PodKind = "manager" | "corner" | "board" | "huddle" | "focus";
+export type PodKind =
+  "manager" | "corner" | "board" | "huddle" | "focus" | "pair";
 
 export interface Pod {
   id: string;
@@ -319,24 +318,24 @@ export interface Pod {
 }
 
 export const PODS: Pod[] = [
-  // --- Level 1: huddle boxes in the lounge, focus rooms off the meeting wing
+  // --- Level 1: pair programming rooms in the lounge, focus rooms off the meeting wing
   {
-    id: "huddle-a",
-    name: "Huddle A",
+    id: "pair-1",
+    name: "Pair Programming A",
     level: 1,
     rect: [-33.4, -28.6, -8.4, -4.8],
     door: { side: "e", at: -6.6, width: 1.1 },
-    kind: "huddle",
-    accent: "#f59e0b",
+    kind: "pair",
+    accent: "#6366f1",
   },
   {
-    id: "huddle-b",
-    name: "Huddle B",
+    id: "pair-2",
+    name: "Pair Programming B",
     level: 1,
     rect: [-33.4, -28.6, -4.4, -0.8],
     door: { side: "e", at: -2.6, width: 1.1 },
-    kind: "huddle",
-    accent: "#f59e0b",
+    kind: "pair",
+    accent: "#6366f1",
   },
   {
     id: "focus-1",
@@ -482,7 +481,6 @@ function podWalls(p: Pod): Wall[] {
 
 export const POD_WALLS: Wall[] = PODS.flatMap(podWalls);
 
-
 export interface Room {
   id: string;
   name: string;
@@ -512,6 +510,13 @@ export const ROOMS: Room[] = [
     rect: [minX, -4, 0, 12],
     floor: "workspace",
     accent: "#818cf8",
+  },
+  {
+    id: "chill",
+    name: "Chill Space",
+    rect: [-24, -4, -20, -4],
+    floor: "lounge",
+    accent: "#f472b6",
   },
   {
     id: "lounge",
@@ -593,6 +598,11 @@ export function roomAt(x: number, z: number, y = 0): string {
   }
   return "Hive Campus";
 }
+
+/** Maps a room name (from `roomAt`) to its pod kind, if any. */
+export const ROOM_KIND: Record<string, PodKind> = Object.fromEntries(
+  PODS.map((p) => [p.name, p.kind]),
+);
 
 // ============================================================================
 // STRUCTURE — columns
@@ -707,6 +717,31 @@ export const RUGS: [number, number, number, number][] = [
   [-28, -11.75, 6.5, 5.5],
   [-14.5, -9, 5.5, 8],
   [-21, -16.6, 6, 4.5],
+];
+
+// --- Chill Space / Play Area (carved from the lounge south-east) -------------
+/** The big shared screen on the chill-space south wall (faces +Z into the room). */
+export const CHILL_SCREEN: WallPanel = {
+  position: [-14, 2.4, -20],
+  rotation: [0, 0, 0],
+  size: [5.6, 3.1],
+  variant: "b",
+};
+/** World center + size of the chill room's interactive floor rug (unused for clipping). */
+export const CHILL_RUG: [number, number, number, number] = [-14, -13, 9, 12];
+/** Bean-bag seating rows facing the screen: [x, z]. */
+export const CHILL_SEATS: Vec2[] = [
+  [-14, -17],
+  [-17, -16],
+  [-11, -16],
+  [-16, -14.4],
+  [-12, -14.4],
+  [-14, -13],
+];
+/** Coastal / floor lamp accents flanking the screen. */
+export const CHILL_LAMPS: Vec2[] = [
+  [-19, -18],
+  [-9, -18],
 ];
 
 // --- Server racks (AI lab) --------------------------------------------------
@@ -937,6 +972,9 @@ export const FRIDGES: [number, number, number][] = [
   [33.3, 9.1, -Math.PI / 2],
 ];
 
+/** Water dispenser against the cafeteria east wall: [x, z]. */
+export const WATER_COOLER: Vec2 = [32.9, 7.0];
+
 // --- Courtyard -------------------------------------------------------------
 export const COURT_TREES: TransformData[] = [
   { position: [-26, 0, 27] },
@@ -1152,7 +1190,11 @@ export const L2_DESKS: TransformData[] = (() => {
 export const L2_DESK_CHAIRS: TransformData[] = L2_DESKS.map((d) => {
   const facing = d.rotation ? d.rotation[1] : 0;
   return {
-    position: [d.position[0], L2_Y, d.position[2] + (facing === 0 ? 0.85 : -0.85)],
+    position: [
+      d.position[0],
+      L2_Y,
+      d.position[2] + (facing === 0 ? 0.85 : -0.85),
+    ],
     rotation: d.rotation,
   };
 });
@@ -1160,7 +1202,11 @@ export const L2_DESK_CHAIRS: TransformData[] = L2_DESKS.map((d) => {
 export const L2_MONITORS: TransformData[] = L2_DESKS.map((d) => {
   const facing = d.rotation ? d.rotation[1] : 0;
   return {
-    position: [d.position[0], L2_Y, d.position[2] + (facing === 0 ? -0.28 : 0.28)],
+    position: [
+      d.position[0],
+      L2_Y,
+      d.position[2] + (facing === 0 ? -0.28 : 0.28),
+    ],
     rotation: d.rotation,
   };
 });
@@ -1183,7 +1229,11 @@ export const POD_DESKS: TransformData[] = PODS.filter(
 
 /** Boardroom / huddle tables, derived so they always sit inside their pod. */
 export const POD_TABLES: { pod: Pod; center: Vec3; size: Vec2 }[] = PODS.filter(
-  (p) => p.kind === "board" || p.kind === "huddle" || p.kind === "focus",
+  (p) =>
+    p.kind === "board" ||
+    p.kind === "huddle" ||
+    p.kind === "focus" ||
+    p.kind === "pair",
 ).map((p) => {
   const [x0, x1, z0, z1] = p.rect;
   const w = x1 - x0;
@@ -1236,19 +1286,48 @@ export const POD_LIGHTS: { position: Vec3; length: number; warm: boolean }[] =
     return {
       position: [(x0 + x1) / 2, base + POD_H - 0.12, (z0 + z1) / 2],
       length: Math.max(1.2, (x1 - x0) * 0.7),
-      warm: p.kind === "corner" || p.kind === "huddle",
+      warm: p.kind === "corner" || p.kind === "huddle" || p.kind === "pair",
     };
   });
 
 export const ACCENT_LIGHTS_L2: AccentLight[] = [
-  { position: [-20, L2_Y + 2.6, -10], color: "#eef4ff", intensity: 22, distance: 17 },
-  { position: [-20, L2_Y + 2.6, 6], color: "#eef4ff", intensity: 22, distance: 17 },
-  { position: [15, L2_Y + 2.6, -16], color: "#cfeaff", intensity: 20, distance: 17 },
-  { position: [19, L2_Y + 2.6, 3], color: "#ffe8c6", intensity: 20, distance: 17 },
-  { position: [29.5, L2_Y + 2.2, -16], color: "#ffd9e6", intensity: 14, distance: 12 },
-  { position: [0, L2_Y + 2.2, 14], color: "#fff2d6", intensity: 22, distance: 18 },
+  {
+    position: [-20, L2_Y + 2.6, -10],
+    color: "#eef4ff",
+    intensity: 22,
+    distance: 17,
+  },
+  {
+    position: [-20, L2_Y + 2.6, 6],
+    color: "#eef4ff",
+    intensity: 22,
+    distance: 17,
+  },
+  {
+    position: [15, L2_Y + 2.6, -16],
+    color: "#cfeaff",
+    intensity: 20,
+    distance: 17,
+  },
+  {
+    position: [19, L2_Y + 2.6, 3],
+    color: "#ffe8c6",
+    intensity: 20,
+    distance: 17,
+  },
+  {
+    position: [29.5, L2_Y + 2.2, -16],
+    color: "#ffd9e6",
+    intensity: 14,
+    distance: 12,
+  },
+  {
+    position: [0, L2_Y + 2.2, 14],
+    color: "#fff2d6",
+    intensity: 22,
+    distance: 18,
+  },
 ];
-
 
 // ============================================================================
 // COLLIDER DERIVATION
@@ -1352,6 +1431,9 @@ const planterBoxes: AABB[] = COURT_PLANTERS.map(([x, z, w, d]) =>
 const fridgeBoxes: AABB[] = FRIDGES.map(([x, z]) =>
   rect(x, z, 0.4, 0.5, 0, 1.9),
 );
+const coolerBoxes: AABB[] = [
+  rect(WATER_COOLER[0], WATER_COOLER[1], 0.28, 0.34, 0, 1.7),
+];
 const podTableBoxes: AABB[] = POD_TABLES.map((t) =>
   rect(
     t.center[0],
@@ -1378,6 +1460,7 @@ export const PLAYER_COLLIDERS: AABB[] = [
   ...credenzaBoxes,
   ...planterBoxes,
   ...fridgeBoxes,
+  ...coolerBoxes,
   ...podTableBoxes,
   ...propBoxes(MEETING_TABLES, 1.5, 2.5),
   ...propBoxes(DESKS, 1.0, 0.55),
@@ -1388,6 +1471,13 @@ export const PLAYER_COLLIDERS: AABB[] = [
   ...propBoxes(POD_DESKS, 1.0, 0.55, L2_Y),
   ...propBoxes(L2_SOFAS, 1.0, 0.5, L2_Y),
   ...propBoxes(L2_TABLES, 0.8, 0.5, L2_Y),
+  ...propBoxes(
+    CHILL_SEATS.map(([x, z]) => ({ position: [x, 0, z] })),
+    0.34,
+    0.34,
+  ),
+  ...CHILL_LAMPS.map(([x, z]) => rect(x, z, 0.12, 0.12, 0, 2.4)),
+  rect(-7, -15, 0.5, 0.4, 0, 2.0),
 ];
 
 /** Full-height boxes the camera should not clip through (interior walls only). */

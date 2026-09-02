@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import Avatar, { type PlayerMotion } from "./Avatar";
+import { CoffeeCup } from "./CoffeeCup";
 import type { AABB } from "./office/layout";
 
 interface PlayerControllerProps {
@@ -24,6 +25,10 @@ interface PlayerControllerProps {
   onRealtimeMove?: (x: number, z: number, roomId: string | null) => void;
   /** Locks keyboard movement (e.g. while a modal is open). */
   disabled?: boolean;
+  /** When true, the avatar holds a coffee cup (inherits position + heading). */
+  coffee?: boolean;
+  /** Hides the avatar + name tag (e.g. under a full-screen modal). */
+  hidden?: boolean;
 }
 
 // --- Movement tuning --------------------------------------------------------
@@ -59,6 +64,8 @@ export function PlayerController({
   stepUp = 0.6,
   onRealtimeMove,
   disabled = false,
+  coffee = false,
+  hidden = false,
 }: PlayerControllerProps) {
   const internalGroupRef = useRef<THREE.Group>(null);
   const groupRef = playerRef || internalGroupRef;
@@ -91,7 +98,17 @@ export function PlayerController({
   const hudAccum = useRef(0);
 
   useEffect(() => {
+    const inEditable = () => {
+      const el = document.activeElement as HTMLElement | null;
+      if (!el) return false;
+      return (
+        el.tagName === "INPUT" ||
+        el.tagName === "TEXTAREA" ||
+        el.isContentEditable
+      );
+    };
     const down = (e: KeyboardEvent) => {
+      if (inEditable()) return;
       keys.current[e.code] = true;
       if (e.code === "Space") e.preventDefault(); // don't scroll the page
     };
@@ -280,13 +297,18 @@ export function PlayerController({
 
   return (
     <group ref={groupRef} position={spawn}>
-      <Avatar
-        modelUrl={modelUrl}
-        motionRef={motionRef}
-        name={name}
-        status={status}
-        badgeColor={badgeColor}
-      />
+      {!hidden && (
+        <>
+          <Avatar
+            modelUrl={modelUrl}
+            motionRef={motionRef}
+            name={name}
+            status={status}
+            badgeColor={badgeColor}
+          />
+          {coffee && <CoffeeCup />}
+        </>
+      )}
     </group>
   );
 }

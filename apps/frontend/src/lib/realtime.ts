@@ -27,6 +27,14 @@ export type RealtimeEventMap = {
     RealtimeEvent,
     { type: "github.notification" }
   >;
+  "social.bump": Extract<RealtimeEvent, { type: "social.bump" }>;
+  "whiteboard.stroke": Extract<RealtimeEvent, { type: "whiteboard.stroke" }>;
+  "whiteboard.clear": Extract<RealtimeEvent, { type: "whiteboard.clear" }>;
+  "whiteboard.history": Extract<RealtimeEvent, { type: "whiteboard.history" }>;
+  "focus.invite": Extract<RealtimeEvent, { type: "focus.invite" }>;
+  "pair.session": Extract<RealtimeEvent, { type: "pair.session" }>;
+  "pair.cursor": Extract<RealtimeEvent, { type: "pair.cursor" }>;
+  "chill.media.state": Extract<RealtimeEvent, { type: "chill.media.state" }>;
 };
 
 type EventHandler<K extends keyof RealtimeEventMap> = (
@@ -121,13 +129,15 @@ export class RealtimeClient {
   }
 
   sendPresence(
-    status: "online" | "away" | "on_call" | "busy",
+    status: "online" | "away" | "on_call" | "busy" | "focusing",
     label?: string,
+    workingOn?: string | null,
   ): boolean {
     return this.send({
       type: "presence.update",
       status,
       ...(label ? { label } : {}),
+      ...(workingOn !== undefined ? { workingOn } : {}),
     });
   }
 
@@ -149,6 +159,57 @@ export class RealtimeClient {
       type: "github.notification.read",
       notificationId,
     });
+  }
+
+  sendBump(roomId: string | null) {
+    return this.send({ type: "social.bump", roomId });
+  }
+
+  sendWhiteboardStroke(
+    boardId: string,
+    stroke: {
+      strokeId: string;
+      color: string;
+      width: number;
+      points: Array<{ x: number; y: number }>;
+    },
+  ): boolean {
+    return this.send({ type: "whiteboard.stroke", boardId, stroke });
+  }
+
+  sendWhiteboardClear(boardId: string): boolean {
+    return this.send({ type: "whiteboard.clear", boardId });
+  }
+
+  requestWhiteboardHistory(boardId: string): boolean {
+    return this.send({ type: "whiteboard.history.request", boardId });
+  }
+
+  sendFocusInvite(
+    toId: string,
+    action: "invite" | "accept" | "decline" | "end",
+  ): boolean {
+    return this.send({ type: "focus.invite", toId, action });
+  }
+
+  sendPairCursor(sessionId: string, x: number, y: number): boolean {
+    return this.send({ type: "pair.cursor", sessionId, x, y });
+  }
+
+  sendChillSetUrl(url: string): boolean {
+    return this.send({ type: "chill.setUrl", url });
+  }
+
+  sendChillPlay(): boolean {
+    return this.send({ type: "chill.media.play" });
+  }
+
+  sendChillPause(): boolean {
+    return this.send({ type: "chill.media.pause" });
+  }
+
+  sendChillSeek(playheadMs: number): boolean {
+    return this.send({ type: "chill.media.seek", playheadMs });
   }
 
   private open(): void {

@@ -25,6 +25,9 @@ import { AVATARS } from "./AvatarConfig";
 import { useRealtimeMap } from "@/hooks/useRealtimeMap";
 import { useLiveKitCall } from "@/hooks/useLiveKitCall";
 import { useNearbyTokens } from "@/hooks/useNearbyTokens";
+import { useInteractions } from "@/hooks/useInteractions";
+import { useFocusRoom } from "@/hooks/useFocusRoom";
+import { usePairSession } from "@/hooks/usePairSession";
 import { http } from "@/lib/http";
 import RemoteAvatars from "./RemoteAvatars";
 import { MemberDetailPopup } from "./MapHud";
@@ -32,14 +35,49 @@ import { ChatPanel } from "./ChatPanel";
 import { GitHubNotificationBell } from "./GitHubNotificationBell";
 import { CallStage } from "./CallStage";
 import { CallControls } from "./CallControls";
+import { WorkspaceModal } from "./WorkspaceModal";
+import { CiDashboardModal } from "./CiDashboardModal";
+import { WhiteboardModal } from "./WhiteboardModal";
+import { PairSessionModal } from "./PairSessionModal";
+import { PairModeBar } from "./PairModeBar";
+import { PeerCursorOverlay } from "./PeerCursorOverlay";
+import { Confetti, type ConfettiRef } from "@/components/ui/confetti";
 import { cn } from "@/lib/utils";
+import { useChillMedia } from "@/hooks/useChillMedia";
+import { ChillScreenProjection } from "./ChillScreenProjection";
+import { ChillScreenModal } from "./ChillScreenModal";
+import { GamesModal } from "./GamesModal";
 import { useChat } from "@/hooks/useChat";
+import {
+  Coffee,
+  Clapperboard,
+  Droplets,
+  Gamepad2,
+  Gauge,
+  Monitor,
+  PenLine,
+  Volume2,
+  Zap,
+  Trophy,
+  type LucideIcon,
+} from "lucide-react";
+import type { Interactable, InteractableIcon } from "./interactions";
 
 const DEFAULT_AVATAR =
   AVATARS.male[0]?.model ?? "/avatars/male/hive_male_01.glb";
 
 /* HUD material — the console's bone-paper instruments, tuned for the pale
    sky. Shared by every floating control so the frame reads as one system. */
+const INTERACTABLE_ICONS: Record<InteractableIcon, LucideIcon> = {
+  coffee: Coffee,
+  water: Droplets,
+  monitor: Monitor,
+  board: PenLine,
+  ci: Gauge,
+  chill: Clapperboard,
+  arcade: Gamepad2,
+};
+
 const CHIP =
   "inline-flex items-center gap-2.5 rounded-full bg-[#f4f2ed]/95 ring-1 ring-black/[0.09] " +
   "shadow-[inset_0_1px_0_rgba(255,255,255,0.7),0_12px_28px_-16px_rgba(28,25,18,0.5)] " +
@@ -66,6 +104,7 @@ const STATUS_DOT: Record<string, string> = {
   away: "bg-amber-500",
   on_call: "bg-sky-500",
   busy: "bg-rose-500",
+  focusing: "bg-purple-500",
   offline: "bg-neutral-300",
 };
 
@@ -74,18 +113,27 @@ const STATUS_LABEL: Record<string, string> = {
   away: "Away",
   on_call: "On call",
   busy: "Busy",
+  focusing: "Focusing",
   offline: "Offline",
 };
 
-/** Inline "set a custom label" row for the presence picker. */
-function CustomLabelRow({
-  current,
+/** Inline "set a value" row for the presence picker: custom label and
+ *  "working on" both use this; a Set button appears on text, a Clear button
+ *  when a value is currently set. */
+function InlineTextRow({
+  placeholder,
+  button,
   onApply,
   onFocusChange,
+  onClear,
+  showClear,
 }: {
-  current: string;
-  onApply: (label: string) => void;
+  placeholder: string;
+  button: (value: string) => string;
+  onApply: (value: string) => void;
   onFocusChange?: (focused: boolean) => void;
+  onClear?: () => void;
+  showClear?: boolean;
 }) {
   const [value, setValue] = useState("");
   return (
@@ -98,18 +146,31 @@ function CustomLabelRow({
         onKeyDown={(e) => {
           if (e.key === "Enter" && value.trim()) onApply(value.trim());
         }}
-        placeholder={current === "Online" ? "Custom status…" : current}
+        placeholder={placeholder}
         maxLength={60}
         className="w-full rounded-lg text-neutral-700 border border-black/[0.09] bg-white px-2.5 py-1.5 text-[12px] outline-none focus:border-neutral-900/40"
       />
-      {value.trim() && (
-        <button
-          type="button"
-          onClick={() => onApply(value.trim())}
-          className="mt-1 w-full rounded-lg bg-neutral-950 py-1 text-[11.5px] font-semibold text-white hover:bg-neutral-800"
-        >
-          Set "{value.trim().slice(0, 24)}"
-        </button>
+      {(value.trim() || showClear) && (
+        <div className="mt-1 flex items-stretch gap-1">
+          {value.trim() && (
+            <button
+              type="button"
+              onClick={() => onApply(value.trim())}
+              className="flex-1 rounded-lg bg-neutral-950 py-1 text-[11.5px] font-semibold text-white hover:bg-neutral-800"
+            >
+              {button(value.trim())}
+            </button>
+          )}
+          {showClear && onClear && !value.trim() && (
+            <button
+              type="button"
+              onClick={onClear}
+              className="flex-1 rounded-lg bg-black/[0.06] py-1 text-[11.5px] font-semibold text-neutral-600 hover:bg-black/[0.1]"
+            >
+              Clear
+            </button>
+          )}
+        </div>
       )}
     </div>
   );
@@ -162,9 +223,48 @@ export function WorldCanvas({
         .length,
     [avatars],
   );
-  const call = useLiveKitCall(workspaceId, myUserId, nearIds, onlineCount);
+  const focus = useFocusRoom({
+    myUserId,
+    currentRoom,
+    client,
+    avatars,
+  });
+  const pair = usePairSession({
+    workspaceId,
+    myUserId,
+    currentRoom,
+    client,
+    avatars,
+  });
+  const call = useLiveKitCall(workspaceId, myUserId, nearIds, onlineCount, {
+    volumePeers: focus.allowedPeers,
+    muteRemote: focus.inFocus,
+    suppressPublish: focus.inFocus && !focus.partnerId,
+    forcePublish: pair.active !== null,
+  });
   const nearbyTokens = useNearbyTokens(workspaceId, client, nearIds);
   const chat = useChat(workspaceId, myUserId, client, chatOpen);
+  const chill = useChillMedia(client, currentRoom === "Chill Space");
+
+  // Pair-session collaborative cursor: forward my pointer to the active
+  // session as normalised window coordinates (throttled inside the hook).
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      pair.sendCursor(
+        e.clientX / window.innerWidth,
+        e.clientY / window.innerHeight,
+      );
+    };
+    window.addEventListener("mousemove", onMove);
+    return () => window.removeEventListener("mousemove", onMove);
+  }, [pair.sendCursor]);
+
+  const CURSOR_COLORS = ["#6366f1", "#0ea5e9", "#10b981", "#f59e0b"];
+  const cursorColorOf = (id: string): string =>
+    CURSOR_COLORS[
+      [...id].reduce((acc, ch) => acc + ch.charCodeAt(0), 0) %
+        CURSOR_COLORS.length
+    ] ?? "#6366f1";
 
   const handleRoomChange = useCallback((room: string) => {
     setCurrentRoom((prev) => (prev === room ? prev : room));
@@ -185,6 +285,15 @@ export function WorldCanvas({
   });
 
   const meName = me.data?.user.name ?? "You";
+  const nameOf = (id: string) => avatars.get(id)?.name ?? id;
+
+  const repoQuery = useQuery({
+    queryKey: ["repository", workspaceId, pair.active?.repositoryId],
+    queryFn: () =>
+      http.reads.repository(workspaceId, pair.active!.repositoryId!),
+    enabled: !!pair.active?.repositoryId,
+  });
+  const repoName = repoQuery.data?.name ?? null;
 
   // Members whose agent is blocked / waiting on them.
   const needsAttention = [...avatars.entries()].filter(
@@ -207,11 +316,13 @@ export function WorldCanvas({
         ? 0
         : s === "on_call"
           ? 1
-          : s === "busy"
+          : s === "focusing"
             ? 2
-            : s === "away"
+            : s === "busy"
               ? 3
-              : 4;
+              : s === "away"
+                ? 4
+                : 5;
     return chat.members
       .map((m) => {
         const live = avatars.get(m.userId);
@@ -220,6 +331,7 @@ export function WorldCanvas({
           name: m.name,
           status: live?.status ?? "offline",
           label: live?.label ?? null,
+          workingOn: live?.workingOn ?? null,
           isMe: m.userId === myUserId,
         };
       })
@@ -235,31 +347,138 @@ export function WorldCanvas({
   interface FeedItem {
     key: string;
     text: string;
-    tone: "push" | "pr" | "test";
+    tone: "push" | "pr" | "test" | "bump" | "focusing" | "merge";
     at: number;
   }
   const [feed, setFeed] = useState<FeedItem[]>([]);
   const avatarsRef = useRef(avatars);
   avatarsRef.current = avatars;
   const feedSeq = useRef(0);
+  const workingOnSeenRef = useRef<Map<string, string>>(new Map());
+  const confettiRef = useRef<ConfettiRef>(null);
+
+  const fireConfetti = useCallback(() => {
+    void confettiRef.current?.fire({
+      particleCount: 140,
+      spread: 75,
+      startVelocity: 42,
+      scalar: 1.05,
+      ticks: 220,
+      zIndex: 9999,
+      origin: { y: 0.7 },
+      colors: ["#f472b6", "#a78bfa", "#34d399", "#fbbf24", "#38bdf8"],
+    });
+  }, []);
+
+  const pushFeed = useCallback((text: string, tone: FeedItem["tone"]) => {
+    setFeed((prev) =>
+      [
+        {
+          key: `${Date.now()}-${++feedSeq.current}`,
+          text,
+          tone,
+          at: Date.now(),
+        },
+        ...prev,
+      ].slice(0, 4),
+    );
+  }, []);
+
+  // Short-lived "speech bubble" texts pinned above remote avatars.
+  const [bumpBubbles, setBumpBubbles] = useState<Record<string, string>>({});
+  const addBubble = useCallback((id: string, text: string) => {
+    setBumpBubbles((prev) => ({ ...prev, [id]: text }));
+    window.setTimeout(() => {
+      setBumpBubbles((prev) => {
+        if (!(id in prev)) return prev;
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+    }, 5000);
+  }, []);
+
+  // Player world position (feet height included) for proximity interactions.
+  const [playerPos, setPlayerPos] = useState<[number, number, number]>([
+    SPAWN[0],
+    SPAWN[1],
+    SPAWN[2],
+  ]);
+  const [coffeeActive, setCoffeeActive] = useState(false);
+  const [toast, setToast] = useState<React.ReactNode | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [workspaceOpen, setWorkspaceOpen] = useState(false);
+  const [ciOpen, setCiOpen] = useState(false);
+  const [whiteboardId, setWhiteboardId] = useState<string | null>(null);
+  const [chillScreenOpen, setChillScreenOpen] = useState(false);
+  const [gamesOpen, setGamesOpen] = useState(false);
+
+  const showToast = useCallback((node: React.ReactNode) => {
+    setToast(node);
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => setToast(null), 2600);
+  }, []);
+
+  const handleInteract = useCallback(
+    (it: Interactable) => {
+      switch (it.kind) {
+        case "coffee": {
+          setCoffeeActive(true);
+          showToast(
+            <span className="inline-flex items-center gap-1.5">
+              <Coffee className="size-3.5" />
+              +10 energy — freshly roasted
+            </span>,
+          );
+          window.setTimeout(() => setCoffeeActive(false), 4500);
+          break;
+        }
+        case "cooler": {
+          client?.sendBump(currentRoom || null);
+          pushFeed("You're at the water cooler", "bump");
+          break;
+        }
+        case "monitor":
+          setWorkspaceOpen(true);
+          break;
+        case "ci":
+          setCiOpen(true);
+          break;
+        case "chill-screen":
+          setChillScreenOpen(true);
+          break;
+        case "arcade":
+          setGamesOpen(true);
+          break;
+        case "whiteboard":
+          setWhiteboardId(it.id);
+          break;
+      }
+    },
+    [client, currentRoom, myUserId, addBubble, pushFeed, showToast],
+  );
+
+  const interaction = useInteractions({
+    pos: playerPos,
+    blocked:
+      chatOpen ||
+      statusInputFocused ||
+      membersOpen ||
+      statusMenu ||
+      openMemberId !== null ||
+      workspaceOpen ||
+      ciOpen ||
+      chillScreenOpen ||
+      gamesOpen ||
+      whiteboardId !== null,
+    onPress: handleInteract,
+  });
 
   useEffect(() => {
     if (!client) return;
     const nameOf = (id: string) =>
       avatarsRef.current.get(id)?.name ?? "Someone";
-    const push = (text: string, tone: FeedItem["tone"]) => {
-      setFeed((prev) =>
-        [
-          {
-            key: `${Date.now()}-${++feedSeq.current}`,
-            text,
-            tone,
-            at: Date.now(),
-          },
-          ...prev,
-        ].slice(0, 4),
-      );
-    };
+    const push = pushFeed;
     const offs = [
       client.on("repo.push", (e) =>
         push(
@@ -267,9 +486,23 @@ export function WorldCanvas({
           "push",
         ),
       ),
-      client.on("pr.updated", (e) =>
-        push(`PR #${e.prNumber} ${e.status} · ${e.title}`, "pr"),
-      ),
+      client.on("pr.updated", (e) => {
+        if (e.status === "merged") {
+          const who = e.authorName
+            ? (e.authorId && avatarsRef.current.get(e.authorId)?.name) ||
+              e.authorName
+            : e.authorId && avatarsRef.current.get(e.authorId)?.name;
+          if (e.authorId && e.authorId === myUserId) {
+            push("You merged PR #" + e.prNumber, "merge");
+            fireConfetti();
+          } else {
+            const label = who ? `${who} — ` : "";
+            push(`${label}PR #${e.prNumber} merged`, "merge");
+          }
+        } else {
+          push(`PR #${e.prNumber} ${e.status} · ${e.title}`, "pr");
+        }
+      }),
       client.on("test.finished", (e) =>
         push(
           `${nameOf(e.developerId)} — tests ${e.passed ? "passed" : "failed"}${
@@ -278,6 +511,38 @@ export function WorldCanvas({
           "test",
         ),
       ),
+      client.on("social.bump", (e) => {
+        if (e.developerId === myUserId) return;
+        push(
+          `${nameOf(e.developerId)} is at the water cooler${
+            e.roomId ? ` · ${e.roomId}` : ""
+          }`,
+          "bump",
+        );
+      }),
+      client.on("chill.media.state", (e) => {
+        if (!e.videoUrl || !e.setByName) return;
+        push(`${e.setByName} put up a video in Chill Space`, "bump");
+      }),
+      client.on("presence.changed", (e) => {
+        if (e.developerId === myUserId) return;
+        if (e.status === "focusing") {
+          push(`${nameOf(e.developerId)} is focusing`, "focusing");
+        }
+        if (
+          e.workingOn &&
+          workingOnSeenRef.current.get(e.developerId) !== e.workingOn
+        ) {
+          workingOnSeenRef.current.set(e.developerId, e.workingOn);
+          push(
+            `${nameOf(e.developerId)} is working on ${e.workingOn}`,
+            "focusing",
+          );
+        }
+        if (!e.workingOn && workingOnSeenRef.current.has(e.developerId)) {
+          workingOnSeenRef.current.delete(e.developerId);
+        }
+      }),
     ];
     const prune = setInterval(
       () => setFeed((prev) => prev.filter((f) => Date.now() - f.at < 60_000)),
@@ -287,7 +552,7 @@ export function WorldCanvas({
       offs.forEach((off) => off());
       clearInterval(prune);
     };
-  }, [client]);
+  }, [client, myUserId, pushFeed, addBubble, fireConfetti]);
 
   return (
     <div className="relative w-full h-screen overflow-hidden font-sans select-none">
@@ -403,7 +668,12 @@ export function WorldCanvas({
                         )}
                       </span>
                       <span className="block truncate text-[10.5px] text-neutral-500">
-                        {row.label ?? STATUS_LABEL[row.status] ?? row.status}
+                        {row.label && row.workingOn
+                          ? `${row.label} · ${row.workingOn}`
+                          : (row.workingOn ??
+                            row.label ??
+                            STATUS_LABEL[row.status] ??
+                            row.status)}
                       </span>
                     </div>
                   </div>
@@ -450,18 +720,23 @@ export function WorldCanvas({
                   · {myPresence.label}
                 </span>
               )}
+              {myPresence?.workingOn && (
+                <span className="inline-flex max-w-[150px] items-center gap-1 truncate text-[11px] font-medium text-violet-600">
+                  <Zap className="size-3 shrink-0" />
+                  <span className="truncate">{myPresence.workingOn}</span>
+                </span>
+              )}
             </button>
 
             {statusMenu && (
-              <div
-                className={`${CHIP} absolute right-0 top-full z-20 mt-2 flex w-56 flex-col items-stretch gap-0.5 p-2`}
-              >
+              <div className="absolute right-0 top-full z-20 mt-2 flex w-56 flex-col items-stretch gap-0.5 rounded-xl bg-[#f4f2ed]/95 p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.7),0_24px_48px_-20px_rgba(28,25,18,0.5)] ring-1 ring-black/[0.09] backdrop-blur-md">
                 {(
                   [
                     ["online", "Online"],
                     ["away", "Away"],
                     ["on_call", "On call"],
                     ["busy", "Busy"],
+                    ["focusing", "Focusing"],
                   ] as const
                 ).map(([value, label]) => (
                   <button
@@ -484,23 +759,88 @@ export function WorldCanvas({
                     {label}
                   </button>
                 ))}
-                <CustomLabelRow
-                  current={myStatusLabel}
+                <InlineTextRow
+                  placeholder={
+                    myStatusLabel === "Online"
+                      ? "Custom status…"
+                      : myStatusLabel
+                  }
+                  button={(v) => `Set "${v.slice(0, 24)}"`}
                   onFocusChange={setStatusInputFocused}
                   onApply={(label) => {
                     client?.sendPresence(
                       (myPresence?.status as
-                        "online" | "away" | "on_call" | "busy") ?? "online",
+                        "online" | "away" | "on_call" | "busy" | "focusing") ??
+                        "online",
                       label,
                     );
                     setStatusMenu(false);
                   }}
+                />
+                <InlineTextRow
+                  placeholder="Working on…"
+                  button={(v) => `Working on "${v.slice(0, 24)}"`}
+                  onFocusChange={setStatusInputFocused}
+                  onApply={(workingOn) => {
+                    client?.sendPresence(
+                      (myPresence?.status as
+                        "online" | "away" | "on_call" | "busy" | "focusing") ??
+                        "online",
+                      myPresence?.label ?? undefined,
+                      workingOn,
+                    );
+                    setStatusMenu(false);
+                  }}
+                  onClear={() => {
+                    client?.sendPresence(
+                      (myPresence?.status as
+                        "online" | "away" | "on_call" | "busy" | "focusing") ??
+                        "online",
+                      myPresence?.label ?? undefined,
+                      null,
+                    );
+                    setStatusMenu(false);
+                  }}
+                  showClear={!!myPresence?.workingOn}
                 />
               </div>
             )}
           </div>
         </div>
       </div>
+
+      {/* Interaction hint + toast (bottom-left, above the movement legend) */}
+      {!workspaceOpen &&
+        !ciOpen &&
+        !whiteboardId &&
+        (interaction.near || toast) && (
+          <div className="pointer-events-none absolute bottom-20 left-4 z-10 flex flex-col items-start gap-1.5">
+            {interaction.near &&
+              (() => {
+                const Icon = INTERACTABLE_ICONS[interaction.near.icon];
+                return (
+                  <div className={`${CHIP} px-3.5 py-2`}>
+                    <kbd className="rounded-md bg-white px-1.5 py-0.5 font-mono text-[10px] font-semibold text-neutral-800 ring-1 ring-black/[0.09] shadow-[0_1px_0_rgba(28,25,18,0.18)]">
+                      E
+                    </kbd>
+                    <Icon className="size-3.5 shrink-0" />
+                    <span className="text-[12px] font-semibold text-neutral-800">
+                      {interaction.near.prompt}
+                    </span>
+                  </div>
+                );
+              })()}
+            {toast && (
+              <div
+                className={`${CHIP} border-amber-500/30 bg-amber-50/95 px-3.5 py-1.5`}
+              >
+                <span className="text-[11.5px] font-semibold text-amber-800">
+                  {toast}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
 
       {/* Controls legend */}
       <div className="absolute bottom-4 left-4 z-10 pointer-events-none">
@@ -544,20 +884,152 @@ export function WorldCanvas({
               style={{ transform: `scale(${1 - i * 0.04})` }}
             >
               <span className="shrink-0">
-                <span
-                  className={`h-1.5 w-1.5 rounded-full ${
-                    f.tone === "test"
-                      ? "bg-sky-500"
-                      : f.tone === "pr"
-                        ? "bg-violet-500"
-                        : "bg-emerald-500"
-                  }`}
-                />
+                {f.tone === "merge" ? (
+                  <Trophy className="size-3 text-amber-500" />
+                ) : (
+                  <span
+                    className={`inline-block h-1.5 w-1.5 rounded-full ${
+                      f.tone === "test"
+                        ? "bg-sky-500"
+                        : f.tone === "pr"
+                          ? "bg-violet-500"
+                          : f.tone === "bump"
+                            ? "bg-amber-500"
+                            : f.tone === "focusing"
+                              ? "bg-purple-500"
+                              : "bg-emerald-500"
+                    }`}
+                  />
+                )}
               </span>
               <span className="min-w-0 truncate">{f.text}</span>
             </div>
           ))}
         </div>
+      )}
+
+      {/* Focus pod widget — presence, mute state and pairing (only inside a focus room) */}
+      {focus.inFocus && (
+        <div className="pointer-events-none absolute left-1/2 top-16 z-10 flex -translate-x-1/2 flex-col items-center gap-1.5">
+          {focus.partnerId ? (
+            <div className={`${CHIP} pointer-events-auto px-3.5 py-2`}>
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-purple-500" />
+              <span className="text-[12px] font-semibold text-neutral-800">
+                Focusing with {nameOf(focus.partnerId)}
+              </span>
+              <span className="hidden h-3.5 w-px shrink-0 bg-black/[0.09] sm:block" />
+              <span className="text-[10.5px] font-medium text-neutral-500">
+                audio on — spatial audio muted for everyone else
+              </span>
+              <button
+                type="button"
+                onClick={focus.endPartner}
+                className="rounded-lg bg-white px-2 py-1 text-[11px] font-semibold text-neutral-700 ring-1 ring-black/[0.09] shadow-[0_1px_0_rgba(28,25,18,0.18)] transition-colors hover:bg-neutral-50"
+              >
+                End
+              </button>
+            </div>
+          ) : focus.pendingInvite ? (
+            <div
+              className={`${CHIP} pointer-events-auto border-purple-500/30 bg-purple-50/95 px-3.5 py-2`}
+            >
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-purple-500" />
+              <span className="text-[12px] font-semibold text-neutral-800">
+                {focus.pendingInvite.name} wants to focus together
+              </span>
+              <button
+                type="button"
+                onClick={() => focus.accept(focus.pendingInvite!.id)}
+                className="rounded-lg bg-purple-600 px-2.5 py-1 text-[11px] font-semibold text-white shadow-[0_1px_0_rgba(28,25,18,0.25)] transition-colors hover:bg-purple-700"
+              >
+                Accept
+              </button>
+              <button
+                type="button"
+                onClick={() => focus.decline(focus.pendingInvite!.id)}
+                className="rounded-lg bg-white px-2.5 py-1 text-[11px] font-semibold text-neutral-700 ring-1 ring-black/[0.09] shadow-[0_1px_0_rgba(28,25,18,0.18)] transition-colors hover:bg-neutral-50"
+              >
+                Decline
+              </button>
+            </div>
+          ) : (
+            <>
+              {focus.invitedId && (
+                <div className={`${CHIP} pointer-events-auto px-3.5 py-2`}>
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-purple-500" />
+                  <span className="text-[12px] font-semibold text-neutral-800">
+                    Invite sent to {nameOf(focus.invitedId)}…
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => focus.decline(focus.invitedId!)}
+                    title="Cancel invite"
+                    className="rounded-lg bg-white px-2 py-1 text-[11px] font-semibold text-neutral-700 ring-1 ring-black/[0.09] shadow-[0_1px_0_rgba(28,25,18,0.18)] transition-colors hover:bg-neutral-50"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              )}
+              {focus.suggestPartnerId && !focus.invitedId && (
+                <div className={`${CHIP} pointer-events-auto px-3.5 py-2`}>
+                  <span className="h-1.5 w-1.5 rounded-full bg-purple-500" />
+                  <span className="text-[12px] font-semibold text-neutral-800">
+                    {nameOf(focus.suggestPartnerId)} is focusing in here
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => focus.invite(focus.suggestPartnerId!)}
+                    className="rounded-lg bg-purple-600 px-2.5 py-1 text-[11px] font-semibold text-white shadow-[0_1px_0_rgba(28,25,18,0.25)] transition-colors hover:bg-purple-700"
+                  >
+                    Invite
+                  </button>
+                </div>
+              )}
+              {!focus.partnerId &&
+                !focus.pendingInvite &&
+                !focus.suggestPartnerId && (
+                  <div className={`${CHIP} pointer-events-none px-3.5 py-2`}>
+                    <span className="h-1.5 w-1.5 rounded-full bg-purple-500" />
+                    <span className="text-[11.5px] font-semibold text-neutral-700">
+                      Focusing — mic muted until someone joins
+                    </span>
+                  </div>
+                )}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Pair-programming session bar (only inside an active pair room) */}
+      {pair.active && (
+        <div className="pointer-events-none absolute left-1/2 top-16 z-10 flex -translate-x-1/2 flex-col items-center gap-1.5">
+          <PairModeBar
+            repoName={repoName}
+            memberNames={pair.active.members
+              .filter((m) => m.userId !== myUserId)
+              .map((m) => m.name)}
+            onEnd={() => void pair.end()}
+            onOpenLink={() => {}}
+          />
+        </div>
+      )}
+
+      {/* Collaborative cursors while pairing */}
+      <PeerCursorOverlay
+        cursors={pair.peerCursors}
+        nameOf={nameOf}
+        colorOf={cursorColorOf}
+      />
+
+      {/* Pair-session setup modal (auto-shown when two people meet in a
+          pair-programming room without a session) */}
+      {pair.open && pair.suggestedPartnerId && (
+        <PairSessionModal
+          workspaceId={workspaceId}
+          partnerName={nameOf(pair.suggestedPartnerId)}
+          onStart={(repositoryId) => void pair.start(repositoryId)}
+          onClose={pair.close}
+        />
       )}
 
       {/* 3D world */}
@@ -579,6 +1051,7 @@ export function WorldCanvas({
 
         <OfficeLighting />
         <OfficeBuilding />
+        <ChillScreenProjection active={!!chill.state.videoId} />
 
         <PlayerController
           playerRef={playerGroupRef}
@@ -593,16 +1066,20 @@ export function WorldCanvas({
           }
           disabled={chatOpen || statusInputFocused}
           onRoomChange={handleRoomChange}
+          onPositionUpdate={(pos) => setPlayerPos(pos)}
           roomAt={roomAt}
           groundAt={supportAt}
           stepUp={STEP_UP}
           onRealtimeMove={handleRealtimeMove}
+          coffee={coffeeActive}
+          hidden={workspaceOpen || whiteboardId !== null}
         />
 
         <RemoteAvatars
           avatars={avatars}
           myUserId={myUserId}
           pills={nearbyTokens}
+          bubbles={bumpBubbles}
           onAvatarClick={(id) => setOpenMemberId(id)}
         />
 
@@ -638,6 +1115,44 @@ export function WorldCanvas({
         </div>
       )}
 
+      {/* Desk monitor — "open workspace" */}
+      {workspaceOpen && (
+        <WorkspaceModal
+          workspaceId={workspaceId}
+          myUserId={myUserId}
+          client={client}
+          onClose={() => setWorkspaceOpen(false)}
+        />
+      )}
+
+      {/* Engineering CI wall screen */}
+      {ciOpen && (
+        <CiDashboardModal
+          workspaceId={workspaceId}
+          client={client}
+          onClose={() => setCiOpen(false)}
+        />
+      )}
+
+      {/* Whiteboard — shared canvas for the board you pressed E on */}
+      {whiteboardId && (
+        <WhiteboardModal
+          boardId={whiteboardId}
+          client={client}
+          onClose={() => setWhiteboardId(null)}
+        />
+      )}
+
+      {/* Chill Space shared screen + arcade station */}
+      {chillScreenOpen && (
+        <ChillScreenModal
+          client={client}
+          state={chill.state}
+          onClose={() => setChillScreenOpen(false)}
+        />
+      )}
+      {gamesOpen && <GamesModal onClose={() => setGamesOpen(false)} />}
+
       {/* Proximity voice/video — only when near other members.
           Bottom-center column: video tiles above the mic/camera controls. */}
       {nearIds.size > 0 && (
@@ -664,8 +1179,35 @@ export function WorldCanvas({
             <CallControls
               micOn={call.micOn}
               cameraOn={call.cameraOn}
+              sharing={call.sharing}
               toggleMic={call.toggleMic}
               toggleCamera={call.toggleCamera}
+              toggleShare={call.toggleShare}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Merge celebration — fires only when one of MY pull requests merges. */}
+      <Confetti
+        ref={confettiRef}
+        manualstart
+        className="pointer-events-none fixed inset-0 z-[9999] h-full w-full"
+      />
+
+      {/* Chill Space shared-screen volume — only while inside the room. */}
+      {currentRoom === "Chill Space" && (
+        <div className="fixed left-1/2 top-4 z-30 -translate-x-1/2">
+          <div className="pointer-events-auto flex items-center gap-3 rounded-full bg-[#0b0d12]/85 py-2 pl-3 pr-2 text-neutral-200 ring-1 ring-white/10">
+            <Volume2 className="h-4 w-4 text-neutral-400" />
+            <input
+              type="range"
+              min={0}
+              max={100}
+              value={Math.round(chill.volume * 100)}
+              onChange={(e) => chill.setVolume(Number(e.target.value) / 100)}
+              className="h-1 w-32 cursor-pointer appearance-none rounded-full bg-neutral-700 accent-[#6ee7b7]"
+              aria-label="Chill space volume"
             />
           </div>
         </div>

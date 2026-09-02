@@ -27,6 +27,8 @@ export type {
   Issue,
   GitHubAccount,
   WebhookDelivery,
+  PairSession,
+  PairSessionMember,
   Prisma,
 } from "./src/generated/prisma/client";
 

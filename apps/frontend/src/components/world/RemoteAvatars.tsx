@@ -1,7 +1,7 @@
 import { useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
-import { AlertTriangle, Check, X, Zap } from "lucide-react";
+import { AlertTriangle, Check, Waves, X, Zap } from "lucide-react";
 import Avatar from "./Avatar";
 import { AvatarErrorBoundary } from "./AvatarErrorBoundary";
 import type { MapAvatar } from "@/hooks/useRealtimeMap";
@@ -28,6 +28,8 @@ interface RemoteAvatarsProps {
   myUserId: string;
   /** Token readouts for members currently within proximity radius. */
   pills?: ReadonlyMap<string, NearbyTokens>;
+  /** Short-lived speech bubbles: developerId → text (e.g. water-cooler bump). */
+  bubbles?: Readonly<Record<string, string>>;
   onAvatarClick?: (developerId: string) => void;
 }
 
@@ -42,6 +44,7 @@ export function RemoteAvatars({
   avatars,
   myUserId,
   pills,
+  bubbles,
   onAvatarClick,
 }: RemoteAvatarsProps) {
   const groupRefs = useRef<Map<string, THREE.Group>>(new Map());
@@ -72,9 +75,24 @@ export function RemoteAvatars({
 
         const meta: Array<{
           text: string;
-          tone?: "amber" | "green" | "red" | "neutral";
+          tone?: "amber" | "green" | "red" | "violet" | "neutral";
           icon?: React.ReactNode;
         }> = [];
+        // The work chip is the floater's headline: "currently working on…"
+        if (avatar.workingOn) {
+          meta.push({
+            text: avatar.workingOn,
+            tone: "violet",
+            icon: <Zap className="size-2.5" />,
+          });
+        }
+        if (bubbles?.[id]) {
+          meta.push({
+            text: bubbles[id],
+            tone: "amber",
+            icon: <Waves className="size-2.5" />,
+          });
+        }
         if (needsYou)
           meta.push({
             text: "Needs you",

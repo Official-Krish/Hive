@@ -18,6 +18,7 @@ import {
   CREDENZAS,
   PRINTERS,
   FRIDGES,
+  WATER_COOLER,
 } from "./layout";
 
 const AISLE_Z = -14.6; // between the two server rows
@@ -139,6 +140,47 @@ function Credenza({
           <primitive object={M.woodLight} attach="material" />
         </mesh>
       ))}
+    </group>
+  );
+}
+
+/** Water dispenser against the cafeteria east wall (front faces west). */
+function WaterCooler({ x, z }: { x: number; z: number }) {
+  return (
+    <group position={[x, 0, z]}>
+      {/* Body */}
+      <mesh position={[0, 0.62, 0]} castShadow receiveShadow>
+        <boxGeometry args={[0.44, 1.24, 0.4]} />
+        <primitive object={M.metalBrushed} attach="material" />
+      </mesh>
+      {/* Top plate */}
+      <mesh position={[0, 1.26, 0]} castShadow>
+        <boxGeometry args={[0.36, 0.06, 0.32]} />
+        <primitive object={M.wall} attach="material" />
+      </mesh>
+      {/* Inverted bottle */}
+      <mesh position={[0, 1.5, 0]} castShadow>
+        <cylinderGeometry args={[0.15, 0.13, 0.07, 16]} />
+        <primitive object={M.blackAnodized} attach="material" />
+      </mesh>
+      <mesh position={[0, 1.75, 0]}>
+        <cylinderGeometry args={[0.125, 0.125, 0.42, 16]} />
+        <primitive object={M.glassCheap} attach="material" />
+      </mesh>
+      {/* Basin + spigot on the west face */}
+      <mesh position={[-0.14, 1.0, 0]}>
+        <boxGeometry args={[0.14, 0.05, 0.3]} />
+        <primitive object={M.wall} attach="material" />
+      </mesh>
+      <mesh position={[-0.24, 0.94, 0]} rotation={[0, 0, Math.PI / 2]}>
+        <cylinderGeometry args={[0.022, 0.022, 0.18, 8]} />
+        <primitive object={M.chrome} attach="material" />
+      </mesh>
+      {/* Blue accent dot (brand cue) */}
+      <mesh position={[0.25, 0.95, 0]} rotation={[0, 0, Math.PI / 2]}>
+        <cylinderGeometry args={[0.04, 0.04, 0.02, 12]} />
+        <primitive object={M.ledCyan} attach="material" />
+      </mesh>
     </group>
   );
 }
@@ -387,6 +429,9 @@ export function Furnishings() {
           </mesh>
         </group>
       ))}
+
+      {/* Water dispenser */}
+      <WaterCooler x={WATER_COOLER[0]} z={WATER_COOLER[1]} />
 
       {/* ---------------- Storage & utility ---------------- */}
       {CREDENZAS.map(([x, z, w, d, ry], i) => (

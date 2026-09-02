@@ -5,8 +5,33 @@ export const presenceStatusSchema = z.enum([
   "away",
   "on_call",
   "busy",
+  "focusing",
   "offline",
 ]);
+
+export const pairSessionMemberSchema = z.object({
+  userId: z.string(),
+  name: z.string(),
+});
+
+export const pairSessionSchema = z.object({
+  id: z.string(),
+  roomId: z.string(),
+  status: z.enum(["pending", "active", "ended"]),
+  repositoryId: z.string().nullable(),
+  members: z.array(pairSessionMemberSchema).min(2).max(2),
+  startedBy: z.string(),
+  startedAt: z.string(),
+  endedAt: z.string().nullable(),
+});
+export type PairSession = z.infer<typeof pairSessionSchema>;
+
+export const pairSessionCreateSchema = z.object({
+  roomId: z.string().min(1).max(100),
+  repositoryId: z.string().min(1).max(120).nullable().optional(),
+  members: z.array(z.string()).min(2).max(2),
+});
+export type PairSessionCreate = z.infer<typeof pairSessionCreateSchema>;
 
 /**
  * Realtime events sent from the server to clients over WebSocket.
@@ -34,10 +59,24 @@ export const realtimeMemberSchema = z.object({
   project: z.string().nullable(),
   /** User-set presence label (e.g. "Shipping 🚀"), null when unset. */
   label: z.string().nullable(),
+  /** User-set "currently working on" (e.g. "LiveKit integration"). */
+  workingOn: z.string().max(60).nullable(),
   status: presenceStatusSchema,
   position: avatarPositionSchema.nullable(),
 });
 export type RealtimeMember = z.infer<typeof realtimeMemberSchema>;
+
+export const whiteboardPointSchema = z.object({
+  x: z.number(),
+  y: z.number(),
+});
+export const whiteboardStrokeSchema = z.object({
+  strokeId: z.string().min(1).max(80),
+  color: z.string().min(1).max(32),
+  width: z.number().min(0.5).max(64),
+  points: z.array(whiteboardPointSchema).min(2).max(4096),
+});
+export type WhiteboardStroke = z.infer<typeof whiteboardStrokeSchema>;
 
 export const realtimeEventSchema = z.discriminatedUnion("type", [
   z.object({
@@ -55,6 +94,8 @@ export const realtimeEventSchema = z.discriminatedUnion("type", [
     status: presenceStatusSchema,
     /** Optional user-set label, e.g. "Shipping 🚀" or "On call w/ acme". */
     label: z.string().max(60).nullable().optional(),
+    /** Optional user-set "currently working on" text. */
+    workingOn: z.string().max(60).nullable().optional(),
     timestamp: z.number(),
   }),
   z.object({
@@ -146,6 +187,8 @@ export const realtimeEventSchema = z.discriminatedUnion("type", [
     prNumber: z.number(),
     title: z.string(),
     status: z.string(),
+    authorId: z.string().nullable().optional(),
+    authorName: z.string().nullable().optional(),
     timestamp: z.number(),
   }),
   z.object({
@@ -161,6 +204,71 @@ export const realtimeEventSchema = z.discriminatedUnion("type", [
       url: z.string().url(),
       createdAt: z.string().datetime(),
     }),
+    timestamp: z.number(),
+  }),
+  z.object({
+    type: z.literal("social.bump"),
+    workspaceId: z.string(),
+    developerId: z.string(),
+    roomId: z.string().max(100).nullable(),
+    timestamp: z.number(),
+  }),
+  z.object({
+    type: z.literal("whiteboard.stroke"),
+    workspaceId: z.string(),
+    boardId: z.string().min(1).max(120),
+    stroke: whiteboardStrokeSchema,
+    timestamp: z.number(),
+  }),
+  z.object({
+    type: z.literal("whiteboard.clear"),
+    workspaceId: z.string(),
+    boardId: z.string().min(1).max(120),
+    clearedBy: z.string(),
+    timestamp: z.number(),
+  }),
+  z.object({
+    type: z.literal("whiteboard.history"),
+    workspaceId: z.string(),
+    boardId: z.string().min(1).max(120),
+    strokes: z.array(whiteboardStrokeSchema).max(200),
+    timestamp: z.number(),
+  }),
+  z.object({
+    type: z.literal("focus.invite"),
+    workspaceId: z.string(),
+    fromId: z.string(),
+    toId: z.string(),
+    action: z.enum(["invite", "accept", "decline", "end"]),
+    timestamp: z.number(),
+  }),
+  z.object({
+    type: z.literal("pair.session"),
+    workspaceId: z.string(),
+    session: pairSessionSchema,
+    timestamp: z.number(),
+  }),
+  z.object({
+    type: z.literal("pair.cursor"),
+    workspaceId: z.string(),
+    sessionId: z.string(),
+    developerId: z.string(),
+    x: z.number().min(0).max(1),
+    y: z.number().min(0).max(1),
+    timestamp: z.number(),
+  }),
+  z.object({
+    type: z.literal("chill.media.state"),
+    workspaceId: z.string(),
+    videoUrl: z.string().nullable(),
+    videoId: z.string().nullable(),
+    title: z.string().nullable(),
+    isPlaying: z.boolean(),
+    /** Server-authoritative playhead in ms (at `at` timestamp). */
+    playheadMs: z.number(),
+    /** Server wall-clock ms when playhead was captured. Clients use this to compute live position. */
+    at: z.number(),
+    setByName: z.string().nullable().optional(),
     timestamp: z.number(),
   }),
 ]);
@@ -179,9 +287,11 @@ export const realtimeClientMessageSchema = z.discriminatedUnion("type", [
   }),
   z.object({
     type: z.literal("presence.update"),
-    status: z.enum(["online", "away", "on_call", "busy"]),
+    status: z.enum(["online", "away", "on_call", "busy", "focusing"]),
     /** Optional user-set label shown next to their name. */
     label: z.string().min(1).max(60).optional(),
+    /** Optional user-set "currently working on" text; null clears it. */
+    workingOn: z.string().min(1).max(60).nullable().optional(),
   }),
   z.object({
     type: z.literal("chat.send"),
@@ -198,9 +308,80 @@ export const realtimeClientMessageSchema = z.discriminatedUnion("type", [
     type: z.literal("github.notification.read"),
     notificationId: z.string().min(1),
   }),
+  z.object({
+    type: z.literal("social.bump"),
+    roomId: z.string().min(1).max(100).nullable(),
+  }),
+  z.object({
+    type: z.literal("whiteboard.stroke"),
+    boardId: z.string().min(1).max(120),
+    stroke: whiteboardStrokeSchema,
+  }),
+  z.object({
+    type: z.literal("whiteboard.clear"),
+    boardId: z.string().min(1).max(120),
+  }),
+  z.object({
+    type: z.literal("whiteboard.history.request"),
+    boardId: z.string().min(1).max(120),
+  }),
+  z.object({
+    type: z.literal("focus.invite"),
+    toId: z.string().min(1),
+    action: z.enum(["invite", "accept", "decline", "end"]),
+  }),
+  z.object({
+    type: z.literal("pair.cursor"),
+    sessionId: z.string().min(1),
+    x: z.number().min(0).max(1),
+    y: z.number().min(0).max(1),
+  }),
+  z.object({
+    type: z.literal("chill.setUrl"),
+    url: z.string().min(1).max(512),
+  }),
+  z.object({
+    type: z.literal("chill.media.play"),
+  }),
+  z.object({
+    type: z.literal("chill.media.pause"),
+  }),
+  z.object({
+    type: z.literal("chill.media.seek"),
+    playheadMs: z.number().min(0),
+  }),
 ]);
 
 export type RealtimeClientMessage = z.infer<typeof realtimeClientMessageSchema>;
+
+// ---------------------------------------------------------------------------
+// YouTube URL parser — shared by frontend + backend
+// ---------------------------------------------------------------------------
+
+/** Supported YT URL patterns, returns null if not a valid YouTube URL. */
+export function parseYouTubeUrl(
+  raw: string,
+): { videoId: string; url: string } | null {
+  const s = raw.trim();
+  if (!s) return null;
+  // Normalise bare IDs to full URL
+  if (/^[A-Za-z0-9_-]{11}$/.test(s))
+    return { videoId: s, url: `https://www.youtube.com/watch?v=${s}` };
+
+  try {
+    const u = new URL(s.replace(/^(https?:)?\/\//, "https://"));
+    // youtube.com/watch?v=ID  /  youtu.be/ID  /  youtube.com/embed/ID  /  youtube.com/shorts/ID
+    const videoId =
+      u.searchParams.get("v") ??
+      (u.hostname === "youtu.be" ? u.pathname.replace(/^\//, "") : null) ??
+      u.pathname.match(/\/(?:embed|shorts)\/([^/?#]+)/)?.[1] ??
+      null;
+    if (!videoId || videoId.length < 11 || videoId.length > 12) return null;
+    return { videoId, url: `https://www.youtube.com/watch?v=${videoId}` };
+  } catch {
+    return null;
+  }
+}
 
 /** Commands the backend can push to a connected collector device. */
 export const deviceCommandSchema = z.enum(["shutdown", "reconnect", "ping"]);
