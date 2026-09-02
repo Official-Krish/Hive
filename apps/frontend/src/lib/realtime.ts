@@ -34,6 +34,7 @@ export type RealtimeEventMap = {
   "focus.invite": Extract<RealtimeEvent, { type: "focus.invite" }>;
   "pair.session": Extract<RealtimeEvent, { type: "pair.session" }>;
   "pair.cursor": Extract<RealtimeEvent, { type: "pair.cursor" }>;
+  "chill.media.state": Extract<RealtimeEvent, { type: "chill.media.state" }>;
 };
 
 type EventHandler<K extends keyof RealtimeEventMap> = (
@@ -193,6 +194,22 @@ export class RealtimeClient {
 
   sendPairCursor(sessionId: string, x: number, y: number): boolean {
     return this.send({ type: "pair.cursor", sessionId, x, y });
+  }
+
+  sendChillSetUrl(url: string): boolean {
+    return this.send({ type: "chill.setUrl", url });
+  }
+
+  sendChillPlay(): boolean {
+    return this.send({ type: "chill.media.play" });
+  }
+
+  sendChillPause(): boolean {
+    return this.send({ type: "chill.media.pause" });
+  }
+
+  sendChillSeek(playheadMs: number): boolean {
+    return this.send({ type: "chill.media.seek", playheadMs });
   }
 
   private open(): void {

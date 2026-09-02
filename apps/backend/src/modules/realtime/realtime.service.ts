@@ -1,5 +1,40 @@
 import { prisma, PresenceStatus } from "@hive/db";
-import type { AvatarPosition, RealtimeMember } from "@hive/types";
+import {
+  parseYouTubeUrl,
+  type AvatarPosition,
+  type RealtimeMember,
+} from "@hive/types";
+
+export interface ChillMediaState {
+  videoUrl: string | null;
+  videoId: string | null;
+  title: string | null;
+  isPlaying: boolean;
+  playheadMs: number;
+  /** Server wall-clock ms at which `playheadMs` was captured. */
+  at: number;
+  setByName: string | null;
+}
+
+function toChillMediaState(row: {
+  videoUrl: string | null;
+  videoId: string | null;
+  title: string | null;
+  isPlaying: boolean;
+  playheadMs: number;
+  updatedAt: Date;
+  setBy: { name: string } | null;
+}): ChillMediaState {
+  return {
+    videoUrl: row.videoUrl,
+    videoId: row.videoId,
+    title: row.title,
+    isPlaying: row.isPlaying,
+    playheadMs: Math.round(row.playheadMs),
+    at: row.updatedAt.getTime(),
+    setByName: row.setBy?.name ?? null,
+  };
+}
 
 export class RealtimeService {
   async isMember(workspaceId: string, userId: string): Promise<boolean> {
@@ -199,5 +234,117 @@ export class RealtimeService {
           : null,
       };
     });
+  }
+
+  async getChillMedia(workspaceId: string): Promise<ChillMediaState | null> {
+    const row = await prisma.chillMedia.findUnique({
+      where: { workspaceId },
+      select: {
+        videoUrl: true,
+        videoId: true,
+        title: true,
+        isPlaying: true,
+        playheadMs: true,
+        updatedAt: true,
+        setBy: { select: { name: true } },
+      },
+    });
+    return row ? toChillMediaState(row) : null;
+  }
+
+  async setChillUrl(
+    workspaceId: string,
+    userId: string,
+    raw: string,
+  ): Promise<ChillMediaState> {
+    const parsed = parseYouTubeUrl(raw);
+    if (!parsed) {
+      throw new Error("invalid_youtube_url");
+    }
+    const row = await prisma.chillMedia.upsert({
+      where: { workspaceId },
+      create: {
+        workspaceId,
+        videoUrl: parsed.url,
+        videoId: parsed.videoId,
+        title: parsed.videoId,
+        isPlaying: false,
+        playheadMs: 0,
+        setById: userId,
+      },
+      update: {
+        videoUrl: parsed.url,
+        videoId: parsed.videoId,
+        title: parsed.videoId,
+        isPlaying: false,
+        playheadMs: 0,
+        setById: userId,
+      },
+      select: {
+        videoUrl: true,
+        videoId: true,
+        title: true,
+        isPlaying: true,
+        playheadMs: true,
+        updatedAt: true,
+        setBy: { select: { name: true } },
+      },
+    });
+    return toChillMediaState(row);
+  }
+
+  async setChillPlaying(
+    workspaceId: string,
+    isPlaying: boolean,
+  ): Promise<ChillMediaState | null> {
+    const existing = await prisma.chillMedia.findUnique({
+      where: { workspaceId },
+      select: { id: true, isPlaying: true, playheadMs: true, updatedAt: true },
+    });
+    if (!existing) return null;
+    // When transitioning from playing → paused, freeze the live position so the
+    // stored playhead stays the baseline for the paused state.
+    const liveMs = existing.isPlaying
+      ? existing.playheadMs + (Date.now() - existing.updatedAt.getTime())
+      : existing.playheadMs;
+    const row = await prisma.chillMedia.update({
+      where: { id: existing.id },
+      data: { isPlaying, playheadMs: liveMs },
+      select: {
+        videoUrl: true,
+        videoId: true,
+        title: true,
+        isPlaying: true,
+        playheadMs: true,
+        updatedAt: true,
+        setBy: { select: { name: true } },
+      },
+    });
+    return toChillMediaState(row);
+  }
+
+  async seekChill(
+    workspaceId: string,
+    playheadMs: number,
+  ): Promise<ChillMediaState | null> {
+    const existing = await prisma.chillMedia.findUnique({
+      where: { workspaceId },
+      select: { id: true },
+    });
+    if (!existing) return null;
+    const row = await prisma.chillMedia.update({
+      where: { id: existing.id },
+      data: { playheadMs },
+      select: {
+        videoUrl: true,
+        videoId: true,
+        title: true,
+        isPlaying: true,
+        playheadMs: true,
+        updatedAt: true,
+        setBy: { select: { name: true } },
+      },
+    });
+    return toChillMediaState(row);
   }
 }

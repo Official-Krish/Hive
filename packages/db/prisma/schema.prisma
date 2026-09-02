@@ -49,6 +49,7 @@ model User {
   conversationsCreated    Conversation[]          @relation("ConversationCreator")
   githubNotifications     GitHubNotification[]
   pairSessionMembers      PairSessionMember[]
+  chillMediaSet           ChillMedia[]
 }
 
 model Organization {
@@ -89,6 +90,7 @@ model Workspace {
   conversations     Conversation[]
   presences         Presence[]
   pairSessions      PairSession[]
+  chillMedia        ChillMedia?
   privacySetting    PrivacySetting?
   invites           Invite[]
   githubInstallations GitHubInstallation[]
@@ -740,6 +742,23 @@ model PairSessionMember {
   @@unique([pairSessionId, userId])
 }
 
+model ChillMedia {
+  id          String   @id @default(cuid())
+  workspaceId String   @unique
+  videoUrl    String?
+  videoId     String?
+  title       String?
+  isPlaying   Boolean  @default(false)
+  playheadMs  Float    @default(0)
+  setById     String?
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  setBy     User?     @relation(fields: [setById], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId])
+}
+
 model PrivacySetting {
   id                     String   @id @default(cuid())
   workspaceId            String   @unique
@@ -760,7 +779,6 @@ model PrivacySetting {
 model Conversation {
   id            String   @id @default(cuid())
   workspaceId   String
-  /// null = direct message between exactly two participants.
   title         String?
   createdById   String
   lastMessageAt DateTime?

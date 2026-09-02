@@ -252,6 +252,23 @@ export class RealtimeHub {
         timestamp,
       };
       this.publishToWorkspace(client.workspaceId, online);
+
+      const chill = await this.service.getChillMedia(client.workspaceId);
+      if (chill) {
+        const media: RealtimeEvent = {
+          type: "chill.media.state",
+          workspaceId: client.workspaceId,
+          videoUrl: chill.videoUrl,
+          videoId: chill.videoId,
+          title: chill.title,
+          isPlaying: chill.isPlaying,
+          playheadMs: chill.playheadMs,
+          at: chill.at,
+          setByName: chill.setByName,
+          timestamp,
+        };
+        ws.send(JSON.stringify(media));
+      }
     } catch (err) {
       console.error(
         `[hive] realtime open failed for user ${client.userId}`,
@@ -469,6 +486,92 @@ export class RealtimeHub {
           timestamp,
         };
         this.publishToWorkspace(workspaceId, event);
+        break;
+      }
+      case "chill.setUrl": {
+        let state;
+        try {
+          state = await this.service.setChillUrl(
+            workspaceId,
+            client.userId,
+            parsed.url,
+          );
+        } catch (err) {
+          // Invalid YouTube URL — notify the sender only.
+          const invalid: RealtimeEvent = {
+            type: "chill.media.state",
+            workspaceId,
+            videoUrl: null,
+            videoId: null,
+            title: null,
+            isPlaying: false,
+            playheadMs: 0,
+            at: Date.now(),
+            timestamp,
+          };
+          ws.send(JSON.stringify(invalid));
+          void err;
+          break;
+        }
+        const event: RealtimeEvent = {
+          type: "chill.media.state",
+          workspaceId,
+          videoUrl: state.videoUrl,
+          videoId: state.videoId,
+          title: state.title,
+          isPlaying: state.isPlaying,
+          playheadMs: state.playheadMs,
+          at: state.at,
+          setByName: state.setByName,
+          timestamp,
+        };
+        this.publishToWorkspace(workspaceId, event);
+        break;
+      }
+      case "chill.media.play":
+      case "chill.media.pause": {
+        const isPlaying = parsed.type === "chill.media.play";
+        const state = await this.service.setChillPlaying(
+          workspaceId,
+          isPlaying,
+        );
+        if (state) {
+          const event: RealtimeEvent = {
+            type: "chill.media.state",
+            workspaceId,
+            videoUrl: state.videoUrl,
+            videoId: state.videoId,
+            title: state.title,
+            isPlaying: state.isPlaying,
+            playheadMs: state.playheadMs,
+            at: state.at,
+            setByName: state.setByName,
+            timestamp,
+          };
+          this.publishToWorkspace(workspaceId, event);
+        }
+        break;
+      }
+      case "chill.media.seek": {
+        const state = await this.service.seekChill(
+          workspaceId,
+          parsed.playheadMs,
+        );
+        if (state) {
+          const event: RealtimeEvent = {
+            type: "chill.media.state",
+            workspaceId,
+            videoUrl: state.videoUrl,
+            videoId: state.videoId,
+            title: state.title,
+            isPlaying: state.isPlaying,
+            playheadMs: state.playheadMs,
+            at: state.at,
+            setByName: state.setByName,
+            timestamp,
+          };
+          this.publishToWorkspace(workspaceId, event);
+        }
         break;
       }
     }

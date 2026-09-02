@@ -1,9 +1,16 @@
 import { DESKS, L2_DESKS, POD_DESKS, type Vec2 } from "./office/layout";
 
 export type InteractableKind =
-  "coffee" | "cooler" | "monitor" | "whiteboard" | "ci";
+  | "coffee"
+  | "cooler"
+  | "monitor"
+  | "whiteboard"
+  | "ci"
+  | "chill-screen"
+  | "arcade";
 
-export type InteractableIcon = "coffee" | "water" | "monitor" | "board" | "ci";
+export type InteractableIcon =
+  "coffee" | "water" | "monitor" | "board" | "ci" | "chill" | "arcade";
 
 export interface Interactable {
   id: string;
@@ -110,6 +117,30 @@ const CI_SCREENS: Interactable[] = [
   },
 ];
 
+/** The big Chill Space screen — stand in front of it and press E to control it. */
+const CHILL_SCREEN: Interactable = {
+  id: "chill-screen",
+  kind: "chill-screen",
+  x: -14,
+  z: -17.2,
+  y: 0,
+  radius: 4.5,
+  prompt: "Shared screen",
+  icon: "chill",
+};
+
+/** Arcade station for the multiplayer games (coming soon). */
+const ARCADE: Interactable = {
+  id: "arcade",
+  kind: "arcade",
+  x: -7,
+  z: -15,
+  y: 0,
+  radius: 2.6,
+  prompt: "Multiplayer games",
+  icon: "arcade",
+};
+
 /** Every desk gets a "workspace" monitor you can lean in and use. */
 function monitorSpots(): Interactable[] {
   return [...DESKS, ...L2_DESKS, ...POD_DESKS].map((d, i) => {
@@ -132,6 +163,8 @@ export const INTERACTABLES: Interactable[] = [
   COFFEE,
   COOLER,
   ...CI_SCREENS,
+  CHILL_SCREEN,
+  ARCADE,
   ...WHITEBOARD_SPOTS.map(([x, z], i): Interactable => ({
     id: `whiteboard-${i}`,
     kind: "whiteboard",

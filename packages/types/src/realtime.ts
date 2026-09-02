@@ -257,6 +257,20 @@ export const realtimeEventSchema = z.discriminatedUnion("type", [
     y: z.number().min(0).max(1),
     timestamp: z.number(),
   }),
+  z.object({
+    type: z.literal("chill.media.state"),
+    workspaceId: z.string(),
+    videoUrl: z.string().nullable(),
+    videoId: z.string().nullable(),
+    title: z.string().nullable(),
+    isPlaying: z.boolean(),
+    /** Server-authoritative playhead in ms (at `at` timestamp). */
+    playheadMs: z.number(),
+    /** Server wall-clock ms when playhead was captured. Clients use this to compute live position. */
+    at: z.number(),
+    setByName: z.string().nullable().optional(),
+    timestamp: z.number(),
+  }),
 ]);
 
 export type RealtimeEvent = z.infer<typeof realtimeEventSchema>;
@@ -322,9 +336,52 @@ export const realtimeClientMessageSchema = z.discriminatedUnion("type", [
     x: z.number().min(0).max(1),
     y: z.number().min(0).max(1),
   }),
+  z.object({
+    type: z.literal("chill.setUrl"),
+    url: z.string().min(1).max(512),
+  }),
+  z.object({
+    type: z.literal("chill.media.play"),
+  }),
+  z.object({
+    type: z.literal("chill.media.pause"),
+  }),
+  z.object({
+    type: z.literal("chill.media.seek"),
+    playheadMs: z.number().min(0),
+  }),
 ]);
 
 export type RealtimeClientMessage = z.infer<typeof realtimeClientMessageSchema>;
+
+// ---------------------------------------------------------------------------
+// YouTube URL parser — shared by frontend + backend
+// ---------------------------------------------------------------------------
+
+/** Supported YT URL patterns, returns null if not a valid YouTube URL. */
+export function parseYouTubeUrl(
+  raw: string,
+): { videoId: string; url: string } | null {
+  const s = raw.trim();
+  if (!s) return null;
+  // Normalise bare IDs to full URL
+  if (/^[A-Za-z0-9_-]{11}$/.test(s))
+    return { videoId: s, url: `https://www.youtube.com/watch?v=${s}` };
+
+  try {
+    const u = new URL(s.replace(/^(https?:)?\/\//, "https://"));
+    // youtube.com/watch?v=ID  /  youtu.be/ID  /  youtube.com/embed/ID  /  youtube.com/shorts/ID
+    const videoId =
+      u.searchParams.get("v") ??
+      (u.hostname === "youtu.be" ? u.pathname.replace(/^\//, "") : null) ??
+      u.pathname.match(/\/(?:embed|shorts)\/([^/?#]+)/)?.[1] ??
+      null;
+    if (!videoId || videoId.length < 11 || videoId.length > 12) return null;
+    return { videoId, url: `https://www.youtube.com/watch?v=${videoId}` };
+  } catch {
+    return null;
+  }
+}
 
 /** Commands the backend can push to a connected collector device. */
 export const deviceCommandSchema = z.enum(["shutdown", "reconnect", "ping"]);

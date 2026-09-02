@@ -43,13 +43,20 @@ import { PairModeBar } from "./PairModeBar";
 import { PeerCursorOverlay } from "./PeerCursorOverlay";
 import { Confetti, type ConfettiRef } from "@/components/ui/confetti";
 import { cn } from "@/lib/utils";
+import { useChillMedia } from "@/hooks/useChillMedia";
+import { ChillScreenProjection } from "./ChillScreenProjection";
+import { ChillScreenModal } from "./ChillScreenModal";
+import { GamesModal } from "./GamesModal";
 import { useChat } from "@/hooks/useChat";
 import {
   Coffee,
+  Clapperboard,
   Droplets,
+  Gamepad2,
   Gauge,
   Monitor,
   PenLine,
+  Volume2,
   Zap,
   Trophy,
   type LucideIcon,
@@ -67,6 +74,8 @@ const INTERACTABLE_ICONS: Record<InteractableIcon, LucideIcon> = {
   monitor: Monitor,
   board: PenLine,
   ci: Gauge,
+  chill: Clapperboard,
+  arcade: Gamepad2,
 };
 
 const CHIP =
@@ -235,6 +244,7 @@ export function WorldCanvas({
   });
   const nearbyTokens = useNearbyTokens(workspaceId, client, nearIds);
   const chat = useChat(workspaceId, myUserId, client, chatOpen);
+  const chill = useChillMedia(client, currentRoom === "Chill Space");
 
   // Pair-session collaborative cursor: forward my pointer to the active
   // session as normalised window coordinates (throttled inside the hook).
@@ -400,6 +410,8 @@ export function WorldCanvas({
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
   const [ciOpen, setCiOpen] = useState(false);
   const [whiteboardId, setWhiteboardId] = useState<string | null>(null);
+  const [chillScreenOpen, setChillScreenOpen] = useState(false);
+  const [gamesOpen, setGamesOpen] = useState(false);
 
   const showToast = useCallback((node: React.ReactNode) => {
     setToast(node);
@@ -432,6 +444,12 @@ export function WorldCanvas({
         case "ci":
           setCiOpen(true);
           break;
+        case "chill-screen":
+          setChillScreenOpen(true);
+          break;
+        case "arcade":
+          setGamesOpen(true);
+          break;
         case "whiteboard":
           setWhiteboardId(it.id);
           break;
@@ -450,6 +468,8 @@ export function WorldCanvas({
       openMemberId !== null ||
       workspaceOpen ||
       ciOpen ||
+      chillScreenOpen ||
+      gamesOpen ||
       whiteboardId !== null,
     onPress: handleInteract,
   });
@@ -499,6 +519,10 @@ export function WorldCanvas({
           }`,
           "bump",
         );
+      }),
+      client.on("chill.media.state", (e) => {
+        if (!e.videoUrl || !e.setByName) return;
+        push(`${e.setByName} put up a video in Chill Space`, "bump");
       }),
       client.on("presence.changed", (e) => {
         if (e.developerId === myUserId) return;
@@ -1027,6 +1051,7 @@ export function WorldCanvas({
 
         <OfficeLighting />
         <OfficeBuilding />
+        <ChillScreenProjection active={!!chill.state.videoId} />
 
         <PlayerController
           playerRef={playerGroupRef}
@@ -1118,6 +1143,16 @@ export function WorldCanvas({
         />
       )}
 
+      {/* Chill Space shared screen + arcade station */}
+      {chillScreenOpen && (
+        <ChillScreenModal
+          client={client}
+          state={chill.state}
+          onClose={() => setChillScreenOpen(false)}
+        />
+      )}
+      {gamesOpen && <GamesModal onClose={() => setGamesOpen(false)} />}
+
       {/* Proximity voice/video — only when near other members.
           Bottom-center column: video tiles above the mic/camera controls. */}
       {nearIds.size > 0 && (
@@ -1159,6 +1194,24 @@ export function WorldCanvas({
         manualstart
         className="pointer-events-none fixed inset-0 z-[9999] h-full w-full"
       />
+
+      {/* Chill Space shared-screen volume — only while inside the room. */}
+      {currentRoom === "Chill Space" && (
+        <div className="fixed left-1/2 top-4 z-30 -translate-x-1/2">
+          <div className="pointer-events-auto flex items-center gap-3 rounded-full bg-[#0b0d12]/85 py-2 pl-3 pr-2 text-neutral-200 ring-1 ring-white/10">
+            <Volume2 className="h-4 w-4 text-neutral-400" />
+            <input
+              type="range"
+              min={0}
+              max={100}
+              value={Math.round(chill.volume * 100)}
+              onChange={(e) => chill.setVolume(Number(e.target.value) / 100)}
+              className="h-1 w-32 cursor-pointer appearance-none rounded-full bg-neutral-700 accent-[#6ee7b7]"
+              aria-label="Chill space volume"
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

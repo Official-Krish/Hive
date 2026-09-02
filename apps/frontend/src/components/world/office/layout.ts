@@ -512,6 +512,13 @@ export const ROOMS: Room[] = [
     accent: "#818cf8",
   },
   {
+    id: "chill",
+    name: "Chill Space",
+    rect: [-24, -4, -20, -4],
+    floor: "lounge",
+    accent: "#f472b6",
+  },
+  {
     id: "lounge",
     name: "Lounge & Breakout",
     rect: [minX, -4, minZ, 0],
@@ -710,6 +717,31 @@ export const RUGS: [number, number, number, number][] = [
   [-28, -11.75, 6.5, 5.5],
   [-14.5, -9, 5.5, 8],
   [-21, -16.6, 6, 4.5],
+];
+
+// --- Chill Space / Play Area (carved from the lounge south-east) -------------
+/** The big shared screen on the chill-space south wall (faces +Z into the room). */
+export const CHILL_SCREEN: WallPanel = {
+  position: [-14, 2.4, -20],
+  rotation: [0, 0, 0],
+  size: [5.6, 3.1],
+  variant: "b",
+};
+/** World center + size of the chill room's interactive floor rug (unused for clipping). */
+export const CHILL_RUG: [number, number, number, number] = [-14, -13, 9, 12];
+/** Bean-bag seating rows facing the screen: [x, z]. */
+export const CHILL_SEATS: Vec2[] = [
+  [-14, -17],
+  [-17, -16],
+  [-11, -16],
+  [-16, -14.4],
+  [-12, -14.4],
+  [-14, -13],
+];
+/** Coastal / floor lamp accents flanking the screen. */
+export const CHILL_LAMPS: Vec2[] = [
+  [-19, -18],
+  [-9, -18],
 ];
 
 // --- Server racks (AI lab) --------------------------------------------------
@@ -1439,6 +1471,13 @@ export const PLAYER_COLLIDERS: AABB[] = [
   ...propBoxes(POD_DESKS, 1.0, 0.55, L2_Y),
   ...propBoxes(L2_SOFAS, 1.0, 0.5, L2_Y),
   ...propBoxes(L2_TABLES, 0.8, 0.5, L2_Y),
+  ...propBoxes(
+    CHILL_SEATS.map(([x, z]) => ({ position: [x, 0, z] })),
+    0.34,
+    0.34,
+  ),
+  ...CHILL_LAMPS.map(([x, z]) => rect(x, z, 0.12, 0.12, 0, 2.4)),
+  rect(-7, -15, 0.5, 0.4, 0, 2.0),
 ];
 
 /** Full-height boxes the camera should not clip through (interior walls only). */
