@@ -74,7 +74,10 @@ export const Faq = () => {
   };
 
   return (
-    <section className="relative bg-[#f0efec] text-neutral-900 py-16 sm:py-28 px-4 sm:px-6 lg:px-12 select-none border-t border-neutral-300/40">
+    <section
+      id="faq"
+      className="relative bg-[#f0efec] text-neutral-900 py-16 sm:py-28 px-4 sm:px-6 lg:px-12 select-none border-t border-neutral-300/40 scroll-mt-16"
+    >
       <div className="relative max-w-8xl">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-16 items-start">
           {/* ── LEFT COLUMN: Title, Contact Email, & CTA Card ── */}
