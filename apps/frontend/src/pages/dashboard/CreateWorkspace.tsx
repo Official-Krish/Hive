@@ -1,13 +1,11 @@
 /* ─────────────────────────────────────────────────────────────
-   CREATE WORKSPACE — step 1 sets the identity, step 2 connects
-   GitHub. The GitHub App install is the recommended path (it
-   wires every repo at once); a manual repo link is the fallback.
+   CREATE WORKSPACE — step 1: identity. Step 2: connect GitHub.
+   Same flow, dark instrument.
    ───────────────────────────────────────────────────────────── */
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { motion } from "motion/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FiCopy, FiGithub, FiRefreshCw } from "react-icons/fi";
+import { FiArrowRight, FiCopy, FiGithub, FiRefreshCw } from "react-icons/fi";
 import {
   ApiError,
   http,
@@ -16,18 +14,17 @@ import {
   type WorkspaceSummary,
 } from "@/lib/http";
 import { notifyError, notifyInfo, notifySuccess } from "@/lib/toast";
-import { fade } from "@/components/dashboard/primitives";
 import {
-  InkNote,
+  Badge,
+  Btn,
+  Card,
+  CardHead,
+  Field,
   LiveDot,
-  PaperInset,
-  StripMeta,
-  inkBtnClass,
-  paperGhostBtnClass,
-  paperInputClass,
-  paperLabelClass,
-} from "@/components/dashboard/Paper";
-import { Field, PageHeader, Spinner } from "@/components/dashboard/ui";
+  PageHead,
+  Spinner,
+  inputClass,
+} from "@/components/dashboard/kit";
 
 function generateSecret(): string {
   const bytes = new Uint8Array(12);
@@ -87,8 +84,10 @@ export function CreateWorkspace() {
   });
 
   const linkMutation = useMutation({
-    mutationFn: (repoId: string) =>
-      http.workspaces.linkRepository(createdWs!.id, repoId),
+    mutationFn: (repoId: string) => {
+      if (!createdWs) throw new Error("No workspace");
+      return http.workspaces.linkRepository(createdWs.id, repoId);
+    },
     onSuccess: (_data, repoId) => {
       const r = repoOptions.find((o) => String(o.id) === repoId);
       if (r) setLinkedRepos((prev) => [...prev, r]);
@@ -125,8 +124,8 @@ export function CreateWorkspace() {
   const secretHint = useMemo(
     () =>
       webhookSecret.trim().length < 8
-        ? "At least 8 characters. Used to verify GitHub webhooks for this workspace."
-        : "Paste this into your GitHub repo's webhook settings (or skip it — the App handles this for you).",
+        ? "At least 8 characters. Used to verify GitHub webhooks."
+        : "Paste this into your repo's webhook settings — or skip it, the App handles this.",
     [webhookSecret],
   );
 
@@ -134,56 +133,30 @@ export function CreateWorkspace() {
   if (createdWs) {
     return (
       <div>
-        <PageHeader
-          eyebrow="Connect GitHub"
-          title={
-            <>
-              Bring <span className="italic text-neutral-400">activity</span> to{" "}
-              {createdWs.name}.
-            </>
-          }
-          subtitle="Install the Hive GitHub App to stream push, PR, issue, release and review events — or link a single repo manually."
+        <PageHead
+          eyebrow="Create workspace · Step 2 of 2"
+          title={`Bring activity to ${createdWs.name}`}
+          sub="Install the Hive GitHub App to stream push, PR, issue, release and review events — or link a single repo manually."
         />
 
-        <motion.div {...fade(0.05)} className="max-w-2xl">
-          <PaperInset
-            grid
-            top={
-              <StripMeta>
-                <span className="uppercase tracking-[0.08em]">Recommended</span>
-              </StripMeta>
-            }
-          >
-            <div className="px-5 py-7 sm:px-7">
-              <div className="flex flex-wrap items-start justify-between gap-4">
-                <div className="min-w-0">
-                  <p className="text-[14px] font-medium text-neutral-900">
-                    Install the Hive GitHub App
-                  </p>
-                  <p className="mt-1 max-w-md text-[12.5px] leading-relaxed text-neutral-600">
-                    Grants this workspace access to the repos you choose. Every
-                    linked repo's webhooks flow in automatically — no manual
-                    secret needed.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  className={inkBtnClass}
-                  onClick={startInstall}
-                  disabled={installing}
-                >
+        <div className="max-w-2xl">
+          <Card>
+            <CardHead
+              title="Install the Hive GitHub App"
+              hint="Recommended — every linked repo's webhooks flow in automatically."
+              right={
+                <Btn onClick={startInstall} disabled={installing}>
                   {installing ? (
-                    <Spinner ink />
+                    <Spinner />
                   ) : (
                     <FiGithub className="size-4" aria-hidden />
                   )}
-                  {installing ? "Redirecting…" : "Install GitHub App"}
-                </button>
-              </div>
-
-              <div className="my-7 h-px bg-neutral-900/[0.08]" />
-
-              <p className="text-[12px] font-semibold uppercase tracking-[0.1em] text-neutral-500">
+                  {installing ? "Redirecting…" : "Install"}
+                </Btn>
+              }
+            />
+            <div className="px-5 py-5">
+              <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-neutral-400">
                 Or link a single repo
               </p>
 
@@ -192,14 +165,12 @@ export function CreateWorkspace() {
                   {linkedRepos.map((r) => (
                     <li
                       key={r.id}
-                      className="flex items-center justify-between gap-3 rounded-xl border border-neutral-900/[0.08] bg-neutral-900/[0.02] px-3 py-2.5"
+                      className="flex items-center justify-between gap-3 rounded-lg border border-neutral-900/[0.08] bg-white px-3 py-2.5"
                     >
-                      <span className="truncate text-[13px] font-medium text-neutral-900">
+                      <span className="truncate font-mono text-[13px] text-neutral-700">
                         {r.fullName}
                       </span>
-                      <span className="text-[11px] text-neutral-500">
-                        Linked
-                      </span>
+                      <Badge tone="live">Linked</Badge>
                     </li>
                   ))}
                 </ul>
@@ -207,12 +178,11 @@ export function CreateWorkspace() {
 
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <select
-                  id="ws-repo"
-                  className={`${paperInputClass} min-w-0 flex-1`}
+                  className={`${inputClass} min-w-0 flex-1`}
                   value={repositoryId}
                   onChange={(e) => setRepositoryId(e.target.value)}
                 >
-                  <option value="">— Choose a repository —</option>
+                  <option value="">Choose a repository…</option>
                   {repoOptions
                     .filter((r) => !linkedNames.has(r.fullName))
                     .map((r) => (
@@ -222,39 +192,38 @@ export function CreateWorkspace() {
                       </option>
                     ))}
                 </select>
-                <button
-                  type="button"
-                  className={inkBtnClass}
+                <Btn
                   disabled={linkMutation.isPending || !repositoryId}
                   onClick={() => {
                     if (repositoryId) linkMutation.mutate(repositoryId);
                   }}
                 >
-                  {linkMutation.isPending && <Spinner ink />}
+                  {linkMutation.isPending && <Spinner />}
                   Link
-                </button>
+                </Btn>
               </div>
               {repos.isError && (
-                <p className="mt-2 text-[12px] text-neutral-500">
+                <p className="mt-2 text-xs text-neutral-500">
                   Connect your GitHub account to link a repo manually.
                 </p>
               )}
             </div>
-          </PaperInset>
+          </Card>
 
           <div className="mt-5 flex items-center justify-between">
-            <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-neutral-500">
+            <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-neutral-400">
               You're the owner
             </span>
             <button
               type="button"
-              className={paperGhostBtnClass}
               onClick={() => navigate(`/dashboard/w/${createdWs.id}`)}
+              className="group inline-flex items-center gap-1.5 text-[13px] font-medium text-neutral-500 transition-colors hover:text-neutral-900"
             >
-              Enter workspace →
+              Enter workspace
+              <FiArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
             </button>
           </div>
-        </motion.div>
+        </div>
       </div>
     );
   }
@@ -262,144 +231,104 @@ export function CreateWorkspace() {
   /* ── Step 1: identity ────────────────────────────────────── */
   return (
     <div>
-      <PageHeader
-        eyebrow="Create workspace"
-        title={
-          <>
-            Start something{" "}
-            <span className="italic text-neutral-400">together.</span>
-          </>
-        }
-        subtitle="A workspace is where your team's activity comes together. You'll be its owner."
+      <PageHead
+        eyebrow="Create workspace · Step 1 of 2"
+        title="Start something together"
+        sub="A workspace is where your team's activity comes together. You'll be its owner."
       />
 
-      <motion.div {...fade(0.05)} className="max-w-2xl">
-        <PaperInset
-          grid
-          top={
-            <>
-              <StripMeta>
-                <span className="uppercase tracking-[0.08em]">
-                  New workspace
-                </span>
-              </StripMeta>
-              <StripMeta>
-                <LiveDot tone={hasDevice ? "live" : "warn"} ping={hasDevice} />
+      <div className="max-w-2xl">
+        <Card>
+          <CardHead
+            title="New workspace"
+            right={
+              <span className="flex items-center gap-1.5 font-mono text-[11px] text-neutral-500">
+                <LiveDot tone={hasDevice ? "live" : "away"} />
                 {hasDevice ? "Collector online" : "Collector offline"}
-              </StripMeta>
-            </>
-          }
-        >
+              </span>
+            }
+          />
           <form
-            className="px-5 py-7 sm:px-7"
+            className="space-y-4 px-5 py-5"
             onSubmit={(e) => {
               e.preventDefault();
               if (canSubmit) mutation.mutate();
             }}
           >
-            {/* identity */}
-            <div className="space-y-5">
-              <Field
-                label="Name"
-                htmlFor="ws-name"
-                labelClass={paperLabelClass}
-              >
+            <Field label="Name">
+              <input
+                className={inputClass}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g. Engineering"
+                maxLength={100}
+                autoFocus
+              />
+            </Field>
+
+            <Field
+              label="Description"
+              hint="Optional — a short line on what this workspace is for."
+            >
+              <textarea
+                className={`${inputClass} h-auto min-h-[84px] resize-y py-2.5`}
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Product & platform engineering"
+                maxLength={500}
+              />
+            </Field>
+
+            <Field label="Webhook secret" hint={secretHint}>
+              <div className="flex items-center gap-2">
                 <input
-                  id="ws-name"
-                  className={paperInputClass}
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. Engineering"
-                  maxLength={100}
-                  autoFocus
+                  className={`${inputClass} font-mono text-[13px]`}
+                  value={webhookSecret}
+                  onChange={(e) => setWebhookSecret(e.target.value)}
+                  minLength={8}
+                  maxLength={128}
+                  spellCheck={false}
                 />
-              </Field>
+                <Btn
+                  variant="ghost"
+                  className="h-10 px-3"
+                  aria-label="Regenerate secret"
+                  onClick={() => setWebhookSecret(generateSecret())}
+                >
+                  <FiRefreshCw className="size-4" aria-hidden />
+                </Btn>
+                <Btn
+                  variant="ghost"
+                  className="h-10 px-3"
+                  aria-label="Copy secret"
+                  onClick={() => {
+                    void navigator.clipboard.writeText(webhookSecret);
+                    notifyInfo("Webhook secret copied to clipboard");
+                  }}
+                >
+                  <FiCopy className="size-4" aria-hidden />
+                </Btn>
+              </div>
+            </Field>
 
-              <Field
-                label="Description"
-                htmlFor="ws-desc"
-                hint="Optional — a short line on what this workspace is for."
-                labelClass={paperLabelClass}
-              >
-                <textarea
-                  id="ws-desc"
-                  className={`${paperInputClass} min-h-[84px] resize-y`}
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Product & platform engineering"
-                  maxLength={500}
-                />
-              </Field>
-            </div>
-
-            {/* integrations */}
-            <div className="my-7 h-px bg-neutral-900/[0.08]" />
-
-            <div className="space-y-5">
-              <Field
-                label="Webhook secret"
-                htmlFor="ws-secret"
-                hint={secretHint}
-                labelClass={paperLabelClass}
-              >
-                <div className="flex items-center gap-2">
-                  <input
-                    id="ws-secret"
-                    className={`${paperInputClass} font-mono text-[13px]`}
-                    value={webhookSecret}
-                    onChange={(e) => setWebhookSecret(e.target.value)}
-                    minLength={8}
-                    maxLength={128}
-                    spellCheck={false}
-                  />
-                  <button
-                    type="button"
-                    aria-label="Regenerate secret"
-                    title="Regenerate"
-                    className={paperGhostBtnClass}
-                    onClick={() => setWebhookSecret(generateSecret())}
-                  >
-                    <FiRefreshCw className="size-4" aria-hidden />
-                  </button>
-                  <button
-                    type="button"
-                    aria-label="Copy secret"
-                    title="Copy"
-                    className={paperGhostBtnClass}
-                    onClick={() => {
-                      void navigator.clipboard.writeText(webhookSecret);
-                      notifyInfo("Webhook secret copied to clipboard");
-                    }}
-                  >
-                    <FiCopy className="size-4" aria-hidden />
-                  </button>
-                </div>
-              </Field>
-            </div>
-
-            {/* action row */}
-            <div className="mt-7 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
               {!hasDevice && !device.isLoading ? (
-                <InkNote className="max-w-xs border-transparent bg-transparent px-0">
+                <p className="font-mono text-[11px] text-amber-800">
                   Start your collector before entering the office.
-                </InkNote>
+                </p>
               ) : (
-                <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-neutral-500">
+                <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-neutral-400">
                   You'll be its owner
                 </span>
               )}
-              <button
-                type="submit"
-                className={inkBtnClass}
-                disabled={!canSubmit}
-              >
-                {mutation.isPending && <Spinner ink />}
+              <Btn type="submit" disabled={!canSubmit}>
+                {mutation.isPending && <Spinner />}
                 {mutation.isPending ? "Creating…" : "Create workspace"}
-              </button>
+              </Btn>
             </div>
           </form>
-        </PaperInset>
-      </motion.div>
+        </Card>
+      </div>
     </div>
   );
 }

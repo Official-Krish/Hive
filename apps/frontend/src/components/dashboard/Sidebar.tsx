@@ -1,5 +1,4 @@
 import { Link, NavLink, useNavigate } from "react-router-dom";
-import { motion, useReducedMotion } from "motion/react";
 import {
   FiArrowUpLeft,
   FiGrid,
@@ -12,7 +11,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { http } from "@/lib/http";
 import { notifyError } from "@/lib/toast";
 import { cn } from "@/lib/utils";
-import { Avatar } from "./ui";
+import { Avatar } from "./kit";
 
 export interface NavItem {
   label: string;
@@ -45,7 +44,6 @@ export function useReceivedInviteCount(): number {
 }
 
 export function Sidebar() {
-  const reduce = useReducedMotion();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const inviteCount = useReceivedInviteCount();
@@ -70,36 +68,35 @@ export function Sidebar() {
   }
 
   return (
-    <aside className="fixed inset-y-0 left-0 z-40 hidden w-[248px] flex-col border-r border-neutral-900/[0.08] bg-[#faf9f6] lg:flex">
-      {/* wordmark — same serif as the landing AppBar */}
-      <div className="flex h-[72px] items-center justify-between px-6">
-        <Link to="/" className="group flex items-baseline gap-2">
-          <span className="font-serif text-[21px] tracking-[-0.01em] text-neutral-900 transition-colors group-hover:text-neutral-600">
+    <aside className="fixed inset-y-0 left-0 z-40 hidden w-[232px] flex-col border-r border-neutral-900/[0.08] bg-[#FBFAF7] lg:flex">
+      <div className="flex h-16 items-center px-5">
+        <Link to="/" className="flex items-baseline gap-2">
+          <span className="text-[16px] font-bold tracking-tight text-neutral-900">
             Hive
           </span>
-          <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-neutral-400 transition-colors group-hover:text-neutral-500">
+          <span className="font-mono text-[9px] uppercase tracking-[0.2em] text-neutral-400">
             Console
           </span>
         </Link>
       </div>
 
-      {/* nav */}
-      <nav aria-label="Console" className="flex-1 space-y-0.5 px-3 py-2">
+      <nav
+        aria-label="Console"
+        className="dash-scroll flex-1 space-y-0.5 overflow-y-auto px-3 py-2"
+      >
         {DASHBOARD_NAV.map((item) => (
           <RailLink
             key={item.href}
             item={item}
-            reduce={!!reduce}
             count={item.badge ? inviteCount : 0}
           />
         ))}
       </nav>
 
-      {/* organization + operator */}
       <div className="border-t border-neutral-900/[0.08] p-3">
         {me?.organizations && me.organizations.length > 0 && (
-          <div className="mb-2 space-y-0.5">
-            <p className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-neutral-400">
+          <div className="mb-2">
+            <p className="px-2 pb-1 font-mono text-[9px] uppercase tracking-[0.18em] text-neutral-400">
               Organizations
             </p>
             {me.organizations.map((o) => (
@@ -111,14 +108,12 @@ export function Sidebar() {
                     "flex items-baseline justify-between rounded-lg px-2 py-1.5 transition-colors",
                     isActive
                       ? "bg-neutral-900/[0.06] text-neutral-900"
-                      : "text-neutral-500 hover:bg-neutral-900/[0.04] hover:text-neutral-900",
+                      : "text-neutral-500 hover:bg-neutral-900/[0.03] hover:text-neutral-800",
                   )
                 }
               >
-                <span className="truncate text-[12px] font-medium">
-                  {o.name}
-                </span>
-                <span className="ml-2 flex-shrink-0 text-[9.5px] font-semibold uppercase tracking-[0.14em] text-neutral-400">
+                <span className="truncate text-xs font-medium">{o.name}</span>
+                <span className="ml-2 flex-shrink-0 font-mono text-[9px] uppercase tracking-[0.14em] text-neutral-400">
                   {o.plan}
                 </span>
               </NavLink>
@@ -127,13 +122,13 @@ export function Sidebar() {
         )}
 
         {user && (
-          <div className="flex items-center gap-2.5 rounded-xl px-2 py-2 transition-colors hover:bg-neutral-900/[0.04]">
-            <Avatar name={user.name} src={user.avatarUrl} size={32} />
+          <div className="flex items-center gap-2.5 rounded-lg px-2 py-2 transition-colors hover:bg-neutral-900/[0.03]">
+            <Avatar name={user.name} src={user.avatarUrl} size={30} />
             <div className="flex min-w-0 flex-1 flex-col">
-              <span className="truncate text-[13px] font-medium leading-tight text-neutral-900">
+              <span className="truncate text-[13px] font-medium leading-tight text-neutral-800">
                 {user.name}
               </span>
-              <span className="truncate text-[10.5px] leading-tight text-neutral-500">
+              <span className="truncate text-[11px] leading-tight text-neutral-500">
                 {user.email}
               </span>
             </div>
@@ -141,7 +136,7 @@ export function Sidebar() {
               onClick={handleLogout}
               aria-label="Sign out"
               title="Sign out"
-              className="flex size-8 flex-shrink-0 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-900/[0.05] hover:text-neutral-900"
+              className="flex size-8 flex-shrink-0 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-900/[0.05] hover:text-neutral-900"
             >
               <FiLogOut className="size-4" />
             </button>
@@ -160,15 +155,7 @@ export function Sidebar() {
   );
 }
 
-function RailLink({
-  item,
-  reduce,
-  count,
-}: {
-  item: NavItem;
-  reduce: boolean;
-  count: number;
-}) {
+function RailLink({ item, count }: { item: NavItem; count: number }) {
   const { label, href, icon: Icon, end } = item;
   return (
     <NavLink
@@ -176,32 +163,19 @@ function RailLink({
       end={end}
       className={({ isActive }) =>
         cn(
-          "group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-[13.5px] font-medium transition-colors",
+          "flex items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] font-medium transition-colors",
           isActive
-            ? "text-neutral-900"
-            : "text-neutral-500 hover:text-neutral-900",
+            ? "bg-neutral-900/[0.06] text-neutral-900"
+            : "text-neutral-500 hover:bg-neutral-900/[0.03] hover:text-neutral-800",
         )
       }
     >
       {({ isActive }) => (
         <>
-          {isActive && (
-            <motion.span
-              layoutId={reduce ? undefined : "rail-active"}
-              className="absolute inset-0 -z-10 rounded-lg border border-neutral-900/[0.08] bg-neutral-900/[0.05]"
-              transition={{ type: "spring", stiffness: 400, damping: 32 }}
-            />
-          )}
-          {isActive && (
-            <span
-              aria-hidden
-              className="absolute left-0 top-1/2 h-4 w-[2.5px] -translate-y-1/2 rounded-full bg-emerald-500"
-            />
-          )}
           <Icon
             className={cn(
-              "size-[17px] flex-shrink-0 transition-opacity",
-              isActive ? "opacity-100" : "opacity-60 group-hover:opacity-100",
+              "size-4 flex-shrink-0",
+              isActive ? "text-neutral-900" : "text-neutral-400",
             )}
             aria-hidden
           />

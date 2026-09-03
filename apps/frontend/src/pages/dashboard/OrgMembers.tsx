@@ -1,9 +1,14 @@
 import { useOutletContext } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FiTrash2 } from "react-icons/fi";
 import { ApiError, http, type OrgMemberPublic } from "@/lib/http";
-import { Note, Spinner } from "@/components/dashboard/ui";
-import { paperGhostBtnClass } from "@/components/dashboard/Paper";
+import {
+  Avatar,
+  ConfirmBtn,
+  Note,
+  RoleBadge,
+  Spinner,
+  inputClass,
+} from "@/components/dashboard/kit";
 import { notifyError, notifySuccess } from "@/lib/toast";
 import type { OrgOutletContext } from "./OrgDetail";
 
@@ -25,6 +30,7 @@ export function OrgMembers() {
       http.orgs.members.changeRole(org.id, userId, { role }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["org", org.id, "members"] });
+      queryClient.invalidateQueries({ queryKey: ["org", org.id] });
       notifySuccess("Role updated");
     },
     onError: (err) =>
@@ -48,7 +54,7 @@ export function OrgMembers() {
 
   if (members.isLoading) {
     return (
-      <div className="flex items-center gap-2.5 text-neutral-500">
+      <div className="flex items-center gap-2.5 text-sm text-neutral-500">
         <Spinner /> Loading members…
       </div>
     );
@@ -63,66 +69,71 @@ export function OrgMembers() {
   return (
     <div className="space-y-2">
       {list.length === 0 && (
-        <Note>No members yet — invite someone from the console.</Note>
+        <Note>
+          No members yet — workspaces in this org will add people here.
+        </Note>
       )}
 
-      {list.map((m) => (
-        <div
-          key={m.userId}
-          className="flex items-center justify-between gap-3 rounded-xl border border-neutral-900/[0.08] bg-neutral-900/[0.02] px-3 py-2.5"
-        >
-          <div className="min-w-0">
-            <p className="truncate text-[13px] font-medium text-neutral-900">
-              {m.name}
-            </p>
-            <p className="truncate text-[11px] text-neutral-500">{m.email}</p>
-          </div>
+      {list.map((m) => {
+        const rowBusy =
+          (changeRole.isPending && changeRole.variables?.userId === m.userId) ||
+          (remove.isPending && remove.variables === m.userId);
+        return (
+          <div
+            key={m.userId}
+            className="flex items-center justify-between gap-3 rounded-lg border border-neutral-900/[0.08] bg-white px-3 py-2.5"
+          >
+            <div className="flex min-w-0 items-center gap-2.5">
+              <Avatar name={m.name} src={m.avatarUrl} size={28} />
+              <div className="min-w-0">
+                <p className="truncate text-[13px] font-medium text-neutral-800">
+                  {m.name}
+                </p>
+                <p className="truncate text-[11px] text-neutral-500">
+                  {m.email}
+                </p>
+              </div>
+            </div>
 
-          <div className="flex items-center gap-2">
-            <span className="hidden text-[11px] uppercase tracking-[0.1em] text-neutral-400 sm:inline">
-              {m.status}
-            </span>
-            {isOwner ? (
-              <>
-                <select
-                  className="rounded-lg border border-neutral-900/15 bg-white px-2 py-1.5 text-[12.5px] text-neutral-900"
-                  value={m.role}
-                  disabled={changeRole.isPending}
-                  onChange={(e) =>
-                    changeRole.mutate({
-                      userId: m.userId,
-                      role: e.target.value,
-                    })
-                  }
-                >
-                  {ROLES.map((r) => (
-                    <option key={r} value={r}>
-                      {r}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  aria-label="Remove member"
-                  title="Remove"
-                  className={paperGhostBtnClass}
-                  disabled={remove.isPending}
-                  onClick={() => remove.mutate(m.userId)}
-                >
-                  <FiTrash2 className="size-4" aria-hidden />
-                </button>
-              </>
-            ) : (
-              <span className="rounded-md bg-neutral-900/[0.05] px-2 py-1 text-[12px] font-medium uppercase tracking-[0.08em] text-neutral-600">
-                {m.role}
-              </span>
-            )}
+            <div className="flex flex-shrink-0 items-center gap-2">
+              {isOwner ? (
+                <>
+                  <select
+                    className={`${inputClass} h-8 w-auto px-2 text-xs`}
+                    value={m.role}
+                    disabled={rowBusy}
+                    onChange={(e) =>
+                      changeRole.mutate({
+                        userId: m.userId,
+                        role: e.target.value,
+                      })
+                    }
+                  >
+                    {ROLES.map((r) => (
+                      <option key={r} value={r}>
+                        {r}
+                      </option>
+                    ))}
+                  </select>
+                  <ConfirmBtn
+                    variant="ghost"
+                    confirmLabel="Remove"
+                    pending={remove.isPending}
+                    onConfirm={() => remove.mutate(m.userId)}
+                  >
+                    Remove
+                  </ConfirmBtn>
+                </>
+              ) : (
+                <RoleBadge role={m.role} />
+              )}
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
 
       {!isOwner && (
-        <p className="pt-2 text-[11.5px] text-neutral-500">
+        <p className="pt-2 font-mono text-[11px] text-neutral-400">
           Only the organization owner can change roles or remove members.
         </p>
       )}

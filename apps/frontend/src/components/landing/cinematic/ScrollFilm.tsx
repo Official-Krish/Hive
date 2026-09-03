@@ -48,6 +48,7 @@ export function ScrollFilm() {
     let smooth = 0;
     let target = 0;
     let currentLeg = -1;
+    let frame = 0;
 
     const measure = () => {
       const rect = section.getBoundingClientRect();
@@ -86,23 +87,46 @@ export function ScrollFilm() {
       const local = Math.min(Math.max(0, t - legStart), legDur);
       const legP = legDur > 0 ? local / legDur : 0;
 
-      // match-cut: show exactly one wrapper
+      // match-cut: show exactly one wrapper + keep only neighbours resident
       if (leg !== currentLeg) {
         wrapRefs.current.forEach((w, i) => {
           if (!w) return;
           w.style.opacity = i === leg ? "1" : "0";
           w.style.zIndex = i === leg ? "2" : "1";
         });
+        videoRefs.current.forEach((vv, i) => {
+          if (!vv) return;
+          if (Math.abs(i - leg) <= 1) {
+            if (vv.preload !== "auto") {
+              vv.preload = "auto";
+              vv.load();
+            }
+          } else {
+            vv.pause();
+          }
+        });
+        cameraRefs.current.forEach((cm, i) => {
+          if (cm) cm.style.willChange = i === leg ? "transform" : "auto";
+        });
         currentLeg = leg;
       }
 
-      // scrub the visible frame (video stays paused — seek only)
+      // scrub the visible frame (video stays paused — seek only).
+      // Disciplined: every 2nd frame max, never while a seek is in flight,
+      // and only past one frame-interval of drift — seek pileups are judder.
+      frame++;
       const v = videoRefs.current[leg];
-      if (v && v.readyState >= 2 && Math.abs(v.currentTime - local) > 0.04) {
+      if (
+        frame % 2 === 0 &&
+        v &&
+        v.readyState >= 2 &&
+        !v.seeking &&
+        Math.abs(v.currentTime - local) > 0.05
+      ) {
         try {
           v.currentTime = local;
         } catch {
-          /* busy — retry next frame */
+          /* busy — retry next slot */
         }
       }
 
@@ -212,7 +236,8 @@ export function ScrollFilm() {
                 ref={(el) => {
                   cameraRefs.current[i] = el;
                 }}
-                className="absolute inset-0 will-change-transform"
+                className="absolute inset-0"
+                style={{ willChange: i === 0 ? "transform" : "auto" }}
               >
                 <img
                   src={c.poster}
@@ -229,7 +254,7 @@ export function ScrollFilm() {
                   src={c.video}
                   muted
                   playsInline
-                  preload="auto"
+                  preload={i < 2 ? "auto" : "metadata"}
                   disablePictureInPicture
                   onLoadedMetadata={(e) => onMeta(i, e.currentTarget.duration)}
                   onSeeked={(e) => {
