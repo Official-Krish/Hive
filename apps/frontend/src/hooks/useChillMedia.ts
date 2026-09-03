@@ -14,7 +14,6 @@ export interface ChillMediaState {
 }
 
 const VOLUME_KEY = "chill.volume";
-const SYNC_TOLERANCE_MS = 2500;
 
 /** The IFrame API has no setMute; mute/unMute are separate calls. */
 function applyMuted(p: YT.Player, muted: boolean) {
@@ -57,7 +56,6 @@ export function useChillMedia(
   stateRef.current = state;
   const inChillRef = useRef(inChillSpace);
   inChillRef.current = inChillSpace;
-  const suppressNext = useRef(false);
   const volumeRef = useRef(volume);
   volumeRef.current = volume;
 
@@ -132,19 +130,6 @@ export function useChillMedia(
             applyMuted(p, volumeRef.current === 0);
             setPlayerMounted(true);
           },
-          onStateChange: (e) => {
-            if (suppressNext.current) {
-              suppressNext.current = false;
-              return;
-            }
-            const s = stateRef.current;
-            const playing = e.data === YT.PlayerState.PLAYING;
-            if (playing !== s.isPlaying && s.videoId) {
-              // A peer started/stopped locally in the iframe UI (play button).
-              if (playing) client?.sendChillPlay();
-              else client?.sendChillPause();
-            }
-          },
         },
       });
       playerRef.current = p;
@@ -174,12 +159,15 @@ export function useChillMedia(
         const videoChanged = player.getVideoData()?.video_id !== targetVideo;
 
         if (videoChanged) {
-          suppressNext.current = true;
-          player.loadVideoById({
+          const video = {
             videoId: targetVideo,
-            suggestedQuality: "large",
-          });
-          player.seekTo(stateRef.current.playheadMs / 1000, true);
+            startSeconds: stateRef.current.playheadMs / 1000,
+            suggestedQuality: "large" as const,
+          };
+          // Loading starts playback immediately. Cue a paused shared video so
+          // the iframe cannot report an unintended play event back to peers.
+          if (wantPlaying) player.loadVideoById(video);
+          else player.cueVideoById(video);
         } else {
           const expected = stateRef.current.isPlaying
             ? stateRef.current.playheadMs + (Date.now() - stateRef.current.at)
@@ -190,11 +178,9 @@ export function useChillMedia(
           }
         }
 
-        if (wantPlaying && actual === YT.PlayerState.PAUSED) {
-          suppressNext.current = true;
+        if (wantPlaying && actual !== YT.PlayerState.PLAYING) {
           player.playVideo();
         } else if (!wantPlaying && actual === YT.PlayerState.PLAYING) {
-          suppressNext.current = true;
           player.pauseVideo();
         }
       } catch {
@@ -222,27 +208,6 @@ export function useChillMedia(
     },
     [client],
   );
-
-  // Drift correction heartbeat while playing.
-  useEffect(() => {
-    if (!state.isPlaying || !state.videoId) return;
-    const id = window.setInterval(() => {
-      const p = playerRef.current;
-      if (!p || !stateRef.current.videoId || !stateRef.current.isPlaying)
-        return;
-      const expected =
-        stateRef.current.playheadMs + (Date.now() - stateRef.current.at);
-      try {
-        const currentMs = p.getCurrentTime() * 1000;
-        if (Math.abs(currentMs - expected) > SYNC_TOLERANCE_MS) {
-          p.seekTo(expected / 1000, true);
-        }
-      } catch {
-        /* ignore */
-      }
-    }, 5000);
-    return () => window.clearInterval(id);
-  }, [state.isPlaying, state.videoId]);
 
   return { state, volume, setVolume, playerMounted, seek, containerRef };
 }

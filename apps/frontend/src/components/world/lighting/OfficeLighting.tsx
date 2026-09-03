@@ -20,7 +20,7 @@ export function OfficeLighting() {
       <fogExp2 attach="fog" args={["#cdd8e3", 0.0055]} />
 
       {/* Baked-once environment (IBL fill + reflections), no network fetch */}
-      <Environment resolution={256} frames={1}>
+      <Environment resolution={192} frames={1}>
         <color attach="background" args={["#0a0d12"]} />
         {/* Big sky panel */}
         <Lightformer
@@ -103,7 +103,7 @@ export function OfficeLighting() {
       <ContactShadows
         position={[cx, 0.02, cz]}
         scale={Math.max(maxX - minX, maxZ - minZ) + 6}
-        resolution={512}
+        resolution={384}
         frames={1}
         far={3.2}
         blur={2.0}

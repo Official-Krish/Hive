@@ -1,25 +1,22 @@
-import { Link, NavLink, Outlet, useParams } from "react-router-dom";
+import { Outlet, useLocation, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { motion } from "motion/react";
-import { FiArrowLeft } from "react-icons/fi";
 import { ApiError, http, type OrgSummary } from "@/lib/http";
-import { fade } from "@/components/dashboard/primitives";
-import { Note, PageHeader, Spinner } from "@/components/dashboard/ui";
-import { PaperInset, StripMeta } from "@/components/dashboard/Paper";
-import { cn } from "@/lib/utils";
+import {
+  BackLink,
+  Card,
+  Note,
+  PageHead,
+  Spinner,
+  Tabs,
+} from "@/components/dashboard/kit";
 
 export interface OrgOutletContext {
   org: OrgSummary;
 }
 
-const TABS = [
-  { label: "Members", to: "members" },
-  { label: "Workspaces", to: "workspaces" },
-  { label: "Teams", to: "teams" },
-];
-
 export function OrgDetail() {
   const { orgId = "" } = useParams();
+  const { pathname } = useLocation();
 
   const org = useQuery({
     queryKey: ["org", orgId],
@@ -30,7 +27,7 @@ export function OrgDetail() {
 
   if (org.isLoading) {
     return (
-      <div className="flex items-center gap-2.5 text-neutral-500">
+      <div className="flex items-center gap-2.5 text-sm text-neutral-500">
         <Spinner /> Loading organization…
       </div>
     );
@@ -40,7 +37,7 @@ export function OrgDetail() {
     const missing = org.error instanceof ApiError && org.error.status === 404;
     return (
       <div>
-        <BackLink />
+        <BackLink to="/dashboard">Overview</BackLink>
         <Note tone="error">
           {missing
             ? "This organization doesn't exist or you're not a member."
@@ -51,74 +48,55 @@ export function OrgDetail() {
   }
 
   const data: OrgSummary = org.data;
+  const base = `/dashboard/o/${orgId}`;
 
   return (
     <div>
-      <BackLink />
+      <BackLink to="/dashboard">Overview</BackLink>
 
-      <PageHeader
+      <PageHead
         eyebrow={`Organization · ${data.plan}`}
-        title={
+        title={data.name}
+        sub={
           <>
-            {data.name}
-            <span className="italic text-neutral-400">, the roster.</span>
-          </>
-        }
-        subtitle={
-          <>
-            <span className="font-mono text-[12px] text-neutral-500">
+            <span className="font-mono text-xs text-neutral-500">
               {data.slug}
-            </span>{" "}
-            · {data.memberCount} member{data.memberCount === 1 ? "" : "s"} ·{" "}
+            </span>
+            {" · "}
+            {data.memberCount} member{data.memberCount === 1 ? "" : "s"} ·{" "}
             {data.workspaceCount} workspace
             {data.workspaceCount === 1 ? "" : "s"}
           </>
         }
       />
 
-      <PaperInset
-        className="mt-2"
-        top={
-          <StripMeta>
-            {TABS.map((tab) => (
-              <NavLink
-                key={tab.to}
-                to={tab.to}
-                className={({ isActive }) =>
-                  cn(
-                    "rounded-md px-2.5 py-1 text-[12px] font-medium uppercase tracking-[0.08em] transition-colors",
-                    isActive
-                      ? "bg-neutral-900/[0.06] text-neutral-900"
-                      : "text-neutral-500 hover:text-neutral-900",
-                  )
-                }
-              >
-                {tab.label}
-              </NavLink>
-            ))}
-          </StripMeta>
-        }
-      >
-        <motion.div {...fade(0.05)} className="px-5 py-6 sm:px-7">
+      <Card>
+        <div className="border-b border-neutral-900/[0.08] px-5 pt-3">
+          <Tabs
+            tabs={[
+              {
+                label: "Members",
+                href: `${base}/members`,
+                active: pathname.endsWith("/members"),
+              },
+              {
+                label: "Workspaces",
+                href: `${base}/workspaces`,
+                active: pathname.endsWith("/workspaces"),
+              },
+              {
+                label: "Teams",
+                href: `${base}/teams`,
+                active: pathname.endsWith("/teams"),
+              },
+            ]}
+          />
+        </div>
+        <div className="px-5 py-5">
           <Outlet context={{ org: data } satisfies OrgOutletContext} />
-        </motion.div>
-      </PaperInset>
+        </div>
+      </Card>
     </div>
-  );
-}
-
-function BackLink() {
-  return (
-    <Link
-      to="/dashboard"
-      className="group mb-7 inline-flex items-center gap-1.5 text-[13px] text-neutral-500 transition-colors hover:text-neutral-900"
-    >
-      <FiArrowLeft
-        className="size-4 transition-transform group-hover:-translate-x-0.5"
-        aria-hidden
-      />
-      Back to console
-    </Link>
   );
 }
 

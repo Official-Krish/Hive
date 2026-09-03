@@ -1,32 +1,26 @@
 /* ─────────────────────────────────────────────────────────────
-   INVITE A USER — by GitHub username.
-   Pick a workspace you administer, enter the person's GitHub
-   username, choose a role. The backend resolves the username to
-   a linked Hive account and issues the invite; they'll see it
-   under Invites. Set on the bone-paper bezel.
+   INVITE A USER — by GitHub username. Workspace, username, role.
+   Same flow, dark instrument.
    ───────────────────────────────────────────────────────────── */
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { motion } from "motion/react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { FiGithub } from "react-icons/fi";
 import { ApiError, http, type InviteCreatedResult } from "@/lib/http";
 import { notifyError, notifySuccess } from "@/lib/toast";
-import { fade } from "@/components/dashboard/primitives";
 import {
-  PaperInset,
-  StripMeta,
-  inkBtnClass,
-  paperInputClass,
-  paperLabelClass,
-} from "@/components/dashboard/Paper";
-import {
-  EmptyState,
+  Btn,
+  Card,
+  CardHead,
+  Empty,
   Field,
-  PageHeader,
+  PageHead,
+  SkeletonRows,
   Spinner,
-  primaryBtnClass,
-} from "@/components/dashboard/ui";
+  btnPrimaryClass,
+  inputClass,
+} from "@/components/dashboard/kit";
+import { cn } from "@/lib/utils";
 
 function inviteErrorMessage(err: unknown): string {
   if (err instanceof ApiError) {
@@ -38,6 +32,30 @@ function inviteErrorMessage(err: unknown): string {
   }
   return "Something went wrong sending the invite.";
 }
+
+const ROLE_RANK: Record<string, number> = {
+  viewer: 0,
+  member: 1,
+  developer: 2,
+  maintainer: 3,
+  admin: 4,
+  owner: 5,
+};
+const INVITE_ROLES = [
+  "member",
+  "developer",
+  "maintainer",
+  "admin",
+  "viewer",
+] as const;
+type InviteRole = (typeof INVITE_ROLES)[number];
+const ROLE_DESC: Record<InviteRole, string> = {
+  member: "Works in the office",
+  developer: "Contributes code and resolves alerts",
+  maintainer: "Manages people & repositories",
+  admin: "Full management, no ownership",
+  viewer: "Read-only observer",
+};
 
 export function InviteUser() {
   const [searchParams] = useSearchParams();
@@ -52,30 +70,6 @@ export function InviteUser() {
     (w) => w.role === "owner" || w.role === "admin" || w.role === "maintainer",
   );
 
-  const ROLE_RANK: Record<string, number> = {
-    viewer: 0,
-    member: 1,
-    developer: 2,
-    maintainer: 3,
-    admin: 4,
-    owner: 5,
-  };
-  const INVITE_ROLES = [
-    "member",
-    "developer",
-    "maintainer",
-    "admin",
-    "viewer",
-  ] as const;
-  type InviteRole = (typeof INVITE_ROLES)[number];
-  const ROLE_DESC: Record<InviteRole, string> = {
-    member: "Works in the office",
-    developer: "Contributes code and resolves alerts",
-    maintainer: "Manages people & repositories",
-    admin: "Full management, no ownership",
-    viewer: "Read-only observer",
-  };
-
   const [workspaceId, setWorkspaceId] = useState(preSelected);
   const [githubLogin, setGithubLogin] = useState("");
   const [role, setRole] = useState<InviteRole>("member");
@@ -85,21 +79,21 @@ export function InviteUser() {
   const selectable = INVITE_ROLES.filter(
     (r) => (ROLE_RANK[r] ?? 0) < actorRank,
   );
+  const selectableKey = selectable.join(",");
+  const manageableIds = manageable.map((w) => w.id).join(",");
 
-  // Keep the chosen role within what this user is allowed to grant.
   useEffect(() => {
     if (selectable.length === 0) return;
     if (!selectable.includes(role)) setRole(selectable[0]!);
-  }, [selectable, role]);
+  }, [selectableKey]);
 
-  // Pre-select the workspace from the query param if it's one we manage.
   useEffect(() => {
     if (preSelected && manageable.some((w) => w.id === preSelected)) {
       setWorkspaceId(preSelected);
     } else if (!workspaceId && manageable.length > 0) {
       setWorkspaceId(manageable[0]!.id);
     }
-  }, [preSelected, manageable, workspaceId]);
+  }, [preSelected, manageableIds]);
 
   const mutation = useMutation({
     mutationFn: (): Promise<InviteCreatedResult> =>
@@ -121,71 +115,43 @@ export function InviteUser() {
 
   return (
     <div>
-      <PageHeader
+      <PageHead
         eyebrow="Invite"
-        title={
-          <>
-            Bring someone{" "}
-            <span className="italic text-neutral-400">to the floor.</span>
-          </>
-        }
-        subtitle="Send a workspace invite by GitHub username — they accept it under Invites."
+        title="Bring someone to the floor"
+        sub="Send a workspace invite by GitHub username — they accept it under Invites."
       />
 
       {isLoading ? (
         <div className="max-w-xl">
-          <PaperInset>
-            <div className="p-6">
-              <div className="h-40 animate-pulse rounded-lg bg-neutral-900/[0.04]" />
-            </div>
-          </PaperInset>
+          <SkeletonRows rows={3} />
         </div>
       ) : manageable.length === 0 ? (
-        <EmptyState
+        <Empty
           title="No workspaces to invite into"
           hint="You can only invite people to workspaces you own or administer. Create one first."
           action={
-            <Link to="/dashboard/create" className={primaryBtnClass}>
+            <Link to="/dashboard/create" className={btnPrimaryClass}>
               Create workspace
             </Link>
           }
         />
       ) : (
-        <motion.div {...fade(0.05)} className="max-w-xl">
-          <PaperInset
-            grid
-            top={
-              <>
-                <StripMeta>
-                  <span className="uppercase tracking-[0.08em]">
-                    Invitation
-                  </span>
-                </StripMeta>
-                {selected && (
-                  <StripMeta>
-                    <span className="max-w-[160px] truncate">
-                      {selected.name}
-                    </span>
-                  </StripMeta>
-                )}
-              </>
-            }
-          >
+        <div className="max-w-xl">
+          <Card>
+            <CardHead
+              title="Invitation"
+              hint={selected ? `to ${selected.name}` : undefined}
+            />
             <form
-              className="space-y-5 px-5 py-7 sm:px-7"
+              className="space-y-4 px-5 py-5"
               onSubmit={(e) => {
                 e.preventDefault();
                 if (canSubmit) mutation.mutate();
               }}
             >
-              <Field
-                label="Workspace"
-                htmlFor="inv-ws"
-                labelClass={paperLabelClass}
-              >
+              <Field label="Workspace">
                 <select
-                  id="inv-ws"
-                  className={paperInputClass}
+                  className={inputClass}
                   value={workspaceId}
                   onChange={(e) => setWorkspaceId(e.target.value)}
                 >
@@ -199,15 +165,12 @@ export function InviteUser() {
 
               <Field
                 label="GitHub username"
-                htmlFor="inv-gh"
                 hint="The person must already have a Hive account connected with GitHub."
-                labelClass={paperLabelClass}
               >
                 <div className="relative">
-                  <FiGithub className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-neutral-400" />
+                  <FiGithub className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-neutral-400" />
                   <input
-                    id="inv-gh"
-                    className={`${paperInputClass} pl-10`}
+                    className={`${inputClass} pl-10`}
                     value={githubLogin}
                     onChange={(e) => setGithubLogin(e.target.value)}
                     placeholder="octocat"
@@ -217,11 +180,7 @@ export function InviteUser() {
                 </div>
               </Field>
 
-              <Field
-                label="Role"
-                htmlFor="inv-role"
-                labelClass={paperLabelClass}
-              >
+              <Field label="Role">
                 <div
                   className="grid grid-cols-2 gap-2"
                   role="radiogroup"
@@ -234,21 +193,21 @@ export function InviteUser() {
                       role="radio"
                       aria-checked={role === r}
                       onClick={() => setRole(r)}
-                      className={
-                        "rounded-xl border px-3 py-2.5 text-left transition-all " +
-                        (role === r
+                      className={cn(
+                        "rounded-lg border px-3 py-2.5 text-left transition-colors",
+                        role === r
                           ? "border-neutral-950 bg-neutral-950 text-white"
-                          : "border-neutral-900/15 bg-white text-neutral-700 hover:border-neutral-900/35")
-                      }
+                          : "border-neutral-900/10 bg-white text-neutral-600 hover:border-neutral-900/30",
+                      )}
                     >
                       <span className="block text-[13px] font-semibold capitalize">
                         {r}
                       </span>
                       <span
-                        className={
-                          "mt-0.5 block text-[11px] leading-tight " +
-                          (role === r ? "text-neutral-300" : "text-neutral-500")
-                        }
+                        className={cn(
+                          "mt-0.5 block text-[11px] leading-tight",
+                          role === r ? "text-neutral-500" : "text-neutral-500",
+                        )}
                       >
                         {ROLE_DESC[r]}
                       </span>
@@ -258,18 +217,14 @@ export function InviteUser() {
               </Field>
 
               <div className="pt-1">
-                <button
-                  type="submit"
-                  className={inkBtnClass}
-                  disabled={!canSubmit}
-                >
-                  {mutation.isPending && <Spinner ink />}
+                <Btn type="submit" disabled={!canSubmit}>
+                  {mutation.isPending && <Spinner />}
                   {mutation.isPending ? "Sending…" : "Send invite"}
-                </button>
+                </Btn>
               </div>
             </form>
-          </PaperInset>
-        </motion.div>
+          </Card>
+        </div>
       )}
     </div>
   );

@@ -7,10 +7,10 @@ import { FiArrowUpRight, FiMenu, FiX, FiLogOut, FiGrid } from "react-icons/fi";
 import { http } from "@/lib/http";
 
 const navLinks = [
-  { label: "Work", href: "#work" },
-  { label: "Products", href: "#products" },
-  { label: "Pricing", href: "#pricing" },
-  { label: "Blog", href: "#blog" },
+  { label: "Film", href: "#film" },
+  { label: "Proof", href: "#proof" },
+  { label: "FAQ", href: "#faq" },
+  { label: "Launch", href: "/auth" },
 ];
 
 const authNavLinks = [{ label: "Dashboard", href: "/dashboard" }];

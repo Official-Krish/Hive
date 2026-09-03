@@ -1,16 +1,21 @@
 import { useMemo, useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FiChevronDown, FiPlus, FiTrash2 } from "react-icons/fi";
+import { FiChevronDown, FiPlus } from "react-icons/fi";
 import { ApiError, http } from "@/lib/http";
-import { Note, Spinner } from "@/components/dashboard/ui";
 import {
-  inkBtnClass,
-  paperGhostBtnClass,
-  paperInputClass,
-} from "@/components/dashboard/Paper";
+  Avatar,
+  Btn,
+  ConfirmBtn,
+  Field,
+  Note,
+  RoleBadge,
+  Spinner,
+  inputClass,
+} from "@/components/dashboard/kit";
 import { notifyError, notifySuccess } from "@/lib/toast";
 import type { OrgOutletContext } from "./OrgDetail";
+import { cn } from "@/lib/utils";
 
 const TEAM_ROLES = ["admin", "member"] as const;
 
@@ -29,6 +34,7 @@ export function OrgTeams() {
     queryKey: ["org", org.id, "members"],
     queryFn: () => http.orgs.members.list(org.id),
     retry: false,
+    enabled: canManage,
   });
 
   const createTeam = useMutation({
@@ -46,7 +52,7 @@ export function OrgTeams() {
 
   if (teams.isLoading) {
     return (
-      <div className="flex items-center gap-2.5 text-neutral-500">
+      <div className="flex items-center gap-2.5 text-sm text-neutral-500">
         <Spinner /> Loading teams…
       </div>
     );
@@ -57,7 +63,7 @@ export function OrgTeams() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {canManage && (
         <CreateTeamForm
           onCreate={createTeam.mutate}
@@ -103,40 +109,35 @@ function CreateTeamForm({
         setName("");
         setSlug("");
       }}
-      className="flex flex-wrap items-end gap-2 rounded-xl border border-neutral-900/[0.08] bg-neutral-900/[0.02] px-3 py-3"
+      className="flex flex-wrap items-end gap-2 rounded-lg border border-neutral-900/[0.08] bg-white p-3"
     >
-      <label className="flex-1 min-w-[160px]">
-        <span className="mb-1 block text-[11px] uppercase tracking-[0.1em] text-neutral-500">
-          New team name
-        </span>
-        <input
-          className={paperInputClass}
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          maxLength={60}
-          placeholder="Platform"
-        />
-      </label>
-      <label className="flex-1 min-w-[160px]">
-        <span className="mb-1 block text-[11px] uppercase tracking-[0.1em] text-neutral-500">
-          Slug (optional)
-        </span>
-        <input
-          className={paperInputClass}
-          value={slug}
-          onChange={(e) => setSlug(e.target.value)}
-          maxLength={40}
-          placeholder="platform"
-        />
-      </label>
-      <button
-        type="submit"
-        className={inkBtnClass}
-        disabled={busy || !name.trim()}
-      >
+      <div className="min-w-[160px] flex-1">
+        <Field label="New team name">
+          <input
+            className={inputClass}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            maxLength={60}
+            placeholder="Platform"
+          />
+        </Field>
+      </div>
+      <div className="min-w-[160px] flex-1">
+        <Field label="Slug (optional)">
+          <input
+            className={inputClass}
+            value={slug}
+            onChange={(e) => setSlug(e.target.value)}
+            maxLength={40}
+            placeholder="platform"
+            spellCheck={false}
+          />
+        </Field>
+      </div>
+      <Btn type="submit" disabled={busy || !name.trim()}>
         <FiPlus className="size-4" aria-hidden />
         {busy ? "Creating…" : "Create team"}
-      </button>
+      </Btn>
     </form>
   );
 }
@@ -164,6 +165,9 @@ function TeamCard({
     retry: false,
   });
 
+  const [pickUserId, setPickUserId] = useState("");
+  const [pickRole, setPickRole] = useState<string>("member");
+
   const addMember = useMutation({
     mutationFn: (input: { userId: string; role: string }) =>
       http.teams.members.add(orgId, team.id, input),
@@ -172,6 +176,8 @@ function TeamCard({
         queryKey: ["org", orgId, "teams", team.id, "members"],
       });
       queryClient.invalidateQueries({ queryKey: ["org", orgId, "teams"] });
+      setPickUserId("");
+      setPickRole("member");
       notifySuccess("Member added");
     },
     onError: (err) =>
@@ -226,106 +232,117 @@ function TeamCard({
     [members.data],
   );
   const candidates = orgMemberOptions.filter((m) => !inTeam.has(m.userId));
-  const [pickUserId, setPickUserId] = useState("");
-  const [pickRole, setPickRole] = useState<string>("member");
 
   return (
-    <div className="rounded-xl border border-neutral-900/[0.08] bg-neutral-900/[0.02]">
+    <div className="rounded-lg border border-neutral-900/[0.08] bg-white">
       <div className="flex items-center justify-between gap-3 px-3 py-2.5">
         <button
           type="button"
           className="flex min-w-0 flex-1 items-center gap-2 text-left"
           onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
         >
           <FiChevronDown
-            className={`size-4 text-neutral-500 transition-transform ${open ? "rotate-180" : ""}`}
+            className={cn(
+              "size-4 flex-shrink-0 text-neutral-500 transition-transform",
+              open && "rotate-180",
+            )}
             aria-hidden
           />
-          <span className="truncate text-[13px] font-medium text-neutral-900">
+          <span className="truncate text-[13px] font-medium text-neutral-800">
             {team.name}
           </span>
-          <span className="font-mono text-[11px] text-neutral-500">
+          <span className="truncate font-mono text-[11px] text-neutral-400">
             {team.slug}
           </span>
-          <span className="text-[11px] text-neutral-400">
+          <span className="flex-shrink-0 text-[11px] tabular-nums text-neutral-400">
             {team.memberCount} member{team.memberCount === 1 ? "" : "s"}
           </span>
         </button>
         {canManage && (
-          <button
-            type="button"
-            aria-label="Delete team"
-            title="Delete team"
-            className={paperGhostBtnClass}
-            disabled={deleteTeam.isPending}
-            onClick={() => deleteTeam.mutate()}
+          <ConfirmBtn
+            variant="ghost"
+            confirmLabel="Delete team"
+            pending={deleteTeam.isPending}
+            onConfirm={() => deleteTeam.mutate()}
           >
-            <FiTrash2 className="size-4" aria-hidden />
-          </button>
+            Delete
+          </ConfirmBtn>
         )}
       </div>
 
       {open && (
-        <div className="space-y-3 border-t border-neutral-900/[0.07] px-3 py-3">
+        <div className="space-y-2 border-t border-neutral-900/[0.08] px-3 py-3">
           {members.isLoading && (
-            <div className="flex items-center gap-2.5 text-neutral-500">
+            <div className="flex items-center gap-2.5 text-sm text-neutral-500">
               <Spinner /> Loading members…
             </div>
           )}
           {members.isError && <Note tone="error">Couldn't load members.</Note>}
 
-          {(members.data ?? []).map((m) => (
-            <div
-              key={m.userId}
-              className="flex items-center justify-between gap-3 rounded-lg border border-neutral-900/[0.06] bg-white/60 px-3 py-2"
-            >
-              <div className="min-w-0">
-                <p className="truncate text-[13px] font-medium text-neutral-900">
-                  {m.name}
-                </p>
-                <p className="truncate text-[11px] text-neutral-500">
-                  {m.email}
-                </p>
+          {(members.data ?? []).map((m) => {
+            const rowBusy =
+              (changeRole.isPending &&
+                changeRole.variables?.userId === m.userId) ||
+              (removeMember.isPending && removeMember.variables === m.userId);
+            return (
+              <div
+                key={m.userId}
+                className="flex items-center justify-between gap-3 rounded-lg bg-white px-3 py-2"
+              >
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <Avatar
+                    name={m.name}
+                    src={
+                      "avatarUrl" in m ? (m.avatarUrl as string | null) : null
+                    }
+                    size={26}
+                  />
+                  <div className="min-w-0">
+                    <p className="truncate text-[13px] font-medium text-neutral-800">
+                      {m.name}
+                    </p>
+                    <p className="truncate text-[11px] text-neutral-500">
+                      {m.email}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex flex-shrink-0 items-center gap-2">
+                  {isOwner ? (
+                    <>
+                      <select
+                        className={`${inputClass} h-8 w-auto px-2 text-xs`}
+                        value={m.role}
+                        disabled={rowBusy}
+                        onChange={(e) =>
+                          changeRole.mutate({
+                            userId: m.userId,
+                            role: e.target.value,
+                          })
+                        }
+                      >
+                        {TEAM_ROLES.map((r) => (
+                          <option key={r} value={r}>
+                            {r}
+                          </option>
+                        ))}
+                      </select>
+                      <ConfirmBtn
+                        variant="ghost"
+                        confirmLabel="Remove"
+                        pending={removeMember.isPending}
+                        onConfirm={() => removeMember.mutate(m.userId)}
+                      >
+                        Remove
+                      </ConfirmBtn>
+                    </>
+                  ) : (
+                    <RoleBadge role={m.role} />
+                  )}
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                {isOwner ? (
-                  <>
-                    <select
-                      className="rounded-lg border border-neutral-900/15 bg-white px-2 py-1.5 text-[12.5px] text-neutral-900"
-                      value={m.role}
-                      disabled={changeRole.isPending}
-                      onChange={(e) =>
-                        changeRole.mutate({
-                          userId: m.userId,
-                          role: e.target.value,
-                        })
-                      }
-                    >
-                      {TEAM_ROLES.map((r) => (
-                        <option key={r} value={r}>
-                          {r}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      type="button"
-                      aria-label="Remove member"
-                      title="Remove"
-                      className={paperGhostBtnClass}
-                      disabled={removeMember.isPending}
-                      onClick={() => removeMember.mutate(m.userId)}
-                    >
-                      <FiTrash2 className="size-4" aria-hidden />
-                    </button>
-                  </>
-                ) : (
-                  <span className="rounded-md bg-neutral-900/[0.05] px-2 py-1 text-[12px] font-medium uppercase tracking-[0.08em] text-neutral-600">
-                    {m.role}
-                  </span>
-                )}
-              </div>
-            </div>
-          ))}
+            );
+          })}
 
           {canManage && candidates.length > 0 && (
             <form
@@ -333,57 +350,49 @@ function TeamCard({
                 e.preventDefault();
                 if (!pickUserId) return;
                 addMember.mutate({ userId: pickUserId, role: pickRole });
-                setPickUserId("");
-                setPickRole("member");
               }}
-              className="flex flex-wrap items-end gap-2 border-t border-neutral-900/[0.07] pt-3"
+              className="flex flex-wrap items-end gap-2 border-t border-neutral-900/[0.08] pt-3"
             >
-              <label className="flex-1 min-w-[160px]">
-                <span className="mb-1 block text-[11px] uppercase tracking-[0.1em] text-neutral-500">
-                  Add member
-                </span>
-                <select
-                  className={paperInputClass}
-                  value={pickUserId}
-                  onChange={(e) => setPickUserId(e.target.value)}
-                >
-                  <option value="">— Select an org member —</option>
-                  {candidates.map((m) => (
-                    <option key={m.userId} value={m.userId}>
-                      {m.name} · {m.email}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <span className="mb-1 block text-[11px] uppercase tracking-[0.1em] text-neutral-500">
-                  Role
-                </span>
-                <select
-                  className={paperInputClass}
-                  value={pickRole}
-                  onChange={(e) => setPickRole(e.target.value)}
-                >
-                  {TEAM_ROLES.map((r) => (
-                    <option key={r} value={r}>
-                      {r}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <button
-                type="submit"
-                className={inkBtnClass}
-                disabled={addMember.isPending || !pickUserId}
-              >
+              <div className="min-w-[160px] flex-1">
+                <Field label="Add member">
+                  <select
+                    className={inputClass}
+                    value={pickUserId}
+                    onChange={(e) => setPickUserId(e.target.value)}
+                  >
+                    <option value="">Select an org member…</option>
+                    {candidates.map((m) => (
+                      <option key={m.userId} value={m.userId}>
+                        {m.name} · {m.email}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              </div>
+              <div>
+                <Field label="Role">
+                  <select
+                    className={inputClass}
+                    value={pickRole}
+                    onChange={(e) => setPickRole(e.target.value)}
+                  >
+                    {TEAM_ROLES.map((r) => (
+                      <option key={r} value={r}>
+                        {r}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              </div>
+              <Btn type="submit" disabled={addMember.isPending || !pickUserId}>
                 <FiPlus className="size-4" aria-hidden />
                 {addMember.isPending ? "Adding…" : "Add"}
-              </button>
+              </Btn>
             </form>
           )}
 
-          {canManage && candidates.length === 0 && (
-            <p className="text-[11.5px] text-neutral-500">
+          {canManage && candidates.length === 0 && members.isSuccess && (
+            <p className="font-mono text-[11px] text-neutral-400">
               Every organization member is already on this team.
             </p>
           )}

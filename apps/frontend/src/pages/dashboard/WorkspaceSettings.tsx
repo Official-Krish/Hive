@@ -1,36 +1,32 @@
 /* ─────────────────────────────────────────────────────────────
-   WORKSPACE SETTINGS — rename, description, webhook secret,
-   repository assignment, and delete. Each group is its own
-   bone instrument with a labelled strip; controls sit on paper.
+   WORKSPACE SETTINGS — identity, webhook secret, repositories,
+   GitHub App, danger zone. Same data, dark instrument.
    ───────────────────────────────────────────────────────────── */
 import { useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
-import { motion } from "motion/react";
+import { useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  FiArrowLeft,
-  FiCopy,
-  FiGithub,
-  FiRefreshCw,
-  FiTrash2,
-} from "react-icons/fi";
+import { FiGithub, FiRefreshCw } from "react-icons/fi";
 import {
   ApiError,
   http,
   type GitHubRepoOption,
   type WorkspaceSettings as WorkspaceSettingsData,
 } from "@/lib/http";
-import { fade } from "@/components/dashboard/primitives";
 import {
-  PaperInset,
-  StripMeta,
-  inkBtnClass,
-  paperGhostBtnClass,
-  paperInputClass,
-  paperLabelClass,
-} from "@/components/dashboard/Paper";
-import { Field, Note, PageHeader, Spinner } from "@/components/dashboard/ui";
-import { notifyError, notifyInfo, notifySuccess } from "@/lib/toast";
+  BackLink,
+  Badge,
+  Btn,
+  Card,
+  CardHead,
+  ConfirmBtn,
+  CopyField,
+  Field,
+  Note,
+  PageHead,
+  Spinner,
+  inputClass,
+} from "@/components/dashboard/kit";
+import { notifyError, notifySuccess } from "@/lib/toast";
 
 export function WorkspaceSettings() {
   const { workspaceId = "" } = useParams();
@@ -196,8 +192,10 @@ export function WorkspaceSettings() {
   if (settings.isLoading) {
     return (
       <div>
-        <BackLink workspaceId={workspaceId} />
-        <div className="flex items-center gap-2.5 text-neutral-500">
+        <BackLink to={`/dashboard/w/${workspaceId}`}>
+          Back to workspace
+        </BackLink>
+        <div className="flex items-center gap-2.5 text-sm text-neutral-500">
           <Spinner /> Loading settings…
         </div>
       </div>
@@ -209,7 +207,9 @@ export function WorkspaceSettings() {
       settings.error instanceof ApiError && settings.error.status === 404;
     return (
       <div>
-        <BackLink workspaceId={workspaceId} />
+        <BackLink to={`/dashboard/w/${workspaceId}`}>
+          Back to workspace
+        </BackLink>
         <Note tone="error">
           {notMember
             ? "This workspace doesn't exist or you're not a member."
@@ -223,46 +223,34 @@ export function WorkspaceSettings() {
   const linkedFullNames = new Set(
     data.repositories.map((r) => r.fullName).filter(Boolean) as string[],
   );
-  const canDelete = me.data?.user?.id && data.name === deleteConfirm;
+  const canDelete = !!me.data?.user?.id && data.name === deleteConfirm;
   const dirty =
     data.name !== name.trim() ||
     (data.description ?? "") !== description.trim();
 
   return (
     <div>
-      <BackLink workspaceId={workspaceId} />
+      <BackLink to={`/dashboard/w/${workspaceId}`}>Back to workspace</BackLink>
 
-      <PageHeader
+      <PageHead
         eyebrow="Settings"
-        title={
-          <>
-            {data.name}
-            <span className="italic text-neutral-400">, tuned.</span>
-          </>
-        }
-        subtitle="Identity, the webhook secret, linked repositories, and the way out."
+        title={data.name}
+        sub="Identity, the webhook secret, linked repositories, and the way out."
       />
 
-      <motion.section {...fade(0.05)} className="max-w-2xl space-y-5">
-        {/* general */}
-        <PaperInset
-          top={
-            <StripMeta>
-              <span className="uppercase tracking-[0.08em]">General</span>
-            </StripMeta>
-          }
-        >
+      <div className="max-w-2xl space-y-4">
+        <Card>
+          <CardHead title="General" />
           <form
             onSubmit={(e) => {
               e.preventDefault();
               if (dirty) renameMutation.mutate();
             }}
-            className="space-y-5 px-5 py-6 sm:px-7"
+            className="space-y-4 px-5 py-5"
           >
-            <Field label="Name" htmlFor="set-name" labelClass={paperLabelClass}>
+            <Field label="Name">
               <input
-                id="set-name"
-                className={paperInputClass}
+                className={inputClass}
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 maxLength={100}
@@ -270,68 +258,54 @@ export function WorkspaceSettings() {
             </Field>
             <Field
               label="Description"
-              htmlFor="set-desc"
               hint="Optional — what this workspace is for."
-              labelClass={paperLabelClass}
             >
               <textarea
-                id="set-desc"
-                className={`${paperInputClass} min-h-[80px] resize-y`}
+                className={`${inputClass} h-auto min-h-[80px] resize-y py-2.5`}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 maxLength={500}
               />
             </Field>
             <div className="flex justify-end">
-              <button
-                type="submit"
-                className={inkBtnClass}
-                disabled={!dirty || renameMutation.isPending}
-              >
-                {renameMutation.isPending && <Spinner ink />}
+              <Btn type="submit" disabled={!dirty || renameMutation.isPending}>
+                {renameMutation.isPending && <Spinner />}
                 Save changes
-              </button>
+              </Btn>
             </div>
           </form>
-        </PaperInset>
+        </Card>
 
-        {/* webhook secret */}
-        <PaperInset
-          top={
-            <StripMeta>
-              <span className="uppercase tracking-[0.08em]">
-                Webhook secret
-              </span>
-            </StripMeta>
-          }
-        >
-          <div className="px-5 py-6 sm:px-7">
-            <p className="text-[12.5px] leading-relaxed text-neutral-600">
-              Verifies GitHub webhooks for this workspace. Paste it into your
-              repo's webhook settings.
-            </p>
-            <div className="mt-4 flex flex-wrap items-center gap-2">
-              <code className="min-w-0 flex-1 truncate rounded-xl border border-neutral-900/15 bg-white px-3.5 py-2.5 font-mono text-[12.5px] text-neutral-900">
-                {revealedSecret ?? data.webhookSecretMasked}
-              </code>
-              <button
-                type="button"
-                aria-label="Copy secret"
-                title="Copy"
-                className={paperGhostBtnClass}
-                onClick={() => {
-                  const value = revealedSecret ?? data.webhookSecretMasked;
-                  void navigator.clipboard.writeText(value);
-                  notifyInfo("Webhook secret copied to clipboard");
-                }}
-              >
-                <FiCopy className="size-4" aria-hidden />
-              </button>
-              <button
-                type="button"
-                className={paperGhostBtnClass}
-                onClick={() => rotateMutation.mutate()}
-                disabled={rotateMutation.isPending}
+        <Card>
+          <CardHead
+            title="Webhook secret"
+            hint="Verifies GitHub webhooks for this workspace."
+          />
+          <div className="space-y-3 px-5 py-5">
+            {revealedSecret ? (
+              <>
+                <CopyField value={revealedSecret} />
+                <Note tone="info">
+                  New secret generated. Copy it now — it won't be shown again.
+                </Note>
+              </>
+            ) : (
+              <>
+                <code className="block truncate rounded-lg border border-neutral-900/10 bg-neutral-900/[0.04] px-3 py-2.5 font-mono text-[13px] text-neutral-500">
+                  {data.webhookSecretMasked}
+                </code>
+                <p className="text-xs text-neutral-500">
+                  The stored secret is masked. Rotate to generate — and copy — a
+                  new one.
+                </p>
+              </>
+            )}
+            <div className="flex justify-end">
+              <ConfirmBtn
+                variant="ghost"
+                confirmLabel="Rotate secret"
+                pending={rotateMutation.isPending}
+                onConfirm={() => rotateMutation.mutate()}
               >
                 <FiRefreshCw
                   className={
@@ -340,87 +314,70 @@ export function WorkspaceSettings() {
                   aria-hidden
                 />
                 {rotateMutation.isPending ? "Rotating…" : "Rotate"}
-              </button>
+              </ConfirmBtn>
             </div>
-            {revealedSecret && (
-              <div className="mt-3">
-                <Note tone="info" onPaper>
-                  New secret generated. Copy it now — it won't be shown again.
-                </Note>
-              </div>
-            )}
           </div>
-        </PaperInset>
+        </Card>
 
-        {/* repositories */}
-        <PaperInset
-          top={
-            <StripMeta>
-              <span className="uppercase tracking-[0.08em]">Repositories</span>
-            </StripMeta>
-          }
-        >
-          <div className="px-5 py-6 sm:px-7">
-            <p className="text-[12.5px] leading-relaxed text-neutral-600">
-              Link GitHub repositories to this workspace. Push, pull request,
-              issue, release and review activity from any linked repo surfaces
-              here and in the world map. Add a webhook with the secret above, or
-              install the GitHub App below to wire them all at once.
-            </p>
-
-            <ul className="mt-4 space-y-2">
-              {data.repositories.length === 0 && (
-                <li className="rounded-xl border border-dashed border-neutral-900/15 px-3 py-3 text-[12.5px] text-neutral-500">
-                  No repositories linked yet.
-                </li>
-              )}
-              {data.repositories.map((repo) => (
-                <li
-                  key={repo.id}
-                  className="flex items-center justify-between gap-3 rounded-xl border border-neutral-900/[0.08] bg-neutral-900/[0.02] px-3 py-2.5"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate text-[13px] font-medium text-neutral-900">
-                      {repo.fullName}
-                    </p>
-                    <p className="text-[11px] text-neutral-500">
-                      {repo.provider}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {repo.url && (
-                      <a
-                        href={repo.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className={paperGhostBtnClass}
-                        title="Open on GitHub"
+        <Card>
+          <CardHead
+            title="Repositories"
+            hint="Push, PR, issue, release and review activity surfaces here."
+          />
+          <div className="px-5 py-5">
+            {data.repositories.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-neutral-900/15 px-3 py-3 text-[13px] text-neutral-500">
+                No repositories linked yet.
+              </div>
+            ) : (
+              <ul className="space-y-2">
+                {data.repositories.map((repo) => (
+                  <li
+                    key={repo.id}
+                    className="flex items-center justify-between gap-3 rounded-lg border border-neutral-900/[0.08] bg-white px-3 py-2.5"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-[13px] font-medium text-neutral-800">
+                        {repo.fullName}
+                      </p>
+                      <p className="font-mono text-[11px] text-neutral-400">
+                        {repo.provider}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      {repo.url && (
+                        <a
+                          href={repo.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          aria-label="Open on GitHub"
+                          title="Open on GitHub"
+                          className="flex size-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-900/[0.05] hover:text-neutral-900"
+                        >
+                          <FiGithub className="size-4" aria-hidden />
+                        </a>
+                      )}
+                      <ConfirmBtn
+                        variant="ghost"
+                        confirmLabel="Unlink"
+                        pending={unlinkRepoMutation.isPending}
+                        onConfirm={() => unlinkRepoMutation.mutate(repo.id)}
                       >
-                        <FiGithub className="size-4" aria-hidden />
-                      </a>
-                    )}
-                    <button
-                      type="button"
-                      aria-label="Unlink repository"
-                      title="Unlink"
-                      className={paperGhostBtnClass}
-                      onClick={() => unlinkRepoMutation.mutate(repo.id)}
-                      disabled={unlinkRepoMutation.isPending}
-                    >
-                      <FiTrash2 className="size-4" aria-hidden />
-                    </button>
-                  </div>
-                </li>
-              ))}
-            </ul>
+                        Unlink
+                      </ConfirmBtn>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
 
-            <div className="mt-4 flex flex-wrap items-center gap-2">
+            <div className="mt-3 flex flex-wrap items-center gap-2">
               <select
-                className={`${paperInputClass} min-w-0 flex-1`}
+                className={`${inputClass} min-w-0 flex-1`}
                 value={repositoryId}
                 onChange={(e) => setRepositoryId(e.target.value)}
               >
-                <option value="">— Add a repository —</option>
+                <option value="">Add a repository…</option>
                 {repoOptions
                   .filter((r) => !linkedFullNames.has(r.fullName))
                   .map((r) => (
@@ -430,145 +387,107 @@ export function WorkspaceSettings() {
                     </option>
                   ))}
               </select>
-              <button
-                type="button"
-                className={inkBtnClass}
+              <Btn
                 disabled={linkRepoMutation.isPending || !repositoryId}
                 onClick={() => {
                   if (repositoryId) linkRepoMutation.mutate(repositoryId);
                 }}
               >
-                {linkRepoMutation.isPending && <Spinner ink />}
+                {linkRepoMutation.isPending && <Spinner />}
                 Link
-              </button>
+              </Btn>
             </div>
           </div>
-        </PaperInset>
+        </Card>
 
-        {/* github app */}
-        <PaperInset
-          top={
-            <StripMeta>
-              <FiGithub className="size-3.5" aria-hidden />
-              <span className="uppercase tracking-[0.08em]">GitHub App</span>
-            </StripMeta>
-          }
-        >
-          <div className="px-5 py-6 sm:px-7">
-            <p className="text-[12.5px] leading-relaxed text-neutral-600">
-              Install the Hive GitHub App to grant this workspace access to your
-              repositories. Webhooks flow in automatically — no manual secret
-              needed.
-            </p>
+        <Card>
+          <CardHead
+            title="GitHub App"
+            hint="Webhooks flow in automatically — no manual secret needed."
+          />
+          <div className="px-5 py-5">
             {(installations.data?.installations ?? []).length > 0 ? (
-              <ul className="mt-4 divide-y divide-neutral-900/[0.07]">
+              <ul className="divide-y divide-neutral-900/[0.08]">
                 {installations.data!.installations.map((inst) => (
                   <li
                     key={inst.id}
-                    className="flex items-center justify-between gap-3 py-3"
+                    className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0"
                   >
                     <div className="min-w-0">
-                      <p className="truncate text-[13px] font-medium text-neutral-900">
+                      <p className="flex items-center gap-2 text-[13px] font-medium text-neutral-800">
+                        <FiGithub
+                          className="size-4 text-neutral-500"
+                          aria-hidden
+                        />
                         GitHub App installed
                       </p>
-                      <p className="text-[11px] text-neutral-500">
-                        {inst.repositoryCount} repository
-                        {inst.repositoryCount === 1 ? "" : "ies"} linked
+                      <p className="mt-0.5 text-xs tabular-nums text-neutral-500">
+                        {inst.repositoryCount}{" "}
+                        {inst.repositoryCount === 1
+                          ? "repository"
+                          : "repositories"}
                       </p>
                     </div>
-                    <button
-                      type="button"
-                      className={paperGhostBtnClass}
-                      onClick={() => removeInstallMutation.mutate(inst.id)}
-                      disabled={removeInstallMutation.isPending}
+                    <ConfirmBtn
+                      variant="ghost"
+                      confirmLabel="Uninstall"
+                      pending={removeInstallMutation.isPending}
+                      onConfirm={() => removeInstallMutation.mutate(inst.id)}
                     >
-                      <FiTrash2 className="size-4" aria-hidden />
                       Uninstall
-                    </button>
+                    </ConfirmBtn>
                   </li>
                 ))}
               </ul>
             ) : (
-              <div className="mt-4 flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  className={inkBtnClass}
+              <div className="flex flex-wrap items-center gap-3">
+                <Btn
                   onClick={() => installMutation.mutate()}
                   disabled={installMutation.isPending}
                 >
-                  {installMutation.isPending && <Spinner ink />}
+                  {installMutation.isPending && <Spinner />}
                   Install GitHub App
-                </button>
+                </Btn>
                 {installations.isError && (
-                  <span className="text-[12px] text-rose-700">
+                  <span className="text-xs text-rose-700">
                     GitHub App isn't configured yet.
                   </span>
                 )}
               </div>
             )}
           </div>
-        </PaperInset>
+        </Card>
 
-        {/* danger zone */}
-        <PaperInset
-          top={
-            <StripMeta className="text-rose-800">
-              <FiTrash2 className="size-3.5" aria-hidden />
-              <span className="uppercase tracking-[0.08em]">Danger zone</span>
-            </StripMeta>
-          }
-        >
-          <div className="px-5 py-6 sm:px-7">
-            <p className="text-[12.5px] leading-relaxed text-neutral-600">
-              Deleting removes members, settings, and links. Repositories are
-              unlinked but not deleted on GitHub.
-            </p>
-            <div className="mt-4">
-              <Field
-                label={`Type "${data.name}" to confirm`}
-                htmlFor="del-confirm"
-                labelClass={paperLabelClass}
-              >
-                <input
-                  id="del-confirm"
-                  className={paperInputClass}
-                  value={deleteConfirm}
-                  onChange={(e) => setDeleteConfirm(e.target.value)}
-                  placeholder={data.name}
-                  autoComplete="off"
-                />
-              </Field>
-            </div>
-            <div className="mt-4 flex justify-end">
-              <button
-                type="button"
-                className="inline-flex items-center justify-center gap-2 rounded-full bg-rose-700 px-5 py-2.5 text-[13px] font-semibold text-white transition-all hover:bg-rose-600 disabled:cursor-not-allowed disabled:opacity-40"
+        <Card className="border-rose-600/25">
+          <CardHead
+            title="Danger zone"
+            hint="Members, settings, and links are removed. Repos stay on GitHub."
+          />
+          <div className="space-y-4 px-5 py-5">
+            <Field label={`Type "${data.name}" to confirm`}>
+              <input
+                className={inputClass}
+                value={deleteConfirm}
+                onChange={(e) => setDeleteConfirm(e.target.value)}
+                placeholder={data.name}
+                autoComplete="off"
+              />
+            </Field>
+            <div className="flex items-center justify-between gap-3">
+              <Badge tone="danger">Irreversible</Badge>
+              <Btn
+                variant="danger"
                 disabled={!canDelete || deleteMutation.isPending}
                 onClick={() => deleteMutation.mutate()}
               >
                 {deleteMutation.isPending && <Spinner />}
                 Delete workspace
-              </button>
+              </Btn>
             </div>
           </div>
-        </PaperInset>
-      </motion.section>
+        </Card>
+      </div>
     </div>
-  );
-}
-
-function BackLink({ workspaceId }: { workspaceId: string }) {
-  return (
-    <Link
-      to={`/dashboard/w/${workspaceId}`}
-      className="group mb-7 inline-flex items-center gap-1.5 text-[13px] text-neutral-500 transition-colors hover:text-neutral-900"
-    >
-      <FiArrowLeft
-        className="size-4 transition-transform group-hover:-translate-x-0.5"
-        aria-hidden
-      />
-      Back to workspace
-    </Link>
   );
 }
 

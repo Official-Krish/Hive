@@ -1,44 +1,34 @@
 /* ─────────────────────────────────────────────────────────────
-   WORKSPACE INVITES — your inbox.
-   Invites addressed to you, delivered as paper mail on the bezel.
-   Accepting just joins the workspace — no collector needed until
-   you actually step into the spatial office.
+   INVITES — your inbox. Accept stays on the page so you can work
+   through several. Same data, dark instrument.
    ───────────────────────────────────────────────────────────── */
-import { useNavigate } from "react-router-dom";
-import { motion } from "motion/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FiInbox } from "react-icons/fi";
-import {
-  ApiError,
-  http,
-  type ReceivedInvite,
-  type WorkspaceSummary,
-} from "@/lib/http";
+import { ApiError, http, type ReceivedInvite } from "@/lib/http";
 import { notifyError, notifySuccess } from "@/lib/toast";
-import { EASE } from "@/components/dashboard/primitives";
-import {
-  PaperInset,
-  StripMeta,
-  inkBtnClass,
-} from "@/components/dashboard/Paper";
 import {
   Avatar,
-  EmptyState,
+  Badge,
+  Btn,
+  Card,
+  Empty,
   Note,
-  PageHeader,
-  PaperRoleTag,
+  PageHead,
+  RoleBadge,
+  SkeletonRows,
   Spinner,
-} from "@/components/dashboard/ui";
+} from "@/components/dashboard/kit";
 
-function expiryLabel(iso: string): string {
-  const ms = new Date(iso).getTime() - Date.now();
+function expiryLabel(invite: ReceivedInvite): string {
+  if (invite.status !== "pending") {
+    return invite.status === "accepted" ? "Accepted" : "No longer valid";
+  }
+  const ms = new Date(invite.expiresAt).getTime() - Date.now();
   if (ms <= 0) return "Expired";
   const days = Math.ceil(ms / (24 * 60 * 60 * 1000));
   return `Expires in ${days} day${days === 1 ? "" : "s"}`;
 }
 
 export function WorkspaceInvites() {
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
 
   const { data, isLoading, isError } = useQuery({
@@ -47,13 +37,11 @@ export function WorkspaceInvites() {
   });
 
   const mutation = useMutation({
-    mutationFn: (inviteId: string): Promise<WorkspaceSummary> =>
-      http.invites.acceptById(inviteId),
+    mutationFn: (inviteId: string) => http.invites.acceptById(inviteId),
     onSuccess: (ws) => {
       queryClient.invalidateQueries({ queryKey: ["workspaces"] });
       queryClient.invalidateQueries({ queryKey: ["invites", "received"] });
-      notifySuccess(`Invite accepted — find "${ws.name}" on your dashboard.`);
-      navigate("/dashboard");
+      notifySuccess(`Joined "${ws.name}".`);
     },
     onError: (err) => {
       notifyError(
@@ -69,62 +57,43 @@ export function WorkspaceInvites() {
 
   return (
     <div>
-      <PageHeader
+      <PageHead
         eyebrow="Invites"
         meta={
           pendingCount > 0 ? (
-            <StripMeta className="text-neutral-500">
-              <span className="tabular-nums text-neutral-800">
-                {pendingCount}
-              </span>
-              pending
-            </StripMeta>
+            <span className="font-mono text-[11px] tabular-nums text-neutral-500">
+              {pendingCount} pending
+            </span>
           ) : undefined
         }
-        title={
-          <>
-            Waiting for you,{" "}
-            <span className="italic text-neutral-400">sealed and sent.</span>
-          </>
-        }
-        subtitle="Workspaces you've been invited to join."
+        title="Waiting for you"
+        sub="Workspaces you've been invited to join."
       />
 
       {isError && (
-        <Note tone="error">
-          We couldn't load your invites. Refresh to try again.
-        </Note>
+        <div className="mb-6">
+          <Note tone="error">
+            We couldn't load your invites. Refresh to try again.
+          </Note>
+        </div>
       )}
 
-      {isLoading && (
-        <PaperInset>
-          <div className="p-6">
-            <div className="h-24 animate-pulse rounded-lg bg-neutral-900/[0.04]" />
-          </div>
-        </PaperInset>
-      )}
+      {isLoading && <SkeletonRows rows={3} />}
 
       {!isLoading && !isError && invites.length === 0 && (
-        <EmptyState
-          icon={<FiInbox className="size-5" />}
-          title="No invites right now."
+        <Empty
+          title="No invites right now"
           hint="When someone invites you to a workspace, it'll appear here."
         />
       )}
 
       {!isLoading && !isError && invites.length > 0 && (
-        <div className="space-y-4">
-          {invites.map((invite, i) => (
+        <div className="max-w-2xl space-y-3">
+          {invites.map((invite) => (
             <InviteRow
               key={invite.id}
               invite={invite}
-              index={i}
               pending={mutation.isPending && mutation.variables === invite.id}
-              error={
-                mutation.isError && mutation.variables === invite.id
-                  ? mutation.error
-                  : null
-              }
               onAccept={() => mutation.mutate(invite.id)}
             />
           ))}
@@ -136,104 +105,62 @@ export function WorkspaceInvites() {
 
 function InviteRow({
   invite,
-  index,
   pending,
-  error,
   onAccept,
 }: {
   invite: ReceivedInvite;
-  index: number;
   pending: boolean;
-  error: unknown;
   onAccept: () => void;
 }) {
-  const expired = invite.status !== "pending";
+  const active = invite.status === "pending";
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 6 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.45, ease: EASE, delay: 0.05 + index * 0.06 }}
-    >
-      <PaperInset
-        grid={index === 0 && !expired}
-        top={
-          <>
-            <StripMeta>
-              <span className="uppercase tracking-[0.08em]">Invitation</span>
-              <span className="text-neutral-300">·</span>
-              <span>{invite.org.name}</span>
-            </StripMeta>
-            <StripMeta className={expired ? "text-rose-700" : undefined}>
-              {expiryLabel(invite.expiresAt)}
-            </StripMeta>
-          </>
-        }
-      >
-        <div className="flex flex-col gap-5 px-5 py-6 sm:flex-row sm:items-center sm:justify-between sm:px-7">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2.5">
-              <span className="font-serif text-[24px] leading-none tracking-[-0.01em] text-neutral-950">
-                {invite.workspace?.name ?? "Workspace"}
-              </span>
-              <PaperRoleTag role={invite.role} />
-            </div>
-            {invite.workspace?.description && (
-              <p className="mt-1.5 max-w-md text-[13px] leading-relaxed text-neutral-600">
-                {invite.workspace.description}
-              </p>
-            )}
-            {invite.invitedBy && (
-              <div className="mt-3.5 flex items-center gap-2 text-[12.5px] text-neutral-600">
-                <span className="flex items-center gap-1 text-neutral-500">
-                  <Avatar
-                    name={invite.invitedBy.name}
-                    src={invite.invitedBy.avatarUrl}
-                    size={20}
-                  />
-                </span>
-                <span>
-                  Invited by{" "}
-                  <span className="font-medium text-neutral-900">
-                    {invite.invitedBy.name}
-                  </span>
-                </span>
-              </div>
-            )}
+    <Card>
+      <div className="flex items-center justify-between gap-4 border-b border-neutral-900/[0.08] px-5 py-2.5">
+        <span className="truncate font-mono text-[11px] text-neutral-400">
+          {invite.org.name}
+        </span>
+        <span className="flex-shrink-0 font-mono text-[11px] text-neutral-400">
+          {expiryLabel(invite)}
+        </span>
+      </div>
+      <div className="flex flex-col gap-4 px-5 py-5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <span className="text-[18px] font-semibold tracking-[-0.01em] text-neutral-900">
+              {invite.workspace?.name ?? "Workspace"}
+            </span>
+            <RoleBadge role={invite.role} />
           </div>
-
-          <button
-            type="button"
-            className={
-              expired
-                ? "flex-shrink-0 cursor-not-allowed rounded-full px-5 py-2.5 text-[13px] font-medium text-neutral-400"
-                : inkBtnClass
-            }
-            onClick={onAccept}
-            disabled={pending || expired}
-          >
-            {expired ? (
-              "Expired"
-            ) : (
-              <>
-                {pending && <Spinner ink />}
-                {pending ? "Accepting…" : "Accept"}
-              </>
-            )}
-          </button>
+          {invite.invitedBy && (
+            <div className="mt-2.5 flex items-center gap-2 text-xs text-neutral-500">
+              <Avatar
+                name={invite.invitedBy.name}
+                src={invite.invitedBy.avatarUrl}
+                size={20}
+              />
+              <span>
+                Invited by{" "}
+                <span className="font-medium text-neutral-700">
+                  {invite.invitedBy.name}
+                </span>
+              </span>
+            </div>
+          )}
         </div>
 
-        {error != null && (
-          <div className="border-t border-neutral-900/10 px-5 py-3.5 sm:px-7">
-            <Note tone="error" onPaper>
-              {error instanceof ApiError
-                ? error.message
-                : "Something went wrong accepting this invite."}
-            </Note>
-          </div>
+        {active ? (
+          <Btn className="flex-shrink-0" onClick={onAccept} disabled={pending}>
+            {pending && <Spinner />}
+            {pending ? "Accepting…" : "Accept"}
+          </Btn>
+        ) : (
+          <Badge tone={invite.status === "accepted" ? "live" : "neutral"}>
+            {invite.status}
+          </Badge>
         )}
-      </PaperInset>
-    </motion.div>
+      </div>
+    </Card>
   );
 }
 

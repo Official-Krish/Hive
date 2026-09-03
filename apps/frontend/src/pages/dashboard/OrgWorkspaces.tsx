@@ -1,8 +1,8 @@
-import { useOutletContext } from "react-router-dom";
+import { Link, useOutletContext } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
+import { FiArrowUpRight } from "react-icons/fi";
 import { http } from "@/lib/http";
-import { Note, Spinner } from "@/components/dashboard/ui";
+import { Note, RoleBadge, Row, Spinner } from "@/components/dashboard/kit";
 import type { OrgOutletContext } from "./OrgDetail";
 
 export function OrgWorkspaces() {
@@ -16,7 +16,7 @@ export function OrgWorkspaces() {
 
   if (workspaces.isLoading) {
     return (
-      <div className="flex items-center gap-2.5 text-neutral-500">
+      <div className="flex items-center gap-2.5 text-sm text-neutral-500">
         <Spinner /> Loading workspaces…
       </div>
     );
@@ -28,35 +28,41 @@ export function OrgWorkspaces() {
 
   const list = workspaces.data ?? [];
 
-  return (
-    <div className="space-y-2">
-      {list.length === 0 && (
-        <Note>
-          No workspaces yet. Create one from the console to get started.
-        </Note>
-      )}
+  if (list.length === 0) {
+    return (
+      <Note>
+        No workspaces yet.{" "}
+        <Link to="/dashboard/create" className="underline underline-offset-2">
+          Create one
+        </Link>{" "}
+        to get started.
+      </Note>
+    );
+  }
 
+  return (
+    <ul className="space-y-2">
       {list.map((w) => (
-        <Link
+        <li
           key={w.id}
-          to={`/dashboard/w/${w.id}`}
-          className="flex items-center justify-between gap-3 rounded-xl border border-neutral-900/[0.08] bg-neutral-900/[0.02] px-3 py-2.5 transition-colors hover:bg-neutral-900/[0.05]"
+          className="rounded-lg border border-neutral-900/[0.08] bg-white transition-colors hover:bg-neutral-900/[0.03]"
         >
-          <div className="min-w-0">
-            <p className="truncate text-[13px] font-medium text-neutral-900">
-              {w.name}
-            </p>
-            <p className="truncate text-[11px] text-neutral-500">
-              {w.description || w.slug} · {w.memberCount} member
-              {w.memberCount === 1 ? "" : "s"}
-            </p>
-          </div>
-          <span className="rounded-md bg-neutral-900/[0.05] px-2 py-1 text-[12px] font-medium uppercase tracking-[0.08em] text-neutral-600">
-            {w.role}
-          </span>
-        </Link>
+          <Row to={`/dashboard/w/${w.id}`}>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[13px] font-medium text-neutral-800">
+                {w.name}
+              </p>
+              <p className="truncate text-[11px] text-neutral-500">
+                {w.description || w.slug} · {w.memberCount} member
+                {w.memberCount === 1 ? "" : "s"}
+              </p>
+            </div>
+            <RoleBadge role={w.role} />
+            <FiArrowUpRight className="size-3.5 flex-shrink-0 text-neutral-400" />
+          </Row>
+        </li>
       ))}
-    </div>
+    </ul>
   );
 }
 

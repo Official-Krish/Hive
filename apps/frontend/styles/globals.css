@@ -78,7 +78,7 @@
   body {
     @apply bg-background text-foreground font-sans antialiased selection:bg-white/20 selection:text-white;
     background-color: #08090d;
-    overflow-x: hidden;
+    overflow-x: clip;
   }
 }
 
