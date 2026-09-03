@@ -416,7 +416,7 @@ export function WorldCanvas({
   const showToast = useCallback((node: React.ReactNode) => {
     setToast(node);
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-    toastTimerRef.current = setTimeout(() => setToast(null), 2600);
+    toastTimerRef.current = setTimeout(() => setToast(null), 3000);
   }, []);
 
   const handleInteract = useCallback(
@@ -522,7 +522,7 @@ export function WorldCanvas({
       }),
       client.on("chill.media.state", (e) => {
         if (!e.videoUrl || !e.setByName) return;
-        push(`${e.setByName} put up a video in Chill Space`, "bump");
+        showToast(`${e.setByName} put up a video in Chill Space`);
       }),
       client.on("presence.changed", (e) => {
         if (e.developerId === myUserId) return;
@@ -552,7 +552,7 @@ export function WorldCanvas({
       offs.forEach((off) => off());
       clearInterval(prune);
     };
-  }, [client, myUserId, pushFeed, addBubble, fireConfetti]);
+  }, [client, myUserId, pushFeed, addBubble, fireConfetti, showToast]);
 
   return (
     <div className="relative w-full h-screen overflow-hidden font-sans select-none">
