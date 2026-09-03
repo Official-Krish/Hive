@@ -134,14 +134,11 @@ export function useRealtimeMap(
       myPosRef.current = { x, y, roomId };
       setMyPositionState({ x, y, roomId });
 
-      const selfId = myIdRef.current;
-      const mine = avatarsRef.current.get(selfId);
-      if (mine) {
-        const next = new Map(avatarsRef.current);
-        next.set(selfId, { ...mine, x, y, roomId });
-        avatarsRef.current = next;
-        setAvatars(next);
-      }
+      // The local avatar is driven directly by PlayerController. Cloning the
+      // complete member map on every movement tick needlessly reconciles every
+      // remote avatar and creates sustained garbage while the player walks.
+      // Keep the local position in its ref for proximity and send it to peers;
+      // the server echo will refresh the member map at its normal cadence.
 
       const socket = clientRef.current;
       if (socket) {

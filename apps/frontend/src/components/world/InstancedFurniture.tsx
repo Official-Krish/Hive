@@ -364,6 +364,32 @@ export function InstancedFurniture({
       });
       lightStripRef.current.instanceMatrix.needsUpdate = true;
     }
+
+    // Instance transforms span the office, but Three starts with bounds around
+    // each source geometry at the origin. Rebuild the aggregate bounds after
+    // writing the matrices so visible furniture is not culled, while genuinely
+    // off-screen batches still cost no draw call.
+    [
+      deskTopRef,
+      deskPadRef,
+      deskLegsRef,
+      chairSeatRef,
+      chairBackRef,
+      chairBaseRef,
+      monitorFrameRef,
+      monitorScreenRef,
+      monitorArmRef,
+      plantPotRef,
+      plantLeavesRef,
+      sofaSeatRef,
+      sofaBackRef,
+      coffeeTableRef,
+      lightBarRef,
+      lightStripRef,
+    ].forEach((ref) => {
+      ref.current?.computeBoundingBox();
+      ref.current?.computeBoundingSphere();
+    });
   }, [desks, chairs, monitors, plants, sofas, coffeeTables, lightFixtures]);
 
   return (

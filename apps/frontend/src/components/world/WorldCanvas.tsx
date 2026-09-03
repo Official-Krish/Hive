@@ -1035,10 +1035,16 @@ export function WorldCanvas({
       {/* 3D world */}
       <Canvas
         shadows
-        dpr={[1, 1.25]}
+        // A modest cap keeps edges and procedural materials crisp without
+        // returning to the memory cost of full device-pixel rendering.
+        dpr={[1, 1.15]}
         camera={{ position: [0, 3, 46], fov: 50, near: 0.1, far: 900 }}
         gl={{
-          antialias: true,
+          // At a capped DPR, MSAA duplicates the main framebuffer with little
+          // visible benefit in this stylised world. Turning it off materially
+          // reduces GPU memory at the viewport sizes used by the office.
+          antialias: false,
+          stencil: false,
           alpha: false,
           powerPreference: "high-performance",
           toneMapping: THREE.ACESFilmicToneMapping,
@@ -1051,7 +1057,12 @@ export function WorldCanvas({
 
         <OfficeLighting />
         <OfficeBuilding />
-        <ChillScreenProjection active={!!chill.state.videoId} />
+        {/* The YouTube player is a DOM surface, so it cannot participate in
+            WebGL wall occlusion. Keep it visible only while the local player
+            is in the Chill Space; elsewhere the real TV wall stays untouched. */}
+        <ChillScreenProjection
+          active={!!chill.state.videoId && currentRoom === "Chill Space"}
+        />
 
         <PlayerController
           playerRef={playerGroupRef}
