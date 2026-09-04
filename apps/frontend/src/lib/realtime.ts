@@ -63,9 +63,16 @@ export class RealtimeClient {
   > = new Set();
   private readonly errorHandlers: Set<(error: Event) => void> = new Set();
 
-  constructor(workspaceId: string, url: string = WS_BASE_URL) {
+  constructor(
+    workspaceId: string,
+    url: string = WS_BASE_URL,
+    token?: string | null,
+  ) {
     const endpoint = new URL(`${url}/ws`);
     endpoint.searchParams.set("workspaceId", workspaceId);
+    if (token) {
+      endpoint.searchParams.set("token", token);
+    }
     this.url = endpoint.toString();
   }
 
@@ -284,8 +291,9 @@ export class RealtimeClient {
 export function createRealtimeClient(
   workspaceId: string,
   url?: string,
+  token?: string | null,
 ): RealtimeClient {
-  return new RealtimeClient(workspaceId, url);
+  return new RealtimeClient(workspaceId, url, token);
 }
 
 export type { RealtimeClientMessage, RealtimeEvent, RealtimeMember };

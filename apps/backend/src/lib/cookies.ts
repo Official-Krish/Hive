@@ -9,6 +9,7 @@ const baseOptions = (): CookieOptions => ({
   httpOnly: true,
   secure: env.COOKIE_SECURE,
   sameSite: "lax",
+  ...(env.COOKIE_DOMAIN ? { domain: env.COOKIE_DOMAIN } : {}),
 });
 
 export function setAccessTokenCookie(

@@ -17,7 +17,7 @@ export function OfficeLighting() {
   return (
     <>
       {/* Atmospheric depth for the courtyard / skyline */}
-      <fogExp2 attach="fog" args={["#cdd8e3", 0.0055]} />
+      <fogExp2 attach="fog" args={["#cdd8e3", 0.0045]} />
 
       {/* Baked-once environment (IBL fill + reflections), no network fetch */}
       <Environment resolution={192} frames={1}>
@@ -71,13 +71,13 @@ export function OfficeLighting() {
       <ambientLight intensity={0.28} />
       <hemisphereLight args={["#bcd3ff", "#2c2820", 0.55]} />
 
-      {/* Sun — the only shadow caster */}
+      {/* Sun — the only shadow caster (2k map over the 140m span) */}
       <directionalLight
         position={SUN}
-        intensity={2.6}
+        intensity={2.75}
         color="#fff4e2"
         castShadow
-        shadow-mapSize={[1024, 1024]}
+        shadow-mapSize={[2048, 2048]}
         shadow-bias={-0.0004}
         shadow-normalBias={0.02}
       >
@@ -99,11 +99,32 @@ export function OfficeLighting() {
         />
       ))}
 
+      {/* Two hero spots reuse existing fixture positions: lobby pendant
+          wash and chill-screen glow. No shadows — pools only. */}
+      <spotLight
+        position={[0, 7.6, 17]}
+        angle={0.75}
+        penumbra={0.9}
+        intensity={55}
+        distance={22}
+        decay={2}
+        color="#ffe9c4"
+      />
+      <spotLight
+        position={[-14, 3.4, -18.6]}
+        angle={0.6}
+        penumbra={1}
+        intensity={30}
+        distance={14}
+        decay={2}
+        color="#f9a8d4"
+      />
+
       {/* Soft contact grounding across the interior floor (baked once for performance) */}
       <ContactShadows
         position={[cx, 0.02, cz]}
         scale={Math.max(maxX - minX, maxZ - minZ) + 6}
-        resolution={384}
+        resolution={512}
         frames={1}
         far={3.2}
         blur={2.0}

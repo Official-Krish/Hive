@@ -11,12 +11,15 @@ import {
   TV_PANELS,
   WHITEBOARDS,
   ROOM_SIGNS,
+  PODS,
   RUGS,
   CEILING_Y,
   EXT_H,
   type WallPanel,
 } from "./layout";
 import { M } from "./materials";
+import { bladeTexture, directoryTexture } from "./signage";
+import { PodDoorPlate } from "./Level2";
 
 const SCREEN_MAT = { a: M.tvA, b: M.tvB, c: M.tvC } as const;
 
@@ -131,7 +134,7 @@ function Whiteboard({ p }: { p: WallPanel }) {
       </mesh>
       <mesh position={[0, 0, 0.031]}>
         <planeGeometry args={[w, h]} />
-        <primitive object={M.whiteboard} attach="material" />
+        <primitive object={M.whiteboardMarked} attach="material" />
       </mesh>
       <mesh position={[0, -h / 2 - 0.09, 0.06]}>
         <boxGeometry args={[w * 0.55, 0.04, 0.1]} />
@@ -181,42 +184,66 @@ function SlatWall({
   );
 }
 
-/** Backlit blade sign beside a doorway. */
+/** Backlit blade sign beside a doorway — real room name, accent kept. */
 function RoomSignBlade({
   position,
   rotation,
   accent,
+  label,
 }: {
   position: [number, number, number];
   rotation: [number, number, number];
   accent: string;
+  label: string;
 }) {
+  const face = useMemo(() => bladeTexture(label, accent), [label, accent]);
   return (
     <group position={position} rotation={rotation}>
       <mesh castShadow>
         <boxGeometry args={[1.5, 0.34, 0.05]} />
         <primitive object={M.blackAnodized} attach="material" />
       </mesh>
-      <mesh position={[-0.6, 0, 0.032]}>
-        <planeGeometry args={[0.16, 0.2]} />
-        <meshStandardMaterial
-          color={accent}
-          emissive={accent}
-          emissiveIntensity={1.8}
-          roughness={0.3}
-        />
+      <mesh position={[0.02, 0, 0.032]}>
+        <planeGeometry args={[1.34, 0.3]} />
+        <meshBasicMaterial map={face} transparent toneMapped={false} />
       </mesh>
-      {[0.06, -0.02, -0.1].map((y, i) => (
-        <mesh key={i} position={[-0.05 + i * 0.02, y, 0.032]}>
-          <planeGeometry args={[0.78 - i * 0.16, 0.045]} />
-          <meshStandardMaterial
-            color="#cbd5e1"
-            emissive="#8ea3bb"
-            emissiveIntensity={0.5}
-            roughness={0.5}
-          />
-        </mesh>
-      ))}
+    </group>
+  );
+}
+
+/** Freestanding lobby directory totem — zones, accents, you-are-here. */
+function DirectoryTotem() {
+  const face = useMemo(
+    () =>
+      directoryTexture([
+        { name: "Reception", accent: "#38bdf8", note: "you are here" },
+        { name: "Engineering Floor", accent: "#818cf8", note: "west wing" },
+        { name: "Lounge & Breakout", accent: "#f59e0b", note: "west wing" },
+        { name: "Chill Space", accent: "#f472b6", note: "inside lounge" },
+        { name: "Cafeteria", accent: "#fb923c", note: "east wing" },
+        { name: "Meeting Rooms", accent: "#34d399", note: "east wing" },
+        { name: "AI Lab", accent: "#22d3ee", note: "east wing" },
+        { name: "Stairs · L2", accent: "#e8eaf0", note: "west end" },
+      ]),
+    [],
+  );
+  return (
+    <group position={[-5.5, 0, 19.5]}>
+      {/* pylon */}
+      <mesh position={[0, 0.95, 0]} castShadow>
+        <boxGeometry args={[0.9, 1.9, 0.12]} />
+        <primitive object={M.blackAnodized} attach="material" />
+      </mesh>
+      {/* face toward the entrance (+Z) */}
+      <mesh position={[0, 0.98, 0.065]}>
+        <planeGeometry args={[0.78, 1.56]} />
+        <meshBasicMaterial map={face} toneMapped={false} />
+      </mesh>
+      {/* base */}
+      <mesh position={[0, 0.03, 0]}>
+        <boxGeometry args={[1.0, 0.06, 0.4]} />
+        <primitive object={M.metalBrushed} attach="material" />
+      </mesh>
     </group>
   );
 }
@@ -311,8 +338,17 @@ export function Fittings() {
           position={s.position}
           rotation={s.rotation}
           accent={s.accent}
+          label={s.label}
         />
       ))}
+
+      {/* Named plates on the L1 pod doors (L2 pods get theirs in Level2) */}
+      {PODS.filter((p) => p.level === 1).map((p) => (
+        <PodDoorPlate key={p.id} pod={p} />
+      ))}
+
+      {/* Lobby directory totem */}
+      <DirectoryTotem />
 
       {/* Rugs anchoring the lounge clusters */}
       {RUGS.map(([x, z, w, d], i) => (

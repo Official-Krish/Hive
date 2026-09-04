@@ -146,7 +146,8 @@ export class RealtimeHub {
     }
 
     const cookies = new Bun.CookieMap(req.headers.get("cookie") ?? "");
-    const token = cookies.get(ACCESS_COOKIE);
+    const token =
+      cookies.get(ACCESS_COOKIE) ?? url.searchParams.get("token") ?? undefined;
     if (!token) {
       return new Response("Unauthorized", { status: 401 });
     }

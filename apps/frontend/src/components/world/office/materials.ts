@@ -7,6 +7,7 @@
 // ============================================================================
 
 import * as THREE from "three";
+import { whiteboardTexture } from "./signage";
 
 const HAS_DOM = typeof document !== "undefined";
 
@@ -672,6 +673,12 @@ export const M = {
   }),
   whiteboard: new THREE.MeshStandardMaterial({
     color: "#f7f8fa",
+    roughness: 0.14,
+    metalness: 0.05,
+  }),
+  // Same face with faint marker scribbles baked in (one shared texture).
+  whiteboardMarked: new THREE.MeshStandardMaterial({
+    map: whiteboardTexture(),
     roughness: 0.14,
     metalness: 0.05,
   }),
