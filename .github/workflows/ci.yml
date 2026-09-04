@@ -193,6 +193,9 @@ jobs:
       GITHUB_CLIENT_SECRET: ci-client-secret
       GITHUB_WEBHOOK_SECRET: ci-webhook-secret
       GITHUB_TOKEN_ENCRYPTION_KEY: __ci_encryption_key_00000000
+      LIVEKIT_URL: wss://fake.livekit.cloud
+      LIVEKIT_API_KEY: ci-livekit-key
+      LIVEKIT_API_SECRET: ci-livekit-secret
 
     steps:
       - name: Checkout
