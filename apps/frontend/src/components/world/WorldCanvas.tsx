@@ -294,7 +294,7 @@ function InlineTextRow({
         placeholder={placeholder}
         maxLength={60}
         aria-label={placeholder}
-        className="w-full rounded-lg border border-black/[0.09] bg-white px-2.5 py-1.5 text-[12px] text-neutral-800 outline-none placeholder:text-neutral-400 focus:border-neutral-900/40"
+        className="w-full rounded-lg border border-black/[0.09] bg-white px-2.5 py-1.5 text-[12px] text-neutral-700 outline-none placeholder:text-neutral-400 focus:border-neutral-900/40"
       />
       {(value.trim() || (showClear && onClear)) && (
         <div className="mt-1 flex items-stretch gap-1">
