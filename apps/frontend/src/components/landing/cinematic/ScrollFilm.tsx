@@ -24,21 +24,22 @@ export function ScrollFilm() {
   const wrapRefs = useRef<(HTMLDivElement | null)[]>([]);
   const videoRefs = useRef<(HTMLVideoElement | null)[]>([]);
   const beatRefs = useRef<(HTMLDivElement | null)[]>([]);
-  const cameraRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const railRef = useRef<HTMLDivElement>(null);
+  const tcRef = useRef<HTMLDivElement>(null);
 
-  // durations live in a ref for the rAF loop + state so the HUD re-renders
+  // durations live in a ref for the rAF loop (state mirrors for devtools)
   const durationsRef = useRef<number[]>(Array(LEG_COUNT).fill(FALLBACK_LEG));
-  const [durations, setDurations] = useState<number[]>(durationsRef.current);
-  const total = durations.reduce((a, b) => a + b, 0);
+  const [, setDurations] = useState<number[]>(durationsRef.current);
 
   const [loaded, setLoaded] = useState(0);
   const [ready, setReady] = useState(false);
-  const [bar, setBar] = useState(0);
   const reduced =
     typeof window !== "undefined" &&
     window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   // ── The scrub engine ──────────────────────────────────────────
+  // Zero React state in the hot loop: HUD updates go straight to the DOM.
+  // No per-frame transforms (static framing) — the footage carries motion.
   useEffect(() => {
     if (reduced || !ready) return;
     const section = sectionRef.current;
@@ -49,15 +50,32 @@ export function ScrollFilm() {
     let target = 0;
     let currentLeg = -1;
     let frame = 0;
+    let last = performance.now();
+    let secTop = 0;
+    let secScrollable = 1;
+    let lastTc = "";
+    const lastBeat: string[] = Array(LEG_COUNT).fill("");
 
-    const measure = () => {
+    // Measure geometry on resize only — never per scroll event.
+    const layout = () => {
       const rect = section.getBoundingClientRect();
-      const scrollable = rect.height - window.innerHeight;
-      target = Math.min(1, Math.max(0, -rect.top / Math.max(1, scrollable)));
+      secTop = rect.top + window.scrollY;
+      secScrollable = Math.max(1, rect.height - window.innerHeight);
     };
+    const measure = () => {
+      target = Math.min(
+        1,
+        Math.max(0, (window.scrollY - secTop) / secScrollable),
+      );
+    };
+    const onResize = () => {
+      layout();
+      measure();
+    };
+    layout();
     measure();
     window.addEventListener("scroll", measure, { passive: true });
-    window.addEventListener("resize", measure);
+    window.addEventListener("resize", onResize);
 
     const legStartOf = (leg: number) => {
       let s = 0;
@@ -65,8 +83,11 @@ export function ScrollFilm() {
       return s;
     };
 
-    const tick = () => {
-      smooth += (target - smooth) * 0.14;
+    const tick = (now: number) => {
+      // Frame-rate-independent damping — identical feel at 30/60/120Hz.
+      const dt = Math.min(0.1, Math.max(0.0001, (now - last) / 1000));
+      last = now;
+      smooth += (target - smooth) * (1 - Math.exp(-dt * 7));
       if (Math.abs(target - smooth) < 0.0004) smooth = target;
 
       const totalDur = durationsRef.current.reduce((a, b) => a + b, 0);
@@ -85,9 +106,9 @@ export function ScrollFilm() {
       const legStart = legStartOf(leg);
       const legDur = durationsRef.current[leg]!;
       const local = Math.min(Math.max(0, t - legStart), legDur);
-      const legP = legDur > 0 ? local / legDur : 0;
 
-      // match-cut: show exactly one wrapper + keep only neighbours resident
+      // match-cut: show exactly one wrapper. Only the current leg ±1 keeps
+      // a decoder — distant legs get their src torn down to truly free it.
       if (leg !== currentLeg) {
         wrapRefs.current.forEach((w, i) => {
           if (!w) return;
@@ -97,23 +118,29 @@ export function ScrollFilm() {
         videoRefs.current.forEach((vv, i) => {
           if (!vv) return;
           if (Math.abs(i - leg) <= 1) {
-            if (vv.preload !== "auto") {
+            if (!vv.getAttribute("src")) {
+              vv.src = CHAPTERS[i]!.video;
+              vv.load();
+              const img = vv.parentElement?.querySelector("img");
+              if (img) (img as HTMLElement).style.display = "";
+            } else if (vv.preload !== "auto") {
               vv.preload = "auto";
               vv.load();
             }
           } else {
             vv.pause();
+            if (vv.getAttribute("src")) {
+              vv.removeAttribute("src");
+              vv.load();
+            }
           }
-        });
-        cameraRefs.current.forEach((cm, i) => {
-          if (cm) cm.style.willChange = i === leg ? "transform" : "auto";
         });
         currentLeg = leg;
       }
 
       // scrub the visible frame (video stays paused — seek only).
       // Disciplined: every 2nd frame max, never while a seek is in flight,
-      // and only past one frame-interval of drift — seek pileups are judder.
+      // and only past a frame-interval of drift — seek pileups are judder.
       frame++;
       const v = videoRefs.current[leg];
       if (
@@ -130,14 +157,8 @@ export function ScrollFilm() {
         }
       }
 
-      // camera: slow push-in + alternating drift, per scene
-      const cam = cameraRefs.current[leg];
-      if (cam) {
-        const dir = leg % 2 === 0 ? 1 : -1;
-        cam.style.transform = `scale(${(1.1 - 0.08 * legP).toFixed(4)}) translateX(${(dir * legP * 1.5).toFixed(3)}%)`;
-      }
-
-      // story titles: duration-weighted windows so copy follows footage
+      // story titles: duration-weighted windows so copy follows footage.
+      // Cached — DOM writes only when the value actually changes.
       for (let i = 0; i < LEG_COUNT; i++) {
         const el = beatRefs.current[i];
         if (!el) continue;
@@ -152,12 +173,26 @@ export function ScrollFilm() {
         if (smooth >= w0 && smooth <= w1) {
           o = Math.min((smooth - w0) / edge, (w1 - smooth) / edge, 1);
         }
-        el.style.opacity = Math.max(0, Math.min(1, o)).toFixed(3);
-        el.style.transform = `translateY(${((1 - Math.min(1, o)) * 32).toFixed(1)}px)`;
-        el.style.visibility = o <= 0.01 ? "hidden" : "visible";
+        const oc = Math.max(0, Math.min(1, o));
+        const key = `${oc.toFixed(3)}|${((1 - oc) * 32).toFixed(1)}`;
+        if (key === lastBeat[i]) continue;
+        lastBeat[i] = key;
+        el.style.opacity = oc.toFixed(3);
+        el.style.transform = `translateY(${((1 - oc) * 32).toFixed(1)}px)`;
+        el.style.visibility = oc <= 0.01 ? "hidden" : "visible";
       }
 
-      setBar((prev) => (Math.abs(prev - smooth) > 0.002 ? smooth : prev));
+      // HUD straight to the DOM — no React re-render in the loop.
+      const rail = railRef.current;
+      if (rail) rail.style.width = `${(smooth * 100).toFixed(2)}%`;
+      const tc = tcRef.current;
+      if (tc) {
+        const s = `${fmt(smooth * totalDur)} / ${fmt(totalDur)}`;
+        if (s !== lastTc) {
+          lastTc = s;
+          tc.textContent = s;
+        }
+      }
 
       raf = requestAnimationFrame(tick);
     };
@@ -166,7 +201,7 @@ export function ScrollFilm() {
     return () => {
       cancelAnimationFrame(raf);
       window.removeEventListener("scroll", measure);
-      window.removeEventListener("resize", measure);
+      window.removeEventListener("resize", onResize);
     };
   }, [reduced, ready]);
 
@@ -232,13 +267,7 @@ export function ScrollFilm() {
               className="absolute inset-0"
               style={{ opacity: i === 0 ? 1 : 0, zIndex: i === 0 ? 2 : 1 }}
             >
-              <div
-                ref={(el) => {
-                  cameraRefs.current[i] = el;
-                }}
-                className="absolute inset-0"
-                style={{ willChange: i === 0 ? "transform" : "auto" }}
-              >
+              <div className="absolute inset-0 scale-[1.03]">
                 <img
                   src={c.poster}
                   alt=""
@@ -258,7 +287,11 @@ export function ScrollFilm() {
                   disablePictureInPicture
                   onLoadedMetadata={(e) => onMeta(i, e.currentTarget.duration)}
                   onSeeked={(e) => {
-                    e.currentTarget.style.opacity = "1";
+                    // First decoded frame: video takes over, still retires.
+                    const vid = e.currentTarget;
+                    vid.style.opacity = "1";
+                    const img = vid.parentElement?.querySelector("img");
+                    if (img) (img as HTMLElement).style.display = "none";
                   }}
                   onCanPlayThrough={() => {
                     setLoaded((n) => Math.min(LEG_COUNT, n + 1));
@@ -358,16 +391,17 @@ export function ScrollFilm() {
             <span className="h-1.5 w-1.5 rounded-full bg-white/40" />
             <span>Hive · a story in 8 scenes</span>
           </div>
-          <div className="tabular-nums text-white/40">
-            {fmt(bar * total)} / {fmt(total)}
+          <div ref={tcRef} className="tabular-nums text-white/40">
+            00:00
           </div>
         </div>
 
         <div className="absolute inset-x-0 bottom-0 z-[5] flex items-center gap-3 px-4 sm:px-8 pb-6">
           <div className="relative h-px flex-1 bg-white/10">
             <div
+              ref={railRef}
               className="absolute left-0 top-0 h-px bg-white/60"
-              style={{ width: `${bar * 100}%` }}
+              style={{ width: "0%" }}
             />
           </div>
           <div className="hidden sm:block font-mono text-[10px] tracking-[0.16em] text-white/30">

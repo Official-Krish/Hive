@@ -1,0 +1,58 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ingress-nginx
+  namespace: hive
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-http-version: "1.1"
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
+    nginx.ingress.kubernetes.io/proxy-body-size: "5g"
+    nginx.ingress.kubernetes.io/proxy-buffer-size: "16k"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - hive.krishlabs.tech
+      secretName: hive-frontend-tls
+    - hosts:
+        - api.hive.krishlabs.tech
+      secretName: hive-backend-tls
+    - hosts:
+        - ws.hive.krishlabs.tech
+      secretName: hive-backend-ws-tls
+
+  rules:
+    - host: hive.krishlabs.tech
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: hive-frontend
+                port:
+                  number: 80
+
+    - host: api.hive.krishlabs.tech
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: hive-backend
+                port:
+                  number: 3000
+
+    - host: ws.hive.krishlabs.tech
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: hive-backend-ws
+                port:
+                  number: 4001

@@ -1,0 +1,182 @@
+name: CD
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types:
+      - completed
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: cd-update-manifests
+  cancel-in-progress: false
+
+jobs:
+  update-manifests:
+    name: Update Kubernetes Manifests
+    runs-on: ubuntu-latest
+
+    if: |
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main'
+
+    env:
+      BRANCH: automation/update-manifests
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Download Changed Services
+        id: download_changed
+        continue-on-error: true
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          workflow: ci.yml
+          run_id: ${{ github.event.workflow_run.id }}
+          name: changed-services
+          path: changed
+
+      - name: Download Version
+        id: download_version
+        continue-on-error: true
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          workflow: ci.yml
+          run_id: ${{ github.event.workflow_run.id }}
+          name: version
+          path: version
+
+      - name: Read Version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f version/version.txt ]; then
+            TAG=$(tr -d '[:space:]' < version/version.txt)
+            if [ -z "$TAG" ]; then
+              echo "::warning::version.txt was empty"
+              echo "tag=" >> "$GITHUB_OUTPUT"
+            else
+              echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            echo "::warning::No version artifact found"
+            echo "tag=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check Changed Services
+        id: changed
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -d changed ]; then
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if grep -Rq "true" changed; then
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Guard - Nothing To Do
+        if: steps.changed.outputs.deploy != 'true' || steps.version.outputs.tag == ''
+        run: |
+          echo "Skipping deploy: deploy=${{ steps.changed.outputs.deploy }} tag='${{ steps.version.outputs.tag }}'"
+
+      - name: Configure Git
+        if: steps.changed.outputs.deploy == 'true' && steps.version.outputs.tag != ''
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Create Or Reset Automation Branch
+        if: steps.changed.outputs.deploy == 'true' && steps.version.outputs.tag != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git checkout -B "$BRANCH" origin/main
+
+      - name: Update Image Tags
+        if: steps.changed.outputs.deploy == 'true' && steps.version.outputs.tag != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.version.outputs.tag }}"
+
+          if [ -f changed/backend ] && [ "$(cat changed/backend)" = "true" ]; then
+            sed -i -E "s|(image: krishanand01/hive-backend:)[^[:space:]]+|\1$VERSION|g" ops/deployment.yml
+          fi
+
+          if [ -f changed/frontend ] && [ "$(cat changed/frontend)" = "true" ]; then
+            sed -i -E "s|(image: krishanand01/hive-frontend:)[^[:space:]]+|\1$VERSION|g" ops/deployment.yml
+          fi
+
+          if [ -f changed/worker ] && [ "$(cat changed/worker)" = "true" ]; then
+            sed -i -E "s|(image: krishanand01/hive-worker:)[^[:space:]]+|\1$VERSION|g" ops/deployment.yml
+          fi
+
+      - name: Check For Manifest Changes
+        id: gitcheck
+        if: steps.changed.outputs.deploy == 'true' && steps.version.outputs.tag != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet ops/deployment.yml; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Commit Changes
+        if: |
+          steps.changed.outputs.deploy == 'true' &&
+          steps.gitcheck.outputs.changed == 'true' &&
+          steps.version.outputs.tag != ''
+        run: |
+          set -euo pipefail
+          git add ops/deployment.yml
+          git commit -m "cd(deploy): update container images to ${{ steps.version.outputs.tag }}"
+
+      - name: Push Branch
+        if: |
+          steps.changed.outputs.deploy == 'true' &&
+          steps.gitcheck.outputs.changed == 'true' &&
+          steps.version.outputs.tag != ''
+        run: |
+          set -euo pipefail
+          git push --force-with-lease origin "HEAD:refs/heads/$BRANCH"
+
+      - name: Create Or Update Pull Request
+        if: |
+          steps.changed.outputs.deploy == 'true' &&
+          steps.gitcheck.outputs.changed == 'true' &&
+          steps.version.outputs.tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TITLE="cd(deploy): update container images to ${{ steps.version.outputs.tag }}"
+          BODY="Automated PR to update container image tags in deployment manifests. Backend and/or frontend images are bumped to the latest build."
+
+          PR=$(gh pr list --head "$BRANCH" --json number --jq '.[0].number')
+          if [ -n "$PR" ] && [ "$PR" != "null" ]; then
+            gh pr edit "$PR" --title "$TITLE" --body "$BODY"
+          else
+            gh pr create \
+              --title "$TITLE" \
+              --body "$BODY" \
+              --base main \
+              --head "$BRANCH"
+          fi

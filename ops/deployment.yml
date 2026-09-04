@@ -1,0 +1,204 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hive-frontend
+  namespace: hive
+  labels:
+    app: hive-frontend
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 0
+  selector:
+    matchLabels:
+      app: hive-frontend
+  template:
+    metadata:
+      labels:
+        app: hive-frontend
+    spec:
+      containers:
+        - name: hive-frontend
+          image: krishanand01/hive-frontend:v1.0.0
+          ports:
+            - containerPort: 80
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: "5m"
+              memory: "32Mi"
+            limits:
+              cpu: "100m"
+              memory: "512Mi"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hive-backend
+  namespace: hive
+  labels:
+    app: hive-backend
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 0
+  selector:
+    matchLabels:
+      app: hive-backend
+  template:
+    metadata:
+      labels:
+        app: hive-backend
+    spec:
+      containers:
+        - name: hive-backend
+          image: krishanand01/hive-backend:v1.0.0
+          ports:
+            - containerPort: 3000
+            - containerPort: 4001
+          startupProbe:
+            httpGet:
+              path: /api/v1/health
+              port: 3000
+            failureThreshold: 30
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/v1/health
+              port: 3000
+            initialDelaySeconds: 30
+            timeoutSeconds: 5
+            periodSeconds: 15
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /api/v1/health
+              port: 3000
+            initialDelaySeconds: 10
+            timeoutSeconds: 5
+            periodSeconds: 15
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: "5m"
+              memory: "32Mi"
+            limits:
+              cpu: "100m"
+              memory: "512Mi"
+          volumeMounts:
+            - name: env-file
+              mountPath: /app/.env
+              subPath: env
+      volumes:
+        - name: env-file
+          secret:
+            secretName: hive-backend-env
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hive-worker
+  namespace: hive
+  labels:
+    app: hive-worker
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 0
+  selector:
+    matchLabels:
+      app: hive-worker
+  template:
+    metadata:
+      labels:
+        app: hive-worker
+    spec:
+      containers:
+        - name: hive-worker
+          image: krishanand01/hive-worker:v1.0.0
+          resources:
+            requests:
+              cpu: "5m"
+              memory: "32Mi"
+            limits:
+              cpu: "100m"
+              memory: "512Mi"
+          volumeMounts:
+            - name: env-file
+              mountPath: /app/.env
+              subPath: env
+      volumes:
+        - name: env-file
+          secret:
+            secretName: hive-worker-env
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: hive
+
+spec:
+  replicas: 1
+
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 0
+
+  selector:
+    matchLabels:
+      app: redis
+
+  template:
+    metadata:
+      labels:
+        app: redis
+
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          imagePullPolicy: Always
+
+          ports:
+            - containerPort: 6379
+
+          resources:
+            requests:
+              cpu: "5m"
+              memory: "32Mi"
+            limits:
+              cpu: "100m"
+              memory: "128Mi"
+
+          volumeMounts:
+            - name: redis-data
+              mountPath: /data
+
+      volumes:
+        - name: redis-data
+          emptyDir: {}

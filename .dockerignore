@@ -1,0 +1,36 @@
+# VCS
+.git
+.gitignore
+.github
+
+# Dependencies
+node_modules
+apps/*/node_modules
+packages/*/node_modules
+
+# Env / secrets — never send these into the build context
+.env
+.env.*
+*.pem
+*.key
+
+# Build outputs
+dist
+apps/*/dist
+apps/*/build
+apps/frontend/dist
+packages/*/dist
+
+# Caches / tooling
+.turbo
+.turbo/cache
+coverage
+*.log
+.DS_Store
+.vscode
+.idea
+
+# Local-only / generated
+plan.md
+skills
+ops 

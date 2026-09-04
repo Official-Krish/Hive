@@ -1,0 +1,41 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: hive-frontend-cert
+  namespace: hive
+spec:
+  secretName: hive-frontend-tls
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  commonName: hive.krishlabs.tech
+  dnsNames:
+  - hive.krishlabs.tech
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: hive-backend-cert
+  namespace: hive
+spec:
+  secretName: hive-backend-tls
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  commonName: api.hive.krishlabs.tech
+  dnsNames:
+  - api.hive.krishlabs.tech
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: hive-backend-ws-cert
+  namespace: hive
+spec:
+  secretName: hive-backend-ws-tls
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  commonName: ws.hive.krishlabs.tech
+  dnsNames:
+  - ws.hive.krishlabs.tech

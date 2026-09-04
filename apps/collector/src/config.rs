@@ -60,10 +60,10 @@ impl Default for Config {
 
 /// Local backend HTTP base the collector talks to (hardcoded so install/login
 /// need no prompt). Change here if your backend runs on another port.
-pub const API_URL: &str = "http://localhost:3000";
+pub const API_URL: &str = "https://api.hive.krishlabs.tech";
 
 /// Local backend realtime base; install overrides this from `/api/v1/health`.
-pub const WS_URL: &str = "ws://localhost:4001";
+pub const WS_URL: &str = "wss://hive.krishlabs.tech";
 
 /// GitHub OAuth endpoints for the device flow (`hive login`). The client id is
 /// public and comes from the backend's `/api/v1/health`; only the user's token is

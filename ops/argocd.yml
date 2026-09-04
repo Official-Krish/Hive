@@ -1,0 +1,60 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+
+metadata:
+  name: hive
+  namespace: argocd
+
+  labels:
+    app.kubernetes.io/name: hive
+    app.kubernetes.io/part-of: hive-platform
+
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/Official-Krish/hive
+
+    targetRevision: main
+
+    path: ops
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: hive
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+
+    retry:
+      limit: 5
+
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+      - RespectIgnoreDifferences=true
+      - ApplyOutOfSyncOnly=true
+
+  revisionHistoryLimit: 10
+
+  info:
+    - name: Environment
+      value: production
+
+    - name: Project
+      value: hive
+
+    - name: Managed-By
+      value: argocd
