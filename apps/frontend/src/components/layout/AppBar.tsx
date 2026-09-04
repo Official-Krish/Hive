@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import {
   FiArrowUpRight,
+  FiChevronDown,
   FiMenu,
   FiUser,
   FiX,
@@ -12,10 +13,9 @@ import {
   FiGrid,
 } from "react-icons/fi";
 import { http } from "@/lib/http";
+import { HiveMark } from "@/components/icons/HiveMark";
 
 const navLinks = [
-  { label: "Film", href: "#film" },
-  { label: "Proof", href: "#proof" },
   { label: "FAQ", href: "#faq" },
   { label: "Launch", href: "/auth" },
 ];
@@ -68,7 +68,8 @@ export function AppBar() {
         )}
       >
         {/* Brand Logo Box */}
-        <Link to="/" className="group flex items-center gap-3">
+        <Link to="/" className="group flex items-center gap-2.5">
+          <HiveMark className="size-7 text-white transition-transform duration-300 group-hover:scale-105" />
           <span className="font-sans font-bold text-lg tracking-tight text-white hidden sm:inline-block">
             Hive
           </span>
@@ -118,71 +119,96 @@ export function AppBar() {
               <button
                 type="button"
                 onClick={() => setProfileOpen(!profileOpen)}
-                className="group relative flex items-center gap-2 rounded-xl bg-white/[0.07] hover:bg-white/[0.12] border border-white/15 hover:border-white/30 px-4 py-2 transition-all duration-200"
+                className="group relative flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.05] py-1.5 pl-1.5 pr-3 backdrop-blur-md transition-all duration-200 hover:border-white/25 hover:bg-white/[0.09]"
                 aria-expanded={profileOpen}
-                aria-haspopup="true"
+                aria-haspopup="menu"
               >
-                <div className="relative w-8 h-8">
+                <span className="relative block size-7">
                   {user.avatarUrl ? (
                     <img
                       src={user.avatarUrl}
                       alt={user.name}
-                      className="w-full h-full rounded-full object-cover ring-2 ring-white/10"
+                      className="h-full w-full rounded-full object-cover ring-1 ring-white/20"
                     />
                   ) : (
-                    <div className="w-full h-full rounded-full bg-gradient-to-br from-cyan-500 to-indigo-600 flex items-center justify-center ring-2 ring-white/10">
-                      <span className="font-semibold text-white text-sm">
-                        {user.name.charAt(0).toUpperCase()}
-                      </span>
-                    </div>
+                    <span className="flex h-full w-full items-center justify-center rounded-full bg-white/10 text-xs font-semibold text-white ring-1 ring-white/20">
+                      {user.name.charAt(0).toUpperCase()}
+                    </span>
                   )}
-                </div>
-                <span className="text-sm font-medium text-white hidden sm:inline-block">
+                  <span className="absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border-2 border-black bg-emerald-400" />
+                </span>
+                <span className="hidden max-w-[120px] truncate text-[13px] font-medium text-white/85 sm:inline-block">
                   {user.name}
                 </span>
-                <FiArrowUpRight className="text-xs text-neutral-400 group-hover:text-white transition-transform group-hover:rotate-180" />
+                <FiChevronDown
+                  className={`size-3.5 text-white/40 transition-transform duration-200 ${profileOpen ? "rotate-180" : ""}`}
+                />
               </button>
 
               {/* Profile Dropdown */}
               {profileOpen && (
                 <motion.div
-                  initial={{ opacity: 0, y: 8, scale: 0.98 }}
+                  initial={{ opacity: 0, y: 6, scale: 0.98 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: -8, scale: 0.98 }}
-                  transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
-                  className="absolute right-0 mt-2 w-56 origin-top-right rounded-2xl border border-white/10 bg-[#0f131d]/95 backdrop-blur-xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] py-2"
+                  exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                  transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+                  role="menu"
+                  className="absolute right-0 mt-2 w-60 origin-top-right rounded-xl border border-white/10 bg-[#0b0d13]/95 p-1.5 shadow-[0_24px_60px_-12px_rgba(0,0,0,0.7)] backdrop-blur-xl"
                 >
-                  <div className="px-4 py-3 border-b border-white/10">
-                    <p className="font-semibold text-white text-sm">
-                      {user.name}
-                    </p>
-                    <p className="text-xs text-slate-400 truncate mt-0.5">
-                      {user.email}
-                    </p>
-                  </div>
+                  <Link
+                    to="/dashboard/profile"
+                    onClick={() => setProfileOpen(false)}
+                    className="flex items-center gap-3 rounded-lg px-2.5 py-2 transition-colors hover:bg-white/[0.06]"
+                  >
+                    <span className="relative block size-9 flex-shrink-0">
+                      {user.avatarUrl ? (
+                        <img
+                          src={user.avatarUrl}
+                          alt=""
+                          className="h-full w-full rounded-full object-cover ring-1 ring-white/20"
+                        />
+                      ) : (
+                        <span className="flex h-full w-full items-center justify-center rounded-full bg-white/10 text-sm font-semibold text-white ring-1 ring-white/20">
+                          {user.name.charAt(0).toUpperCase()}
+                        </span>
+                      )}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[13px] font-semibold text-white">
+                        {user.name}
+                      </span>
+                      <span className="block truncate text-xs text-white/40">
+                        {user.email}
+                      </span>
+                    </span>
+                  </Link>
+                  <div className="my-1.5 h-px bg-white/[0.07]" />
                   <Link
                     to="/dashboard"
                     onClick={() => setProfileOpen(false)}
-                    className="flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-slate-200 hover:bg-white/5 hover:text-white transition-colors"
+                    role="menuitem"
+                    className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-medium text-white/70 transition-colors hover:bg-white/[0.06] hover:text-white"
                   >
-                    <FiGrid className="size-4" />
+                    <FiGrid className="size-4 text-white/40" />
                     <span>Dashboard</span>
                   </Link>
                   <Link
                     to="/dashboard/profile"
                     onClick={() => setProfileOpen(false)}
-                    className="flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-slate-200 hover:bg-white/5 hover:text-white transition-colors"
+                    role="menuitem"
+                    className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-medium text-white/70 transition-colors hover:bg-white/[0.06] hover:text-white"
                   >
-                    <FiUser className="size-4" />
+                    <FiUser className="size-4 text-white/40" />
                     <span>Profile</span>
                   </Link>
-                  <div className="border-t border-white/10 my-2" />
+                  <div className="my-1.5 h-px bg-white/[0.07]" />
                   <button
                     type="button"
                     onClick={handleLogout}
-                    className="flex w-full items-center gap-3 px-4 py-2.5 text-sm font-medium text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 transition-colors"
+                    role="menuitem"
+                    className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-medium text-rose-300/90 transition-colors hover:bg-rose-500/10 hover:text-rose-200"
                   >
-                    <FiLogOut className="size-4" />
+                    <FiLogOut className="size-4 opacity-70" />
                     <span>Sign out</span>
                   </button>
                 </motion.div>

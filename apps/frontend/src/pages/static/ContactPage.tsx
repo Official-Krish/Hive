@@ -24,18 +24,20 @@ export function ContactPage() {
 
       <h2 id="bugs">Bugs & feature requests</h2>
       <p>
-        Open an issue on <a href="https://github.com">GitHub</a> — public
-        tracker, public discussion. For workspace-specific problems, include
-        your workspace slug and roughly when it happened.
+        Open an issue on{" "}
+        <a href="https://github.com/Official-Krish/hive/issues">GitHub</a> —
+        public tracker, public discussion. For workspace-specific problems,
+        include your workspace slug and roughly when it happened.
       </p>
 
       <h2 id="social">Elsewhere</h2>
       <ul>
         <li>
-          GitHub — <a href="https://github.com">github.com</a>
+          GitHub —{" "}
+          <a href="https://github.com/Official-Krish/hive">github.com</a>
         </li>
         <li>
-          X — <a href="https://x.com">x.com</a>
+          X — <a href="https://x.com/KrishAnand0103">x.com</a>
         </li>
         <li>
           LinkedIn — <a href="https://linkedin.com">linkedin.com</a>

@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { FaInstagram, FaLinkedin, FaSquareXTwitter } from "react-icons/fa6";
+import { FaGithub, FaLinkedin, FaSquareXTwitter } from "react-icons/fa6";
 
 const COLUMNS: { title: string; links: { label: string; to: string }[] }[] = [
   {
@@ -22,7 +22,10 @@ const COLUMNS: { title: string; links: { label: string; to: string }[] }[] = [
     title: "Resources",
     links: [
       { label: "Install guide", to: "/install" },
-      { label: "Report an issue", to: "https://github.com" },
+      {
+        label: "Report an issue",
+        to: "https://github.com/Official-Krish/hive/issues",
+      },
     ],
   },
   {
@@ -130,7 +133,7 @@ export const Footer = () => {
             <a
               target="_blank"
               rel="noopener noreferrer"
-              href="https://x.com"
+              href="https://x.com/KrishAnand0103"
               aria-label="Hive on X"
             >
               <FaSquareXTwitter className="text-neutral-400 hover:text-white size-6 transition-colors" />
@@ -146,10 +149,10 @@ export const Footer = () => {
             <a
               target="_blank"
               rel="noopener noreferrer"
-              href="https://instagram.com"
-              aria-label="Hive on Instagram"
+              href="https://github.com/Official-Krish/hive/"
+              aria-label="Hive on GitHub"
             >
-              <FaInstagram className="text-neutral-400 hover:text-white size-6 transition-colors" />
+              <FaGithub className="text-neutral-400 hover:text-white size-6 transition-colors" />
             </a>
           </div>
         </div>

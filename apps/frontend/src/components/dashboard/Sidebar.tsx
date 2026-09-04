@@ -12,6 +12,7 @@ import { http } from "@/lib/http";
 import { notifyError } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import { Avatar } from "./kit";
+import { HiveMark } from "@/components/icons/HiveMark";
 
 export interface NavItem {
   label: string;
@@ -70,7 +71,8 @@ export function Sidebar() {
   return (
     <aside className="fixed inset-y-0 left-0 z-40 hidden w-[232px] flex-col border-r border-neutral-900/[0.08] bg-[#FBFAF7] lg:flex">
       <div className="flex h-16 items-center px-5">
-        <Link to="/" className="flex items-baseline gap-2">
+        <Link to="/" className="flex items-center gap-2">
+          <HiveMark className="size-6 text-neutral-900" />
           <span className="text-[16px] font-bold tracking-tight text-neutral-900">
             Hive
           </span>
