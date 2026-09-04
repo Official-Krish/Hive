@@ -155,6 +155,13 @@ export function InstancedFurniture({
   const lightBarRef = useRef<THREE.InstancedMesh>(null);
   const lightStripRef = useRef<THREE.InstancedMesh>(null);
 
+  // Deterministic per-index jitter (lived-in chairs, zero new meshes).
+  // Same hash feeds seat/back/base so each chair stays coherent.
+  const jitter = (i: number, salt: number): number => {
+    const x = Math.sin(i * 127.1 + salt * 311.7) * 43758.5453;
+    return x - Math.floor(x);
+  };
+
   // Layout instance matrices
   useLayoutEffect(() => {
     // DESKS
@@ -204,12 +211,21 @@ export function InstancedFurniture({
       deskLegsRef.current.instanceMatrix.needsUpdate = true;
     }
 
-    // CHAIRS
+    // CHAIRS (rotated/pushed slightly — nobody leaves chairs perfect)
     if (chairSeatRef.current && chairs.length > 0) {
       chairs.forEach((c, i) => {
+        const baseYaw = c.rotation ? c.rotation[1] : 0;
+        const yaw = baseYaw + (jitter(i, 1) - 0.5) * 0.55;
+        const jx = (jitter(i, 2) - 0.5) * 0.14;
+        const jz = (jitter(i, 3) - 0.5) * 0.14;
         const m = createMatrix({
           ...c,
-          position: [c.position[0], c.position[1] + 0.45, c.position[2]],
+          rotation: [0, yaw, 0],
+          position: [
+            c.position[0] + jx,
+            c.position[1] + 0.45,
+            c.position[2] + jz,
+          ],
         });
         chairSeatRef.current!.setMatrixAt(i, m);
       });
@@ -218,13 +234,16 @@ export function InstancedFurniture({
 
     if (chairBackRef.current && chairs.length > 0) {
       chairs.forEach((c, i) => {
-        const rotY = c.rotation ? c.rotation[1] : 0;
+        const baseYaw = c.rotation ? c.rotation[1] : 0;
+        const yaw = baseYaw + (jitter(i, 1) - 0.5) * 0.55;
+        const jx = (jitter(i, 2) - 0.5) * 0.14;
+        const jz = (jitter(i, 3) - 0.5) * 0.14;
         const dz = -0.22;
-        const worldX = c.position[0] - dz * Math.sin(rotY);
-        const worldZ = c.position[2] + dz * Math.cos(rotY);
+        const worldX = c.position[0] + jx - dz * Math.sin(yaw);
+        const worldZ = c.position[2] + jz + dz * Math.cos(yaw);
         const m = createMatrix({
           position: [worldX, c.position[1] + 0.72, worldZ],
-          rotation: c.rotation,
+          rotation: [0, yaw, 0],
         });
         chairBackRef.current!.setMatrixAt(i, m);
       });
@@ -233,9 +252,15 @@ export function InstancedFurniture({
 
     if (chairBaseRef.current && chairs.length > 0) {
       chairs.forEach((c, i) => {
+        const jx = (jitter(i, 2) - 0.5) * 0.14;
+        const jz = (jitter(i, 3) - 0.5) * 0.14;
         const m = createMatrix({
           ...c,
-          position: [c.position[0], c.position[1] + 0.2, c.position[2]],
+          position: [
+            c.position[0] + jx,
+            c.position[1] + 0.2,
+            c.position[2] + jz,
+          ],
         });
         chairBaseRef.current!.setMatrixAt(i, m);
       });

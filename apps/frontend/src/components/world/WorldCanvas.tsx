@@ -31,6 +31,7 @@ import { useFocusRoom } from "@/hooks/useFocusRoom";
 import { usePairSession } from "@/hooks/usePairSession";
 import { http } from "@/lib/http";
 import RemoteAvatars from "./RemoteAvatars";
+import { Markers } from "./Markers";
 import { MemberDetailPopup } from "./MapHud";
 import { ChatPanel } from "./ChatPanel";
 import { GitHubNotificationBell } from "./GitHubNotificationBell";
@@ -293,7 +294,7 @@ function InlineTextRow({
         placeholder={placeholder}
         maxLength={60}
         aria-label={placeholder}
-        className="w-full rounded-lg border border-black/[0.09] bg-white px-2.5 py-1.5 text-[12px] text-neutral-800 outline-none placeholder:text-neutral-400 focus:border-neutral-900/40"
+        className="w-full rounded-lg border border-black/[0.09] bg-white px-2.5 py-1.5 text-[12px] text-neutral-700 outline-none placeholder:text-neutral-400 focus:border-neutral-900/40"
       />
       {(value.trim() || (showClear && onClear)) && (
         <div className="mt-1 flex items-stretch gap-1">
@@ -748,6 +749,9 @@ export function WorldCanvas({
           <span className={EYEBROW}>Location</span>
           <span className="max-w-[160px] truncate text-[13px] font-medium leading-none text-neutral-900">
             {currentRoom}
+          </span>
+          <span className="rounded bg-white px-1 py-px font-mono text-[9px] font-semibold text-neutral-600 ring-1 ring-black/[0.09]">
+            {playerPos[1] > 3.1 ? "L2" : "L1"}
           </span>
         </div>
 
@@ -1206,6 +1210,9 @@ export function WorldCanvas({
           bubbles={bumpBubbles}
           onAvatarClick={(id) => setOpenMemberId(id)}
         />
+
+        {/* Wayfinding markers over usable things (desks excluded — too many) */}
+        <Markers playerPos={playerPos} nearId={interaction.near?.id ?? null} />
 
         <ThirdPersonCamera
           targetRef={playerGroupRef}

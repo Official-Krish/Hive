@@ -118,7 +118,7 @@ function MemberModalInner({
           </span>
         )}
         <div className="min-w-0 flex-1">
-          <div className="truncate text-[17px] font-semibold leading-tight tracking-tight text-white">
+          <div className="truncate text-[17px] font-semibold leading-tight tracking-tight text-neutral-900">
             {title}
           </div>
           <div className="truncate text-[11.5px] text-neutral-500">
@@ -161,7 +161,7 @@ function MemberModalInner({
         {data?.developer.workingOn && (
           <section>
             <div className={LABEL}>Working on</div>
-            <div className="mt-1 flex items-center gap-1.5 font-medium text-white">
+            <div className="mt-1 flex items-center gap-1.5 font-medium text-neutral-700">
               <Zap className="size-3.5 shrink-0 text-violet-600" />
               <span className="min-w-0 truncate">
                 {data.developer.workingOn}
@@ -182,7 +182,7 @@ function MemberModalInner({
         {session ? (
           <section>
             <div className={LABEL}>Current session</div>
-            <div className="mt-1.5 font-medium leading-snug text-white">
+            <div className="mt-1.5 font-medium leading-snug text-neutral-800">
               {session.title ?? "Untitled session"}
             </div>
             <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11.5px] text-neutral-500">
@@ -221,7 +221,7 @@ function MemberModalInner({
         {data?.issue && (
           <section>
             <div className={LABEL}>Linked issue</div>
-            <div className="mt-1.5 font-medium text-white">
+            <div className="mt-1.5 font-medium text-neutral-800">
               #{data.issue.number} · {data.issue.title}
             </div>
             <div className="mt-0.5 text-[11.5px] capitalize text-neutral-500">
@@ -233,7 +233,7 @@ function MemberModalInner({
         {data && (
           <section>
             <div className={LABEL}>AI tokens</div>
-            <div className="mt-1.5 flex items-baseline gap-2 text-[22px] font-semibold leading-none tabular-nums text-white">
+            <div className="mt-1.5 flex items-baseline gap-2 text-[22px] font-semibold leading-none tabular-nums text-neutral-900">
               {formatTokens(data.inputTokens)}
               <span className="text-[10px] font-medium uppercase tracking-wider text-neutral-500">
                 in
@@ -298,14 +298,14 @@ function MemberModalInner({
               <div className={LABEL}>Today</div>
               <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] tabular-nums text-neutral-600">
                 <span>
-                  <span className="font-semibold text-white">
+                  <span className="font-semibold text-neutral-800">
                     {stats.sessionsToday}
                   </span>{" "}
                   session{stats.sessionsToday === 1 ? "" : "s"}
                 </span>
                 <span className="h-3 w-px bg-black/[0.05]" aria-hidden />
                 <span>
-                  <span className="font-semibold text-white">
+                  <span className="font-semibold text-neutral-800">
                     {formatDuration(stats.activeMinutesToday * 60_000)}
                   </span>{" "}
                   active
@@ -329,7 +329,7 @@ function MemberModalInner({
                 {stats.costCentsToday != null && stats.costCentsToday > 0 && (
                   <>
                     <span className="h-3 w-px bg-black/[0.05]" aria-hidden />
-                    <span className="font-semibold text-white">
+                    <span className="font-semibold text-neutral-800">
                       ${(stats.costCentsToday / 100).toFixed(2)}
                     </span>
                     <span className="text-neutral-500">today</span>

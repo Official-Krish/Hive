@@ -3,6 +3,7 @@ import type * as THREE from "three";
 import { Instances, Instance } from "@react-three/drei";
 import { InstancedFurniture } from "../InstancedFurniture";
 import { M, floorFor } from "./materials";
+import { plateTexture } from "./signage";
 import {
   ROOMS_L2,
   WALLS_L2,
@@ -268,14 +269,6 @@ function PodTrim({ pod }: { pod: Pod }) {
   const headSize: [number, number, number] = horizontal
     ? [width, 0.12, 0.14]
     : [0.14, 0.12, width];
-  // Signage plate sits just outside the pod, beside the opening.
-  const outward = side === "n" ? -1 : side === "s" ? 1 : 0;
-  const outwardX = side === "w" ? -1 : side === "e" ? 1 : 0;
-  const signPos: [number, number, number] = [
-    cx + outwardX * 0.09 + (horizontal ? width / 2 + 0.45 : 0),
-    base + 1.55,
-    cz + outward * 0.09 + (horizontal ? 0 : width / 2 + 0.45),
-  ];
 
   return (
     <group>
@@ -296,19 +289,8 @@ function PodTrim({ pod }: { pod: Pod }) {
         />
         <primitive object={M.metalBrushed} attach="material" />
       </mesh>
-      {/* Accent signage plate */}
-      <mesh
-        position={signPos}
-        rotation={[0, horizontal ? 0 : Math.PI / 2, 0]}
-      >
-        <boxGeometry args={[0.42, 0.16, 0.03]} />
-        <meshStandardMaterial
-          color={pod.accent}
-          emissive={pod.accent}
-          emissiveIntensity={0.9}
-          roughness={0.4}
-        />
-      </mesh>
+      {/* Named door plate — real pod name, accent underline */}
+      <PodDoorPlate pod={pod} />
       {/* Frosted privacy band across the glazing */}
       {(
         [
@@ -323,6 +305,62 @@ function PodTrim({ pod }: { pod: Pod }) {
           </mesh>
         ),
       )}
+    </group>
+  );
+}
+
+/** Door plate beside a pod opening: dark plate, pod name, accent rule.
+ *  Faces outward from the doorway on whichever side the door sits.
+ *  Exported so L1 pods (built elsewhere) get the same plates. */
+export function PodDoorPlate({ pod }: { pod: Pod }) {
+  const [x0, x1, z0, z1] = pod.rect;
+  const base = pod.level === 2 ? L2_Y : 0;
+  const { side, at, width } = pod.door;
+  const horizontal = side === "n" || side === "s";
+  const z = side === "n" ? z0 : z1;
+  const x = side === "w" ? x0 : x1;
+  const cx = horizontal ? at : x;
+  const cz = horizontal ? z : at;
+  const outward = side === "n" ? -1 : side === "s" ? 1 : 0;
+  const outwardX = side === "w" ? -1 : side === "e" ? 1 : 0;
+  const signPos: [number, number, number] = [
+    cx + outwardX * 0.09 + (horizontal ? width / 2 + 0.45 : 0),
+    base + 1.55,
+    cz + outward * 0.09 + (horizontal ? 0 : width / 2 + 0.45),
+  ];
+  const face = useMemo(
+    () => plateTexture(pod.name, pod.accent),
+    [pod.name, pod.accent],
+  );
+  // plane normal must point away from the pod, along the door side
+  const rotY =
+    side === "n"
+      ? Math.PI
+      : side === "s"
+        ? 0
+        : side === "w"
+          ? -Math.PI / 2
+          : Math.PI / 2;
+  const off: [number, number, number] =
+    side === "n"
+      ? [0, 0, -0.02]
+      : side === "s"
+        ? [0, 0, 0.02]
+        : side === "w"
+          ? [-0.02, 0, 0]
+          : [0.02, 0, 0];
+  return (
+    <group position={signPos}>
+      <mesh castShadow>
+        <boxGeometry
+          args={[horizontal ? 0.84 : 0.03, 0.18, horizontal ? 0.03 : 0.84]}
+        />
+        <primitive object={M.blackAnodized} attach="material" />
+      </mesh>
+      <mesh position={off} rotation={[0, rotY, 0]}>
+        <planeGeometry args={[0.78, 0.15]} />
+        <meshBasicMaterial map={face} transparent toneMapped={false} />
+      </mesh>
     </group>
   );
 }

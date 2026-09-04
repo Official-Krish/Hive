@@ -228,7 +228,7 @@ export function DField({
 }
 
 export const dInputClass =
-  "w-full rounded-lg border border-black/[0.09] bg-white px-3 py-2 text-[13px] text-neutral-800 placeholder:text-neutral-400 outline-none transition-colors focus:border-neutral-900/40";
+  "w-full rounded-lg border border-black/[0.09] bg-white px-3 py-2 text-[13px] text-neutral-700 placeholder:text-neutral-400 outline-none transition-colors focus:border-neutral-900/40";
 
 /* ── Badges / status ───────────────────────────────────────── */
 export const STATUS_DOT: Record<string, string> = {

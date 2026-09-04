@@ -23,6 +23,7 @@ RUN cd packages/db && DATABASE_URL="postgresql://placeholder:placeholder@localho
 # Bundle the worker (queue consumer + scheduler) into a single self-contained
 # file.
 WORKDIR /app/apps/worker
+ENV NODE_ENV=production
 RUN bun run build
 
 # ---- runtime ----

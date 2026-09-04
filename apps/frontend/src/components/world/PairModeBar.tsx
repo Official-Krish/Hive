@@ -19,7 +19,7 @@ export function PairModeBar({
     <div
       role="status"
       aria-label={`Pairing: ${names}`}
-      className="pointer-events-auto flex max-w-[calc(100vw-2rem)] items-center gap-2 rounded-full bg-[#f4f2ed]/95 py-2 pl-3.5 pr-2 text-white ring-1 ring-black/[0.08] backdrop-blur-md"
+      className="pointer-events-auto flex max-w-[calc(100vw-2rem)] items-center gap-2 rounded-full bg-[#f4f2ed]/95 py-2 pl-3.5 pr-2 text-neutral-700 ring-1 ring-black/[0.08] backdrop-blur-md"
     >
       <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-emerald-600" />
       <span className="flex min-w-0 items-center gap-1.5 text-[12px] font-semibold">

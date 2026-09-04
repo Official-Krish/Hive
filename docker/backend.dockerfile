@@ -28,6 +28,7 @@ RUN cd packages/db && DATABASE_URL="postgresql://placeholder:placeholder@localho
 # Bundle the backend into a single self-contained file. Using the Prisma
 # driver adapter, the generated client and all @hive/* packages are inlined.
 WORKDIR /app/apps/backend
+ENV NODE_ENV=production
 RUN bun run build
 
 # ---- runtime ----

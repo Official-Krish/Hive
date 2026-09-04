@@ -339,7 +339,7 @@ export const PODS: Pod[] = [
   },
   {
     id: "focus-1",
-    name: "Focus 1:1",
+    name: "Focus 1",
     level: 1,
     rect: [29.6, 33.4, -7.4, -4.2],
     door: { side: "w", at: -5.8, width: 1.0 },
@@ -348,7 +348,7 @@ export const PODS: Pod[] = [
   },
   {
     id: "focus-2",
-    name: "Focus 1:1",
+    name: "Focus 2",
     level: 1,
     rect: [29.6, 33.4, -3.8, -0.6],
     door: { side: "w", at: -2.2, width: 1.0 },
@@ -882,11 +882,12 @@ export const WHITEBOARDS: WallPanel[] = [
   },
 ];
 
-/** Backlit room signage: position, facing, label colour. */
+/** Backlit room signage: position, facing, label + label colour. */
 export interface RoomSign {
   position: Vec3;
   rotation: Vec3;
   accent: string;
+  label: string;
 }
 // Signs sit on the corridor face of the corridor walls, beside each doorway.
 export const ROOM_SIGNS: RoomSign[] = [
@@ -894,27 +895,50 @@ export const ROOM_SIGNS: RoomSign[] = [
     position: [-3.8, 2.45, 3.4],
     rotation: [0, Math.PI / 2, 0],
     accent: "#818cf8",
+    label: "Engineering",
   }, // workspace
   {
     position: [-3.8, 2.45, -5.4],
     rotation: [0, Math.PI / 2, 0],
     accent: "#f59e0b",
+    label: "Lounge",
   }, // lounge
   {
     position: [3.8, 2.45, 4.4],
     rotation: [0, -Math.PI / 2, 0],
     accent: "#fb923c",
+    label: "Cafeteria",
   }, // cafeteria
   {
     position: [3.8, 2.45, -3.6],
     rotation: [0, -Math.PI / 2, 0],
     accent: "#34d399",
+    label: "Meeting Rooms",
   }, // meeting
   {
     position: [3.8, 2.45, -10.4],
     rotation: [0, -Math.PI / 2, 0],
     accent: "#22d3ee",
+    label: "AI Lab",
   }, // ai lab
+  {
+    position: [3.8, 2.45, 10.5],
+    rotation: [0, -Math.PI / 2, 0],
+    accent: "#38bdf8",
+    label: "Reception",
+  }, // lobby (east corridor wall segment z9-12)
+  {
+    position: [-3.8, 6.75, 6],
+    rotation: [0, Math.PI / 2, 0],
+    accent: "#818cf8",
+    label: "Leadership",
+  }, // L2 west gallery (y = L2_Y + 2.45)
+  {
+    position: [3.8, 6.75, 6],
+    rotation: [0, -Math.PI / 2, 0],
+    accent: "#22d3ee",
+    label: "Executive",
+  }, // L2 east gallery (y = L2_Y + 2.45)
 ];
 
 // --- Acoustic ceiling baffles (workspace + lounge) --------------------------
@@ -1381,6 +1405,8 @@ export const SOLID_PROPS: AABB[] = [
   { min: [5.5, 15.2], max: [15.5, 17], y0: 0, y1: 1.2 },
   // Reception backdrop wall
   { min: [4.6, 17.9], max: [16.4, 18.5], y0: 0, y1: 3.6 },
+  // Lobby directory totem (freestanding, west of the entrance path)
+  { min: [-5.95, 19.4], max: [-5.05, 19.6], y0: 0, y1: 2 },
   // Cafeteria service counter
   { min: [6, 3], max: [9, 11], y0: 0, y1: 1.2 },
   // Coffee-bar island

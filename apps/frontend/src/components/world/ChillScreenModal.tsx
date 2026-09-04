@@ -159,7 +159,7 @@ export function ChillScreenModal({
                     if (e.key === "Enter") submit();
                   }}
                   placeholder="Paste a YouTube link…"
-                  className="w-full rounded-xl bg-white py-2.5 pl-9 pr-3 text-[13px] text-neutral-800 placeholder:text-neutral-400 ring-1 ring-black/[0.09] outline-none focus:ring-2 focus:ring-neutral-900/30"
+                  className="w-full rounded-xl bg-white py-2.5 pl-9 pr-3 text-[13px] text-neutral-700 placeholder:text-neutral-400 ring-1 ring-black/[0.09] outline-none focus:ring-2 focus:ring-neutral-900/30"
                 />
               </div>
               <button

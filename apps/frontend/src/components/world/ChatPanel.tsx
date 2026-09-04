@@ -241,7 +241,7 @@ export function ChatPanel({
             onChange={(e) => setGroupName(e.target.value)}
             placeholder="Group name…"
             aria-label="Group name"
-            className="w-full rounded-lg border border-black/[0.09] bg-white px-2.5 py-1.5 text-[12.5px] text-white outline-none placeholder:text-neutral-400 focus:border-neutral-900/40"
+            className="w-full rounded-lg border border-black/[0.09] bg-white px-2.5 py-1.5 text-[12.5px] text-neutral-700 outline-none placeholder:text-neutral-400 focus:border-neutral-900/40"
           />
           <div className="max-h-32 space-y-1 overflow-y-auto">
             {directory.map((m) => (
@@ -273,7 +273,7 @@ export function ChatPanel({
             type="button"
             onClick={() => void createGroup()}
             disabled={!groupName.trim() || selectedMembers.size === 0}
-            className="w-full rounded-lg bg-white py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-neutral-800 disabled:opacity-40"
+            className="w-full rounded-lg bg-neutral-950 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-neutral-800 disabled:opacity-40"
           >
             Create group ({selectedMembers.size})
           </button>
@@ -371,7 +371,7 @@ export function ChatPanel({
                       "max-w-[78%] rounded-2xl px-3 py-2 text-[13px] leading-snug",
                       mine
                         ? "bg-neutral-950 text-white"
-                        : "bg-black/[0.04] text-white ring-1 ring-black/[0.08]",
+                        : "bg-black/[0.04] text-neutral-700 ring-1 ring-black/[0.08]",
                     )}
                   >
                     {!mine && active?.isGroup && (
@@ -420,7 +420,7 @@ export function ChatPanel({
               autoFocus={!coarsePointer}
               maxLength={4000}
               aria-label="Type a message"
-              className="min-w-0 flex-1 rounded-xl border border-black/[0.09] bg-white px-3 py-2 text-[13px] text-white outline-none placeholder:text-neutral-400 focus:border-neutral-900/40"
+              className="min-w-0 flex-1 rounded-xl border border-black/[0.09] bg-white px-3 py-2 text-[13px] text-neutral-700 outline-none placeholder:text-neutral-400 focus:border-neutral-900/40"
             />
             <button
               type="submit"
@@ -440,34 +440,31 @@ export function ChatPanel({
 function timeLabel(iso: string): string {
   const d = new Date(iso);
   const now = new Date();
-  const sameDay = d.toDateString() === now.toDateString();
-  if (sameDay)
-    return d.toLocaleTimeString("en-US", {
-      hour: "numeric",
-      minute: "2-digit",
-    });
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  if (d.toDateString() === now.toDateString()) {
+    return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  }
+  return d.toLocaleDateString([], { month: "short", day: "numeric" });
 }
 
 function ConversationListItem({
   name,
   avatarUrl,
-  group,
   dotColor,
   time,
   preview,
-  unread,
-  isTyping,
+  unread = 0,
+  isTyping = false,
+  group = false,
   onClick,
 }: {
   name: string;
-  avatarUrl?: string | null;
-  group?: boolean;
+  avatarUrl: string | null;
   dotColor?: string;
   time?: string;
   preview: string;
-  unread: number;
-  isTyping: boolean;
+  unread?: number;
+  isTyping?: boolean;
+  group?: boolean;
   onClick: () => void;
 }) {
   return (
@@ -475,7 +472,7 @@ function ConversationListItem({
       <button
         type="button"
         onClick={onClick}
-        className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-black/[0.03]"
+        className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-black/[0.04]"
       >
         <span className="relative flex-shrink-0">
           {avatarUrl ? (
@@ -492,7 +489,7 @@ function ConversationListItem({
           {dotColor && !group && (
             <span
               className={cn(
-                "absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full ring-2 ring-[#0d1017]",
+                "absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full ring-2 ring-[#f4f2ed]",
                 dotColor,
               )}
             />
@@ -504,7 +501,7 @@ function ConversationListItem({
               className={cn(
                 "truncate text-[13px]",
                 unread > 0
-                  ? "font-bold text-white"
+                  ? "font-bold text-neutral-900"
                   : "font-medium text-neutral-800",
               )}
             >
@@ -523,7 +520,7 @@ function ConversationListItem({
                 isTyping
                   ? "italic text-emerald-700"
                   : unread > 0
-                    ? "font-semibold text-white"
+                    ? "font-semibold text-neutral-900"
                     : "text-neutral-500",
               )}
             >
