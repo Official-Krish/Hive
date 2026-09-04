@@ -1,6 +1,39 @@
 import { Link } from "react-router-dom";
 import { FaInstagram, FaLinkedin, FaSquareXTwitter } from "react-icons/fa6";
 
+const COLUMNS: { title: string; links: { label: string; to: string }[] }[] = [
+  {
+    title: "Product",
+    links: [
+      { label: "Install", to: "/install" },
+      { label: "Security", to: "/security" },
+      { label: "Status", to: "/status" },
+      { label: "Launch app", to: "/auth" },
+    ],
+  },
+  {
+    title: "Company",
+    links: [
+      { label: "About", to: "/about" },
+      { label: "Contact", to: "/contact" },
+    ],
+  },
+  {
+    title: "Resources",
+    links: [
+      { label: "Install guide", to: "/install" },
+      { label: "Report an issue", to: "https://github.com" },
+    ],
+  },
+  {
+    title: "Legal",
+    links: [
+      { label: "Privacy Policy", to: "/privacy" },
+      { label: "Terms of Service", to: "/terms" },
+    ],
+  },
+];
+
 export const Footer = () => {
   return (
     <div
@@ -17,204 +50,46 @@ export const Footer = () => {
               <span>Hive</span>
             </Link>
             <span className="text-neutral-400 text-sm leading-5">
-              We design and build workspaces that drive results
+              Where your team and AI agents build together.
             </span>
           </div>
 
-          {/* Links Columns */}
           <div className="grid grid-cols-2 gap-10 sm:grid-cols-4 md:gap-0">
-            <div className="flex flex-col gap-4">
-              <h3 className="text-neutral-400 tracking-tight text-xs leading-5 font-medium">
-                Home
-              </h3>
-              <ul className="flex flex-col gap-4">
-                <li>
-                  <a
-                    className="text-white text-sm leading-5 font-medium hover:underline"
-                    href="#"
-                  >
-                    Overview
-                  </a>
-                </li>
-                <li>
-                  <a
-                    className="text-white text-sm leading-5 font-medium hover:underline"
-                    href="#"
-                  >
-                    Features
-                  </a>
-                </li>
-                <li>
-                  <a
-                    className="text-white text-sm leading-5 font-medium hover:underline"
-                    href="#"
-                  >
-                    Pricing
-                  </a>
-                </li>
-                <li>
-                  <a
-                    className="text-white text-sm leading-5 font-medium hover:underline"
-                    href="#"
-                  >
-                    Testimonials
-                  </a>
-                </li>
-                <li>
-                  <a
-                    className="text-white text-sm leading-5 font-medium hover:underline"
-                    href="#"
-                  >
-                    FAQs
-                  </a>
-                </li>
-              </ul>
-            </div>
-            <div className="flex flex-col gap-4">
-              <h3 className="text-neutral-400 tracking-tight text-xs leading-5 font-medium">
-                About
-              </h3>
-              <ul className="flex flex-col gap-4">
-                <li>
-                  <a
-                    className="text-white text-sm leading-5 font-medium hover:underline"
-                    href="#"
-                  >
-                    Our Story
-                  </a>
-                </li>
-                <li>
-                  <a
-                    className="text-white text-sm leading-5 font-medium hover:underline"
-                    href="#"
-                  >
-                    Team
-                  </a>
-                </li>
-                <li>
-                  <a
-                    className="text-white text-sm leading-5 font-medium hover:underline"
-                    href="#"
-                  >
-                    Careers
-                  </a>
-                </li>
-                <li>
-                  <a
-                    className="text-white text-sm leading-5 font-medium hover:underline"
-                    href="#"
-                  >
-                    Blog
-                  </a>
-                </li>
-                <li>
-                  <a
-                    className="text-white text-sm leading-5 font-medium hover:underline"
-                    href="#"
-                  >
-                    Press Kit
-                  </a>
-                </li>
-              </ul>
-            </div>
-            <div className="flex flex-col gap-4">
-              <h3 className="text-neutral-400 tracking-tight text-xs leading-5 font-medium">
-                Contact
-              </h3>
-              <ul className="flex flex-col gap-4">
-                <li>
-                  <a
-                    className="text-white text-sm leading-5 font-medium hover:underline"
-                    href="#"
-                  >
-                    Contact Us
-                  </a>
-                </li>
-                <li>
-                  <a
-                    className="text-white text-sm leading-5 font-medium hover:underline"
-                    href="#"
-                  >
-                    Support
-                  </a>
-                </li>
-                <li>
-                  <a
-                    className="text-white text-sm leading-5 font-medium hover:underline"
-                    href="#"
-                  >
-                    Live Chat
-                  </a>
-                </li>
-                <li>
-                  <a
-                    className="text-white text-sm leading-5 font-medium hover:underline"
-                    href="#"
-                  >
-                    Help Center
-                  </a>
-                </li>
-                <li>
-                  <a
-                    className="text-white text-sm leading-5 font-medium hover:underline"
-                    href="#"
-                  >
-                    Report Issue
-                  </a>
-                </li>
-              </ul>
-            </div>
-            <div className="flex flex-col gap-4">
-              <h3 className="text-neutral-400 tracking-tight text-xs leading-5 font-medium">
-                Legal
-              </h3>
-              <ul className="flex flex-col gap-4">
-                <li>
-                  <a
-                    className="text-white text-sm leading-5 font-medium hover:underline"
-                    href="#"
-                  >
-                    Privacy Policy
-                  </a>
-                </li>
-                <li>
-                  <a
-                    className="text-white text-sm leading-5 font-medium hover:underline"
-                    href="#"
-                  >
-                    Terms of Service
-                  </a>
-                </li>
-                <li>
-                  <a
-                    className="text-white text-sm leading-5 font-medium hover:underline"
-                    href="#"
-                  >
-                    Cookie Policy
-                  </a>
-                </li>
-                <li>
-                  <a
-                    className="text-white text-sm leading-5 font-medium hover:underline"
-                    href="#"
-                  >
-                    Licenses
-                  </a>
-                </li>
-                <li>
-                  <a
-                    className="text-white text-sm leading-5 font-medium hover:underline"
-                    href="#"
-                  >
-                    Security
-                  </a>
-                </li>
-              </ul>
-            </div>
+            {COLUMNS.map((col) => (
+              <div key={col.title} className="flex flex-col gap-4">
+                <h3 className="text-neutral-400 tracking-tight text-xs leading-5 font-medium">
+                  {col.title}
+                </h3>
+                <ul className="flex flex-col gap-4">
+                  {col.links.map((l) =>
+                    l.to.startsWith("http") ? (
+                      <li key={l.label}>
+                        <a
+                          className="text-white text-sm leading-5 font-medium hover:underline"
+                          href={l.to}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          {l.label}
+                        </a>
+                      </li>
+                    ) : (
+                      <li key={l.label}>
+                        <Link
+                          className="text-white text-sm leading-5 font-medium hover:underline"
+                          to={l.to}
+                        >
+                          {l.label}
+                        </Link>
+                      </li>
+                    ),
+                  )}
+                </ul>
+              </div>
+            ))}
           </div>
         </div>
 
-        {/* Bottom Copyright & Social Links */}
         <div className="flex w-full flex-col justify-between gap-6 md:flex-row md:items-center md:gap-0 pt-6 border-t border-white/10">
           <div>
             <span className="flex items-center gap-1">
@@ -251,15 +126,20 @@ export const Footer = () => {
             </span>
           </div>
 
-          {/* Social Icons */}
           <div className="flex items-center gap-5">
-            <a target="_blank" rel="noopener noreferrer" href="https://x.com">
+            <a
+              target="_blank"
+              rel="noopener noreferrer"
+              href="https://x.com"
+              aria-label="Hive on X"
+            >
               <FaSquareXTwitter className="text-neutral-400 hover:text-white size-6 transition-colors" />
             </a>
             <a
               target="_blank"
               rel="noopener noreferrer"
               href="https://linkedin.com"
+              aria-label="Hive on LinkedIn"
             >
               <FaLinkedin className="text-neutral-400 hover:text-white size-6 transition-colors" />
             </a>
@@ -267,6 +147,7 @@ export const Footer = () => {
               target="_blank"
               rel="noopener noreferrer"
               href="https://instagram.com"
+              aria-label="Hive on Instagram"
             >
               <FaInstagram className="text-neutral-400 hover:text-white size-6 transition-colors" />
             </a>

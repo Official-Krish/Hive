@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect, type ReactNode } from "react";
+import { useState, useMemo, useEffect, type ReactNode } from "react";
 import {
   FiAlertTriangle,
   FiAtSign,
@@ -16,25 +16,40 @@ import { cn } from "@/lib/utils";
 import { useGitHubNotifications } from "@/hooks/useGitHubNotifications";
 import type { RealtimeClient } from "@/lib/realtime";
 import { formatDistanceToNow } from "date-fns";
-
-const HEADER =
-  "flex items-center justify-between border-b border-black/[0.07] px-4 py-2.5 " +
-  "text-[10px] font-semibold uppercase tracking-[0.16em] text-neutral-500";
+import { DIconBtn, EYEBROW, useDismiss } from "./chrome";
 
 const TYPE_ICONS: Record<string, ReactNode> = {
+  ISSUE_MENTION: <FiAtSign className="size-3.5" />,
   ISSUE_ASSIGNED: <FiBookOpen className="size-3.5" />,
   ISSUE_COMMENT: <FiMessageSquare className="size-3.5" />,
   ISSUE_CLOSED: <FiCheckCircle className="size-3.5" />,
   PR_OPENED: <FiGitPullRequest className="size-3.5" />,
   PR_REVIEW_REQUESTED: <FiEye className="size-3.5" />,
   PR_REVIEW_SUBMITTED: <FiCheckCircle className="size-3.5" />,
+  PR_REVIEW_COMMENT: <FiMessageSquare className="size-3.5" />,
   PR_MERGED: <FiGitMerge className="size-3.5" />,
   PR_CLOSED: <FiXCircle className="size-3.5" />,
   PR_COMMENT: <FiMessageSquare className="size-3.5" />,
-  ISSUE_MENTION: <FiAtSign className="size-3.5" />,
-  PR_REVIEW_COMMENT: <FiMessageSquare className="size-3.5" />,
   RELEASE_PUBLISHED: <FiTag className="size-3.5" />,
 };
+
+function groupOf(type: string): string {
+  if (type === "ISSUE_MENTION") return "Mentions";
+  if (type.startsWith("ISSUE")) return "Issues";
+  if (type.startsWith("PR_") && type.includes("REVIEW")) return "Reviews";
+  if (type.startsWith("PR_")) return "Pull Requests";
+  return "Other";
+}
+
+function timeLabel(iso: string): string {
+  const d = new Date(iso).getTime();
+  if (Number.isNaN(d)) return "";
+  try {
+    return formatDistanceToNow(new Date(d), { addSuffix: true });
+  } catch {
+    return "";
+  }
+}
 
 interface GitHubNotificationBellProps {
   workspaceId: string;
@@ -51,7 +66,7 @@ export function GitHubNotificationBell({
   onOpenChange,
 }: GitHubNotificationBellProps) {
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const panelRef = useDismiss<HTMLDivElement>(() => setOpen(false));
 
   useEffect(() => {
     onOpenChange?.(open);
@@ -76,7 +91,7 @@ export function GitHubNotificationBell({
       (payload?.repository
         ? `https://github.com/${payload.repository}`
         : undefined);
-    if (url) window.open(url, "_blank");
+    if (url) window.open(url, "_blank", "noopener");
     if (!notification.readAt) {
       void markAsRead(notification.id);
     }
@@ -84,112 +99,103 @@ export function GitHubNotificationBell({
   };
 
   const grouped = useMemo(() => {
-    const groups: Record<
-      "Issues" | "Pull Requests" | "Reviews" | "Mentions" | "Other",
-      typeof notifications
-    > = {
+    const groups: Record<string, typeof notifications> = {
       Issues: [],
       "Pull Requests": [],
       Reviews: [],
       Mentions: [],
       Other: [],
     };
-
-    notifications.forEach((n) => {
-      const type = n.type;
-      if (type.startsWith("ISSUE")) groups["Issues"].push(n);
-      else if (type.startsWith("PR_") && type.includes("REVIEW"))
-        groups["Reviews"].push(n);
-      else if (type.startsWith("PR_")) groups["Pull Requests"].push(n);
-      else if (type === "ISSUE_MENTION") groups["Mentions"].push(n);
-      else groups["Other"].push(n);
-    });
-
+    for (const n of notifications) groups[groupOf(n.type)]!.push(n);
     return Object.entries(groups)
       .filter(([, items]) => items.length > 0)
       .map(([label, items]) => ({ label, items }));
   }, [notifications]);
 
   return (
-    <div ref={ref} className="relative">
-      <button
-        type="button"
+    <div className="relative">
+      <DIconBtn
+        label="GitHub notifications"
         onClick={() => setOpen((v) => !v)}
-        className="relative grid size-9 place-items-center rounded-full bg-[#f4f2ed]/95 text-neutral-700 ring-1 ring-black/[0.09] shadow-[inset_0_1px_0_rgba(255,255,255,0.7),0_8px_20px_-12px_rgba(28,25,18,0.35)] backdrop-blur-sm transition-colors hover:bg-white/70"
-        aria-label="GitHub notifications"
+        active={open}
       >
-        <Bell className="size-5 text-neutral-700" />
+        <Bell className="size-5" />
         {unreadCount > 0 && (
           <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-emerald-600 px-1 text-[9.5px] font-bold text-white ring-2 ring-[#faf9f6]">
             {unreadCount > 9 ? "9+" : unreadCount}
           </span>
         )}
-      </button>
+      </DIconBtn>
 
       {open && (
         <>
           <div
-            className="fixed inset-0 z-20 bg-black/20 backdrop-blur-sm"
+            className="fixed inset-0 z-20 bg-black/20"
             onClick={() => setOpen(false)}
+            aria-hidden
           />
-          <div className="fixed top-16 right-4 z-30 w-96 max-h-[500px] overflow-hidden rounded-2xl bg-[#faf9f6] ring-1 ring-black/[0.08] shadow-[inset_0_1px_0_rgba(255,255,255,0.7),0_24px_40px_-16px_rgba(28,25,18,0.4)]">
-            <div className={HEADER}>
-              <span className="font-serif text-[11px] text-neutral-900">
-                GitHub Notifications
-              </span>
+          <div
+            ref={panelRef}
+            role="dialog"
+            aria-label="GitHub notifications"
+            className="fixed top-16 right-4 z-30 flex max-h-[500px] w-96 max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl bg-[#f4f2ed]/98 ring-1 ring-black/[0.09] backdrop-blur-md"
+          >
+            <div className="flex items-center justify-between border-b border-black/[0.07] px-4 py-2.5">
+              <span className={EYEBROW}>GitHub notifications</span>
               <button
+                type="button"
                 onClick={() => setOpen(false)}
-                className="flex size-7 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:text-neutral-900"
+                aria-label="Close notifications"
+                className="flex size-7 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-black/[0.05] hover:text-neutral-900"
               >
                 <X className="size-3.5" />
               </button>
             </div>
             <div className="max-h-[400px] overflow-y-auto">
               {grouped.length === 0 ? (
-                <div className="p-6 text-center text-neutral-500 text-sm">
+                <div className="p-6 text-center text-sm text-neutral-500">
                   No notifications yet
                 </div>
               ) : (
                 <div className="divide-y divide-black/[0.05]">
                   {grouped.map(({ label, items }) => (
-                    <div key={label} className="border-t border-black/[0.05]">
-                      <div className="px-4 py-2 text-[9px] font-semibold uppercase tracking-[0.16em] text-neutral-400">
+                    <div key={label}>
+                      <div className="px-4 pb-1 pt-2.5 text-[9px] font-semibold uppercase tracking-[0.16em] text-neutral-400">
                         {label}
                       </div>
                       <ul className="divide-y divide-black/[0.04]">
                         {items.map((n) => (
-                          <li
-                            key={n.id}
-                            onClick={() => handleNotificationClick(n)}
-                            className={cn(
-                              "px-4 py-3 hover:bg-neutral-50 transition-colors",
-                              !n.readAt && "bg-amber-50/50",
-                            )}
-                          >
-                            <div className="flex items-start gap-3">
-                              <span className="flex items-center gap-1.5">
-                                <span className="size-4">
-                                  {TYPE_ICONS[n.type] ?? (
-                                    <FiAlertTriangle className="size-4" />
-                                  )}
+                          <li key={n.id} className="relative">
+                            <button
+                              type="button"
+                              onClick={() => handleNotificationClick(n)}
+                              className={cn(
+                                "flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-black/[0.03]",
+                                !n.readAt && "bg-amber-50/60",
+                              )}
+                            >
+                              <span className="mt-0.5 shrink-0 text-neutral-500">
+                                {TYPE_ICONS[n.type] ?? (
+                                  <FiAlertTriangle className="size-3.5" />
+                                )}
+                              </span>
+                              <span className="min-w-0 flex-1">
+                                <span className="block truncate text-[13px] font-medium text-neutral-900">
+                                  {n.title}
                                 </span>
-                                <div>
-                                  <p className="truncate text-[13px] font-medium text-neutral-900">
-                                    {n.title}
-                                  </p>
-                                  <p className="truncate text-[12px] text-neutral-500">
-                                    {n.body}
-                                  </p>
-                                </div>
+                                <span className="block truncate text-[12px] text-neutral-500">
+                                  {n.body}
+                                </span>
                               </span>
-                              <span className="text-[10px] text-neutral-400 whitespace-nowrap">
-                                {formatDistanceToNow(new Date(n.createdAt), {
-                                  addSuffix: true,
-                                })}
+                              <span className="flex-shrink-0 whitespace-nowrap text-[10px] tabular-nums text-neutral-400">
+                                {timeLabel(n.createdAt)}
                               </span>
-                            </div>
+                            </button>
                             {!n.readAt && (
-                              <div className="absolute right-2 top-1/2 -translate-y-1/2 h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                              <span
+                                aria-hidden
+                                className="absolute right-2 top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full bg-emerald-500"
+                              />
                             )}
                           </li>
                         ))}
@@ -198,20 +204,19 @@ export function GitHubNotificationBell({
                   ))}
                 </div>
               )}
-              <div className="border-t border-black/[0.07] px-4 py-2.5">
-                <div className="flex items-center justify-between">
-                  <button
-                    type="button"
-                    onClick={() => void markAllAsRead()}
-                    className="text-xs font-medium text-neutral-500 hover:text-neutral-900"
-                  >
-                    Mark all as read
-                  </button>
-                  <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-neutral-500">
-                    {notifications.length} total
-                  </span>
-                </div>
-              </div>
+            </div>
+            <div className="flex items-center justify-between border-t border-black/[0.07] px-4 py-2.5">
+              <button
+                type="button"
+                onClick={() => void markAllAsRead()}
+                disabled={unreadCount === 0}
+                className="text-xs font-medium text-neutral-500 transition-colors hover:text-neutral-900 disabled:opacity-40"
+              >
+                Mark all as read
+              </button>
+              <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-neutral-400">
+                {notifications.length} total
+              </span>
             </div>
           </div>
         </>

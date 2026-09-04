@@ -37,6 +37,7 @@ export function WhiteboardModal({
   const drawingRef = useRef(false);
   const pointsRef = useRef<WhiteboardPoint[]>([]);
   const [color, setColor] = useState<string>(COLORS[0] ?? "#1c1917");
+  const [confirmClear, setConfirmClear] = useState(false);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -48,9 +49,22 @@ export function WhiteboardModal({
     ctx.lineJoin = "round";
     for (const s of strokes) {
       const p0 = s.points[0];
-      if (!p0 || s.points.length < 2) continue;
+      if (!p0) continue;
       ctx.strokeStyle = s.color;
+      ctx.fillStyle = s.color;
       ctx.lineWidth = s.width;
+      if (s.points.length === 1) {
+        ctx.beginPath();
+        ctx.arc(
+          p0.x * canvas.width,
+          p0.y * canvas.height,
+          s.width / 2,
+          0,
+          Math.PI * 2,
+        );
+        ctx.fill();
+        continue;
+      }
       ctx.beginPath();
       ctx.moveTo(p0.x * canvas.width, p0.y * canvas.height);
       for (let i = 1; i < s.points.length; i++) {
@@ -61,6 +75,12 @@ export function WhiteboardModal({
       ctx.stroke();
     }
   }, [strokes]);
+
+  useEffect(() => {
+    if (!confirmClear) return;
+    const t = setTimeout(() => setConfirmClear(false), 2500);
+    return () => clearTimeout(t);
+  }, [confirmClear]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -109,16 +129,31 @@ export function WhiteboardModal({
     ctx.stroke();
   };
 
-  const onPointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    e.currentTarget.releasePointerCapture(e.pointerId);
+  const finishStroke = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
     if (!drawingRef.current) return;
     drawingRef.current = false;
     commit(pointsRef.current, color, STROKE_WIDTH);
     pointsRef.current = [];
   };
 
+  const onPointerUp = finishStroke;
+  const onPointerCancel = finishStroke;
+  const onPointerLeave = finishStroke;
+
+  const handleClear = () => {
+    if (!confirmClear) {
+      setConfirmClear(true);
+      return;
+    }
+    setConfirmClear(false);
+    clear();
+  };
+
   return (
-    <div className="pointer-events-auto fixed inset-0 z-40 flex flex-col bg-zinc-950/85 p-4 backdrop-blur-[2px]">
+    <div className="pointer-events-auto fixed inset-0 z-40 flex flex-col bg-black/35 p-4 backdrop-blur-[2px]">
       <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col overflow-hidden rounded-2xl bg-[#f4f2ed] ring-1 ring-black/[0.09] shadow-[0_24px_60px_-24px_rgba(0,0,0,0.6)]">
         {/* Header */}
         <div className="flex items-center justify-between gap-3 border-b border-black/[0.07] px-4 py-2.5">
@@ -139,10 +174,10 @@ export function WhiteboardModal({
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={clear}
+              onClick={handleClear}
               className="rounded-lg bg-white px-2.5 py-1 text-[12px] font-semibold text-neutral-700 ring-1 ring-black/[0.09] transition-colors hover:bg-neutral-100"
             >
-              Clear
+              {confirmClear ? "Sure?" : "Clear"}
             </button>
             <button
               type="button"
@@ -155,13 +190,15 @@ export function WhiteboardModal({
         </div>
 
         {/* Tray + board */}
-        <div className="flex flex-col">
+        <div className="flex min-h-0 flex-col">
           <div className="flex items-center gap-2 px-4 py-2">
             {COLORS.map((c) => (
               <button
                 key={c}
                 type="button"
                 title={c}
+                aria-label={`Ink color ${c}`}
+                aria-pressed={color === c}
                 onClick={() => setColor(c)}
                 className={cn(
                   "h-5 w-5 rounded-full ring-2 ring-offset-1 ring-offset-[#f4f2ed] transition-transform hover:scale-110",
@@ -171,7 +208,7 @@ export function WhiteboardModal({
               />
             ))}
           </div>
-          <div className="flex-1 px-4 pb-4">
+          <div className="min-h-0 flex-1 px-4 pb-4">
             <canvas
               ref={canvasRef}
               width={DRAW_LEN}
@@ -179,6 +216,8 @@ export function WhiteboardModal({
               onPointerDown={onPointerDown}
               onPointerMove={onPointerMove}
               onPointerUp={onPointerUp}
+              onPointerCancel={onPointerCancel}
+              onPointerLeave={onPointerLeave}
               className="w-full touch-none rounded-xl bg-white shadow-inner ring-1 ring-black/[0.08]"
             />
           </div>

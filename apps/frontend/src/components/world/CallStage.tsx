@@ -69,12 +69,12 @@ function VideoTile({
       return pub?.track
         ? "live"
         : room.localParticipant.isCameraEnabled
-          ? "no signal"
+          ? "reconnecting"
           : "camera off";
     }
     const p = room.getParticipantByIdentity(identity) as
       RemoteParticipant | undefined;
-    if (!p) return "waiting";
+    if (!p) return "joining";
     const videoPub = [...p.videoTrackPublications.values()].find(
       (x) => x.kind === Track.Kind.Video,
     );
@@ -82,10 +82,19 @@ function VideoTile({
       return videoPub.track &&
         videoPub.track.streamState === Track.StreamState.Active
         ? "live"
-        : "connecting media";
+        : "connecting";
     }
-    return videoPub ? "no signal" : "no video track";
+    return videoPub ? "reconnecting" : "no video";
   })();
+
+  const statusText: Record<string, string> = {
+    live: "Live",
+    joining: "Joining…",
+    connecting: "Connecting…",
+    reconnecting: "Reconnecting…",
+    "camera off": "Camera off",
+    "no video": "No video",
+  };
 
   // Remote mic state arrives over the LiveKit signal channel (a WebSocket) as
   // TrackMuted/TrackUnmuted events; `version` bumps re-render this in real time.
@@ -113,7 +122,7 @@ function VideoTile({
         }`}
       />
       {identity !== "__local__" && <audio ref={audioRef} autoPlay />}
-      <span className="absolute bottom-1 left-1.5 rounded-md bg-black/55 px-1.5 py-0.5 text-[10px] font-medium text-white">
+      <span className="absolute bottom-1 left-1.5 max-w-[104px] truncate rounded-md bg-black/55 px-1.5 py-0.5 text-[10px] font-medium text-white">
         {label}
       </span>
       {identity !== "__local__" && (
@@ -136,12 +145,12 @@ function VideoTile({
         className={`absolute right-1.5 top-1.5 rounded-full px-1.5 py-0.5 text-[9px] font-semibold ring-1 ${
           status === "live"
             ? "bg-emerald-500/85 text-white ring-emerald-400"
-            : status === "waiting" || status === "camera off"
+            : status === "joining" || status === "camera off"
               ? "bg-neutral-700/80 text-neutral-200 ring-neutral-500"
               : "bg-amber-500/85 text-white ring-amber-400"
         }`}
       >
-        {status}
+        {statusText[status] ?? status}
       </span>
     </div>
   );
@@ -178,8 +187,9 @@ function ScreenTile({
     <button
       type="button"
       onClick={onExpand}
-      title="Open full screen"
-      className="group relative w-96 overflow-hidden rounded-xl bg-neutral-900 ring-1 ring-black/10 transition-shadow hover:ring-indigo-400"
+      title="Expand screen share"
+      aria-label={`Expand screen share from ${label}`}
+      className="group relative w-72 overflow-hidden rounded-xl bg-neutral-900 ring-1 ring-black/10 transition-shadow hover:ring-white/40 focus-visible:outline-2 focus-visible:outline-white/60 focus-visible:ring-white/40 sm:w-96"
     >
       <video
         ref={videoRef}
@@ -187,10 +197,10 @@ function ScreenTile({
         playsInline
         className="aspect-video w-full object-contain"
       />
-      <span className="absolute bottom-1.5 left-2 rounded-md bg-black/55 px-1.5 py-0.5 text-[10px] font-medium text-white">
+      <span className="absolute bottom-1.5 left-2 max-w-[70%] truncate rounded-md bg-black/55 px-1.5 py-0.5 text-left text-[10px] font-medium text-white">
         Screen — {label}
       </span>
-      <span className="absolute right-1.5 top-1.5 grid size-7 place-items-center rounded-lg bg-black/45 text-white opacity-0 transition-opacity group-hover:opacity-100">
+      <span className="absolute right-1.5 top-1.5 grid size-7 place-items-center rounded-lg bg-black/45 text-white opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
         <FiMaximize className="size-3.5" />
       </span>
     </button>
@@ -241,10 +251,11 @@ function ScreenFocusModal({
         <button
           type="button"
           onClick={onClose}
-          title="Exit full screen (Esc)"
+          title="Close (Esc)"
+          aria-label="Close screen share viewer"
           className="flex items-center gap-2 rounded-lg bg-white/10 px-3 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-white/20"
         >
-          <FiX className="size-4" /> Exit
+          <FiX className="size-4" /> Close
         </button>
       </div>
       <video
@@ -330,16 +341,18 @@ export function CallStage({
   );
 
   return (
-    <div className="flex flex-col items-center gap-2">
-      <div className="flex flex-row gap-2">
+    <div className="flex max-w-[calc(100vw-2rem)] flex-col items-center gap-2">
+      <div className="flex max-w-full flex-row flex-wrap justify-center gap-2">
         <VideoTile
           room={room}
           identity="__local__"
           label="You"
           version={version}
         />
-        {ids.map((id) =>
-          shares.some((p) => p.identity === id) ? null : (
+        {ids
+          .filter((id) => !shares.some((p) => p.identity === id))
+          .slice(0, 4)
+          .map((id) => (
             <VideoTile
               key={id}
               room={room}
@@ -347,7 +360,11 @@ export function CallStage({
               label={labelFor(id)}
               version={version}
             />
-          ),
+          ))}
+        {ids.length > 5 && (
+          <span className="flex h-28 items-center rounded-xl bg-black/45 px-3 font-mono text-[11px] tabular-nums text-white/70 ring-1 ring-white/10">
+            +{ids.length - 5}
+          </span>
         )}
       </div>
       {shares.length > 0 && (

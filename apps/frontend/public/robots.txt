@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /auth
+Disallow: /dashboard
+Disallow: /world
+
+Sitemap: https://hive.dev/sitemap.xml

@@ -33,6 +33,20 @@ const server = serve({
       });
     },
 
+    // SEO: robots + sitemap
+    "/robots.txt": async () => {
+      const file = Bun.file("./public/robots.txt");
+      return new Response(file, {
+        headers: { "Content-Type": "text/plain" },
+      });
+    },
+    "/sitemap.xml": async () => {
+      const file = Bun.file("./public/sitemap.xml");
+      return new Response(file, {
+        headers: { "Content-Type": "application/xml" },
+      });
+    },
+
     // Scene still images
     "/skills/*": async (req) => {
       const url = new URL(req.url);

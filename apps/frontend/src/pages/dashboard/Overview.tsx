@@ -346,7 +346,7 @@ function EmptyWorkspaces() {
           <Link to="/dashboard/invites" className={btnGhostClass}>
             View invites
             {pending > 0 && (
-              <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-white px-1 text-[10px] font-semibold tabular-nums text-black">
+              <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-neutral-950 px-1 text-[10px] font-semibold tabular-nums text-white">
                 {pending}
               </span>
             )}

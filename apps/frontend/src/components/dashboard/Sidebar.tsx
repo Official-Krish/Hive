@@ -122,7 +122,11 @@ export function Sidebar() {
         )}
 
         {user && (
-          <div className="flex items-center gap-2.5 rounded-lg px-2 py-2 transition-colors hover:bg-neutral-900/[0.03]">
+          <Link
+            to="/dashboard/profile"
+            title="Your profile"
+            className="flex items-center gap-2.5 rounded-lg px-2 py-2 transition-colors hover:bg-neutral-900/[0.03]"
+          >
             <Avatar name={user.name} src={user.avatarUrl} size={30} />
             <div className="flex min-w-0 flex-1 flex-col">
               <span className="truncate text-[13px] font-medium leading-tight text-neutral-800">
@@ -133,14 +137,17 @@ export function Sidebar() {
               </span>
             </div>
             <button
-              onClick={handleLogout}
+              onClick={(e) => {
+                e.preventDefault();
+                void handleLogout();
+              }}
               aria-label="Sign out"
               title="Sign out"
               className="flex size-8 flex-shrink-0 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-900/[0.05] hover:text-neutral-900"
             >
               <FiLogOut className="size-4" />
             </button>
-          </div>
+          </Link>
         )}
 
         <Link

@@ -29,6 +29,8 @@ export function PairSessionModal({
     staleTime: 60_000,
   });
 
+  useEffect(() => () => setStarting(false), []);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -43,14 +45,14 @@ export function PairSessionModal({
   };
 
   return (
-    <div className="fixed inset-0 z-40 grid place-items-center bg-black/35 p-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-40 grid place-items-center bg-black/30 p-4 backdrop-blur-sm">
       <div className="flex w-full max-w-md flex-col overflow-hidden rounded-2xl bg-[#f4f2ed]/95 shadow-[inset_0_1px_0_rgba(255,255,255,0.7),0_24px_48px_-20px_rgba(28,25,18,0.5)] ring-1 ring-black/[0.09] backdrop-blur-md">
         <div className="flex items-start justify-between border-b border-black/[0.06] px-5 pb-3 pt-4">
           <div>
-            <span className="text-[10.5px] font-semibold tracking-[0.14em] text-indigo-600 uppercase">
+            <span className="text-[10.5px] font-semibold tracking-[0.14em] text-neutral-500 uppercase">
               Pair programming
             </span>
-            <h2 className="mt-0.5 font-serif text-[17px] leading-tight text-neutral-900">
+            <h2 className="mt-0.5 text-[17px] font-semibold leading-tight tracking-tight text-neutral-900">
               Start a session with {partnerName}
             </h2>
           </div>
@@ -92,7 +94,7 @@ export function PairSessionModal({
                 className={cn(
                   "flex items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-[12.5px] transition-colors",
                   repo === r.id
-                    ? "bg-indigo-600 text-white"
+                    ? "bg-neutral-950 text-white"
                     : "bg-white/60 text-neutral-700 ring-1 ring-black/[0.07] hover:bg-white",
                 )}
               >
@@ -106,7 +108,7 @@ export function PairSessionModal({
                       "shrink-0 rounded-full px-1.5 py-0.5 text-[9.5px] font-semibold",
                       repo === r.id
                         ? "bg-white/20 text-white"
-                        : "bg-indigo-50 text-indigo-600",
+                        : "bg-neutral-900/[0.05] text-neutral-600",
                     )}
                   >
                     {r.openPrCount} pr{r.openPrCount === 1 ? "" : "s"}
@@ -130,7 +132,7 @@ export function PairSessionModal({
             type="button"
             onClick={() => begin(repo)}
             disabled={starting}
-            className="rounded-xl bg-indigo-600 px-4 py-2 text-[12.5px] font-semibold text-white shadow-[0_1px_0_rgba(28,25,18,0.25)] transition-colors hover:bg-indigo-700 disabled:opacity-50"
+            className="rounded-xl bg-neutral-950 px-4 py-2 text-[12.5px] font-semibold text-white shadow-[0_1px_0_rgba(28,25,18,0.25)] transition-colors hover:bg-neutral-800 disabled:opacity-50"
           >
             {starting
               ? "Starting…"

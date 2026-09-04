@@ -43,6 +43,7 @@ import { PairModeBar } from "./PairModeBar";
 import { PeerCursorOverlay } from "./PeerCursorOverlay";
 import { Confetti, type ConfettiRef } from "@/components/ui/confetti";
 import { cn } from "@/lib/utils";
+import { statusLabel, useDismiss } from "./chrome";
 import { useChillMedia } from "@/hooks/useChillMedia";
 import { ChillScreenProjection } from "./ChillScreenProjection";
 import { ChillScreenModal } from "./ChillScreenModal";
@@ -66,8 +67,15 @@ import type { Interactable, InteractableIcon } from "./interactions";
 const DEFAULT_AVATAR =
   AVATARS.male[0]?.model ?? "/avatars/male/hive_male_01.glb";
 
-/* HUD material — the console's bone-paper instruments, tuned for the pale
-   sky. Shared by every floating control so the frame reads as one system. */
+/* HUD material — warm bone paper floating over the 3D scene, same voice
+   as the light dashboard. Shared tokens live in ./chrome; these two
+   aliases keep the frame terse. */
+const CHIP =
+  "inline-flex items-center gap-2.5 rounded-full bg-[#f4f2ed]/95 ring-1 ring-black/[0.09] " +
+  "backdrop-blur-md";
+const EYEBROW =
+  "text-[9px] font-medium uppercase tracking-[0.18em] text-neutral-500 leading-none";
+
 const INTERACTABLE_ICONS: Record<InteractableIcon, LucideIcon> = {
   coffee: Coffee,
   water: Droplets,
@@ -77,13 +85,6 @@ const INTERACTABLE_ICONS: Record<InteractableIcon, LucideIcon> = {
   chill: Clapperboard,
   arcade: Gamepad2,
 };
-
-const CHIP =
-  "inline-flex items-center gap-2.5 rounded-full bg-[#f4f2ed]/95 ring-1 ring-black/[0.09] " +
-  "shadow-[inset_0_1px_0_rgba(255,255,255,0.7),0_12px_28px_-16px_rgba(28,25,18,0.5)] " +
-  "backdrop-blur-sm";
-const EYEBROW =
-  "text-[9px] font-semibold uppercase tracking-[0.16em] text-neutral-400 leading-none";
 
 /* r3f v9.7 `events.connect(target)` can fire with a null container during a
    Provider remount when the tree churns (upstream #3754). Unlike `disconnect`
@@ -117,25 +118,167 @@ const STATUS_LABEL: Record<string, string> = {
   offline: "Offline",
 };
 
-/** Inline "set a value" row for the presence picker: custom label and
- *  "working on" both use this; a Set button appears on text, a Clear button
- *  when a value is currently set. */
+/** Members directory popup — Escape or outside click dismisses. */
+function MembersPopup({
+  roster,
+  onlineCount,
+  onClose,
+}: {
+  roster: Array<{
+    userId: string;
+    name: string;
+    status: string;
+    label: string | null;
+    workingOn: string | null;
+    isMe: boolean;
+  }>;
+  onlineCount: number;
+  onClose: () => void;
+}) {
+  const ref = useDismiss<HTMLDivElement>(onClose);
+  return (
+    <div
+      ref={ref}
+      role="dialog"
+      aria-label="Members"
+      className="fixed top-16 right-4 z-30 flex max-h-[calc(100vh-6rem)] w-80 flex-col overflow-hidden rounded-2xl bg-[#f4f2ed]/97 ring-1 ring-black/[0.09] backdrop-blur-md"
+    >
+      <div className="flex items-end justify-between border-b border-black/[0.07] px-4 pb-2 pt-3">
+        <span className={EYEBROW}>Members</span>
+        <span className="font-mono text-[10.5px] tabular-nums text-neutral-500">
+          {onlineCount} online · {roster.length} total
+        </span>
+      </div>
+      <div className="flex flex-col overflow-y-auto p-2">
+        {roster.map((row) => (
+          <div
+            key={row.userId}
+            className="flex items-center gap-2.5 rounded-lg px-2.5 py-1.5"
+          >
+            <span
+              className={cn(
+                "h-2 w-2 shrink-0 rounded-full",
+                STATUS_DOT[row.status] ?? "bg-neutral-300",
+              )}
+            />
+            <div className="min-w-0 flex-1">
+              <span className="block truncate text-[12.5px] font-medium text-neutral-900">
+                {row.name}
+                {row.isMe && (
+                  <span className="ml-1.5 font-normal text-neutral-400">
+                    (you)
+                  </span>
+                )}
+              </span>
+              <span className="block truncate text-[10.5px] text-neutral-500">
+                {row.label && row.workingOn
+                  ? `${row.label} · ${row.workingOn}`
+                  : (row.workingOn ?? row.label ?? statusLabel(row.status))}
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+type PresenceValue = "online" | "away" | "on_call" | "busy" | "focusing";
+
+/** Status picker menu — Escape or outside click dismisses. */
+function StatusMenu({
+  status,
+  onPick,
+  onLabel,
+  onWorkingOn,
+  onClearWorkingOn,
+  onFocusChange,
+  onClose,
+}: {
+  status: string;
+  onPick: (value: PresenceValue) => void;
+  onLabel: (label: string) => void;
+  onWorkingOn: (workingOn: string) => void;
+  onClearWorkingOn: () => void;
+  onFocusChange?: (focused: boolean) => void;
+  onClose: () => void;
+}) {
+  const ref = useDismiss<HTMLDivElement>(onClose);
+  return (
+    <div
+      ref={ref}
+      role="menu"
+      aria-label="Change status"
+      className="absolute right-0 top-full z-20 mt-2 flex w-60 flex-col items-stretch gap-0.5 rounded-xl bg-[#f4f2ed]/97 p-2 ring-1 ring-black/[0.09] backdrop-blur-md"
+    >
+      {(
+        [
+          ["online", "Online"],
+          ["away", "Away"],
+          ["on_call", "On call"],
+          ["busy", "Busy"],
+          ["focusing", "Focusing"],
+        ] as const
+      ).map(([value, label]) => (
+        <button
+          key={value}
+          type="button"
+          role="menuitemradio"
+          aria-checked={status === value}
+          onClick={() => onPick(value)}
+          className={cn(
+            "flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-[12.5px] transition-colors hover:bg-black/[0.05]",
+            status === value
+              ? "font-semibold text-neutral-900"
+              : "text-neutral-700",
+          )}
+        >
+          <span className={cn("h-2 w-2 rounded-full", STATUS_DOT[value])} />
+          {label}
+        </button>
+      ))}
+      <InlineTextRow
+        placeholder="Custom status…"
+        action="Set status"
+        onFocusChange={onFocusChange}
+        onApply={onLabel}
+      />
+      <InlineTextRow
+        placeholder="Working on…"
+        action="Set focus"
+        onFocusChange={onFocusChange}
+        onApply={onWorkingOn}
+        onClear={onClearWorkingOn}
+        showClear
+      />
+    </div>
+  );
+}
+
+/** Inline "set a value" row: type + Set; Clear sits beside it whenever
+ *  a value is currently set. Input resets after applying. */
 function InlineTextRow({
   placeholder,
-  button,
+  action,
   onApply,
   onFocusChange,
   onClear,
   showClear,
 }: {
   placeholder: string;
-  button: (value: string) => string;
+  action: string;
   onApply: (value: string) => void;
   onFocusChange?: (focused: boolean) => void;
   onClear?: () => void;
   showClear?: boolean;
 }) {
   const [value, setValue] = useState("");
+  const apply = () => {
+    const v = value.trim();
+    if (!v) return;
+    onApply(v);
+    setValue("");
+  };
   return (
     <div className="mt-1 border-t border-black/[0.07] pt-1.5">
       <input
@@ -144,31 +287,34 @@ function InlineTextRow({
         onFocus={() => onFocusChange?.(true)}
         onBlur={() => onFocusChange?.(false)}
         onKeyDown={(e) => {
-          if (e.key === "Enter" && value.trim()) onApply(value.trim());
+          if (e.key === "Enter") apply();
         }}
         placeholder={placeholder}
         maxLength={60}
-        className="w-full rounded-lg text-neutral-700 border border-black/[0.09] bg-white px-2.5 py-1.5 text-[12px] outline-none focus:border-neutral-900/40"
+        aria-label={placeholder}
+        className="w-full rounded-lg border border-black/[0.09] bg-white px-2.5 py-1.5 text-[12px] text-neutral-800 outline-none placeholder:text-neutral-400 focus:border-neutral-900/40"
       />
-      {(value.trim() || showClear) && (
+      {(value.trim() || (showClear && onClear)) && (
         <div className="mt-1 flex items-stretch gap-1">
-          {value.trim() && (
+          {value.trim() ? (
             <button
               type="button"
-              onClick={() => onApply(value.trim())}
+              onClick={apply}
               className="flex-1 rounded-lg bg-neutral-950 py-1 text-[11.5px] font-semibold text-white hover:bg-neutral-800"
             >
-              {button(value.trim())}
+              {action}
             </button>
-          )}
-          {showClear && onClear && !value.trim() && (
-            <button
-              type="button"
-              onClick={onClear}
-              className="flex-1 rounded-lg bg-black/[0.06] py-1 text-[11.5px] font-semibold text-neutral-600 hover:bg-black/[0.1]"
-            >
-              Clear
-            </button>
+          ) : (
+            showClear &&
+            onClear && (
+              <button
+                type="button"
+                onClick={onClear}
+                className="flex-1 rounded-lg bg-black/[0.05] py-1 text-[11.5px] font-semibold text-neutral-600 ring-1 ring-black/[0.07] hover:bg-black/[0.08]"
+              >
+                Clear
+              </button>
+            )
           )}
         </div>
       )}
@@ -419,6 +565,16 @@ export function WorldCanvas({
     toastTimerRef.current = setTimeout(() => setToast(null), 3000);
   }, []);
 
+  useEffect(
+    () => () => {
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    },
+    [],
+  );
+
+  // Agents waiting on a human — click cycles through them.
+  const [attentionIdx, setAttentionIdx] = useState(0);
+
   const handleInteract = useCallback(
     (it: Interactable) => {
       switch (it.kind) {
@@ -570,14 +726,14 @@ export function WorldCanvas({
           Dashboard
         </button>
 
-        <div className={`${CHIP} px-4 py-1.5`}>
+        <div className={`${CHIP} px-4 py-2`}>
           <span className={EYEBROW}>Workspace</span>
-          <span className="font-serif text-[13.5px] leading-none text-neutral-900">
+          <span className="max-w-[180px] truncate text-[13px] font-medium leading-none text-neutral-900">
             {workspaceName}
           </span>
         </div>
 
-        <div className={`${CHIP} px-4 py-1.5`}>
+        <div className={`${CHIP} px-4 py-2`}>
           <span
             className={`h-1.5 w-1.5 rounded-full ${
               connectionStatus === "open"
@@ -589,25 +745,32 @@ export function WorldCanvas({
             }`}
           />
           <span className={EYEBROW}>Location</span>
-          <span className="font-serif text-[13.5px] leading-none text-neutral-900">
+          <span className="max-w-[160px] truncate text-[13px] font-medium leading-none text-neutral-900">
             {currentRoom}
           </span>
         </div>
 
-        {/* Agents waiting on a human — click cycles through them */}
+        {/* Agents waiting on a human — click cycles, double-click opens */}
         {needsAttention.length > 0 && (
           <button
             type="button"
-            onClick={() => setOpenMemberId(needsAttention[0]?.[0] ?? null)}
+            onClick={() =>
+              setAttentionIdx((i) => (i + 1) % needsAttention.length)
+            }
+            onDoubleClick={() =>
+              setOpenMemberId(needsAttention[attentionIdx]?.[0] ?? null)
+            }
             title={`${needsAttention.length} agent(s) need you — ${needsAttention
               .map(([, a]) => a.name || "member")
-              .join(", ")}`}
-            className={`${CHIP} pointer-events-auto ml-auto border-amber-500/40 bg-amber-50/95 py-1.5 transition-colors hover:bg-amber-100/95`}
+              .join(", ")}. Click to cycle, double-click to open.`}
+            className={`${CHIP} pointer-events-auto border-amber-500/40 bg-amber-50/95 py-2 transition-colors hover:bg-amber-100/95`}
           >
             <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-500" />
             <span className="text-[12px] font-semibold text-amber-900">
               {needsAttention.length} agent
               {needsAttention.length === 1 ? "" : "s"} need you
+              {needsAttention.length > 1 &&
+                ` · ${needsAttention[attentionIdx % needsAttention.length]?.[1]?.name ?? "next"} ↓`}
             </span>
           </button>
         )}
@@ -627,7 +790,8 @@ export function WorldCanvas({
               void chat.refreshMembers();
               setMembersOpen((v) => !v);
             }}
-            title="Members — who's in this workplace"
+            aria-label="Members — who's in this workplace"
+            aria-expanded={membersOpen}
             className={`${CHIP} relative px-3 py-2 transition-colors hover:bg-white/70`}
           >
             <FiUsers className="size-4 text-neutral-700" />
@@ -639,54 +803,19 @@ export function WorldCanvas({
           </button>
 
           {membersOpen && (
-            <div className="fixed top-16 right-4 z-30 flex max-h-[calc(100vh-6rem)] w-80 flex-col overflow-hidden rounded-2xl bg-[#f4f2ed]/95 shadow-[inset_0_1px_0_rgba(255,255,255,0.7),0_24px_48px_-20px_rgba(28,25,18,0.5)] ring-1 ring-black/[0.09] backdrop-blur-md">
-              <div className="flex items-end justify-between border-b border-black/[0.06] px-4 pb-2 pt-3">
-                <span className={EYEBROW}>Members</span>
-                <span className="text-[10.5px] font-medium text-neutral-500">
-                  {onlineCount} online · {roster.length} total
-                </span>
-              </div>
-              <div className="flex flex-col overflow-y-auto p-2">
-                {roster.map((row) => (
-                  <div
-                    key={row.userId}
-                    className="flex items-center gap-2.5 rounded-lg px-2.5 py-1.5"
-                  >
-                    <span
-                      className={cn(
-                        "h-2 w-2 shrink-0 rounded-full",
-                        STATUS_DOT[row.status] ?? "bg-neutral-300",
-                      )}
-                    />
-                    <div className="min-w-0 flex-1">
-                      <span className="block truncate text-[12.5px] font-medium text-neutral-900">
-                        {row.name}
-                        {row.isMe && (
-                          <span className="ml-1.5 font-normal text-neutral-400">
-                            (you)
-                          </span>
-                        )}
-                      </span>
-                      <span className="block truncate text-[10.5px] text-neutral-500">
-                        {row.label && row.workingOn
-                          ? `${row.label} · ${row.workingOn}`
-                          : (row.workingOn ??
-                            row.label ??
-                            STATUS_LABEL[row.status] ??
-                            row.status)}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
+            <MembersPopup
+              roster={roster}
+              onlineCount={onlineCount}
+              onClose={() => setMembersOpen(false)}
+            />
           )}
 
           {/* Chat toggle */}
           <button
             type="button"
             onClick={() => setChatOpen((v) => !v)}
-            title="Messages"
+            aria-label="Messages"
+            aria-expanded={chatOpen}
             className={`${CHIP} relative px-3 py-2 transition-colors hover:bg-white/70`}
           >
             <FiMessageSquare className="size-4 text-neutral-700" />
@@ -702,8 +831,9 @@ export function WorldCanvas({
             <button
               type="button"
               onClick={() => setStatusMenu((v) => !v)}
-              title={`${myStatusLabel} — change status`}
-              className={`${CHIP} py-1.5 transition-colors hover:bg-white/70`}
+              aria-label={`${myStatusLabel} — change status`}
+              aria-expanded={statusMenu}
+              className={`${CHIP} py-2 transition-colors hover:bg-white/70`}
             >
               <span
                 className={cn(
@@ -712,7 +842,7 @@ export function WorldCanvas({
                     "bg-emerald-500",
                 )}
               />
-              <span className="font-serif text-[13.5px] leading-none text-neutral-900">
+              <span className="max-w-[120px] truncate text-[13px] font-medium leading-none text-neutral-900">
                 {meName}
               </span>
               {myPresence?.label && (
@@ -729,81 +859,44 @@ export function WorldCanvas({
             </button>
 
             {statusMenu && (
-              <div className="absolute right-0 top-full z-20 mt-2 flex w-56 flex-col items-stretch gap-0.5 rounded-xl bg-[#f4f2ed]/95 p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.7),0_24px_48px_-20px_rgba(28,25,18,0.5)] ring-1 ring-black/[0.09] backdrop-blur-md">
-                {(
-                  [
-                    ["online", "Online"],
-                    ["away", "Away"],
-                    ["on_call", "On call"],
-                    ["busy", "Busy"],
-                    ["focusing", "Focusing"],
-                  ] as const
-                ).map(([value, label]) => (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => {
-                      client?.sendPresence(value);
-                      setStatusMenu(false);
-                    }}
-                    className={cn(
-                      "flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-[12.5px] transition-colors hover:bg-black/[0.05]",
-                      (myPresence?.status ?? "online") === value
-                        ? "font-semibold text-neutral-900"
-                        : "text-neutral-700",
-                    )}
-                  >
-                    <span
-                      className={cn("h-2 w-2 rounded-full", STATUS_DOT[value])}
-                    />
-                    {label}
-                  </button>
-                ))}
-                <InlineTextRow
-                  placeholder={
-                    myStatusLabel === "Online"
-                      ? "Custom status…"
-                      : myStatusLabel
-                  }
-                  button={(v) => `Set "${v.slice(0, 24)}"`}
-                  onFocusChange={setStatusInputFocused}
-                  onApply={(label) => {
-                    client?.sendPresence(
-                      (myPresence?.status as
-                        "online" | "away" | "on_call" | "busy" | "focusing") ??
-                        "online",
-                      label,
-                    );
-                    setStatusMenu(false);
-                  }}
-                />
-                <InlineTextRow
-                  placeholder="Working on…"
-                  button={(v) => `Working on "${v.slice(0, 24)}"`}
-                  onFocusChange={setStatusInputFocused}
-                  onApply={(workingOn) => {
-                    client?.sendPresence(
-                      (myPresence?.status as
-                        "online" | "away" | "on_call" | "busy" | "focusing") ??
-                        "online",
-                      myPresence?.label ?? undefined,
-                      workingOn,
-                    );
-                    setStatusMenu(false);
-                  }}
-                  onClear={() => {
-                    client?.sendPresence(
-                      (myPresence?.status as
-                        "online" | "away" | "on_call" | "busy" | "focusing") ??
-                        "online",
-                      myPresence?.label ?? undefined,
-                      null,
-                    );
-                    setStatusMenu(false);
-                  }}
-                  showClear={!!myPresence?.workingOn}
-                />
-              </div>
+              <StatusMenu
+                status={myPresence?.status ?? "online"}
+                onPick={(value) => {
+                  client?.sendPresence(value);
+                  setStatusMenu(false);
+                }}
+                onLabel={(label) => {
+                  client?.sendPresence(
+                    (myPresence?.status as
+                      "online" | "away" | "on_call" | "busy" | "focusing") ??
+                      "online",
+                    label,
+                  );
+                  setStatusMenu(false);
+                }}
+                onWorkingOn={(workingOn) => {
+                  client?.sendPresence(
+                    (myPresence?.status as
+                      "online" | "away" | "on_call" | "busy" | "focusing") ??
+                      "online",
+                    myPresence?.label ?? undefined,
+                    workingOn,
+                  );
+                  setStatusMenu(false);
+                }}
+                onClearWorkingOn={() => {
+                  client?.sendPresence(
+                    (myPresence?.status as
+                      "online" | "away" | "on_call" | "busy" | "focusing") ??
+                      "online",
+                    myPresence?.label ?? undefined,
+                    null,
+                  );
+                  setStatusMenu(false);
+                }}
+                onFocusChange={setStatusInputFocused}
+                onClose={() => setStatusMenu(false)}
+              />
             )}
           </div>
         </div>
@@ -820,10 +913,10 @@ export function WorldCanvas({
                 const Icon = INTERACTABLE_ICONS[interaction.near.icon];
                 return (
                   <div className={`${CHIP} px-3.5 py-2`}>
-                    <kbd className="rounded-md bg-white px-1.5 py-0.5 font-mono text-[10px] font-semibold text-neutral-800 ring-1 ring-black/[0.09] shadow-[0_1px_0_rgba(28,25,18,0.18)]">
+                    <kbd className="rounded-md bg-white px-1.5 py-0.5 font-mono text-[10px] font-semibold text-neutral-800 ring-1 ring-black/[0.09]">
                       E
                     </kbd>
-                    <Icon className="size-3.5 shrink-0" />
+                    <Icon className="size-3.5 shrink-0 text-neutral-700" />
                     <span className="text-[12px] font-semibold text-neutral-800">
                       {interaction.near.prompt}
                     </span>
@@ -832,6 +925,7 @@ export function WorldCanvas({
               })()}
             {toast && (
               <div
+                role="status"
                 className={`${CHIP} border-amber-500/30 bg-amber-50/95 px-3.5 py-1.5`}
               >
                 <span className="text-[11.5px] font-semibold text-amber-800">
@@ -846,11 +940,12 @@ export function WorldCanvas({
       <div className="absolute bottom-4 left-4 z-10 pointer-events-none">
         <div
           className={`${CHIP} rounded-full px-4 py-2.5 text-[11px] font-medium text-neutral-500`}
+          aria-label="Keyboard controls: WASD to move, Shift to run, Space to jump, drag to look, scroll to zoom"
         >
           {["W", "A", "S", "D"].map((k) => (
             <kbd
               key={k}
-              className="-ml-0.5 rounded-md bg-white px-1.5 py-0.5 font-mono text-[10px] font-semibold text-neutral-800 ring-1 ring-black/[0.09] shadow-[0_1px_0_rgba(28,25,18,0.18)]"
+              className="rounded-md bg-white px-1.5 py-0.5 font-mono text-[10px] font-semibold text-neutral-800 ring-1 ring-black/[0.09]"
             >
               {k}
             </kbd>
@@ -865,7 +960,7 @@ export function WorldCanvas({
             <span className="font-semibold text-neutral-900">Space</span> Jump
           </span>
           <span className="h-3.5 w-px bg-black/[0.09]" />
-          <span>
+          <span className="hidden sm:inline">
             <span className="font-semibold text-neutral-900">Drag</span> Look ·{" "}
             <span className="font-semibold text-neutral-900">Scroll</span> Zoom
           </span>
@@ -874,80 +969,87 @@ export function WorldCanvas({
 
       {/* Office ticker — pushes / PRs / test pulses (hidden while a call is active) */}
       {feed.length > 0 && nearIds.size === 0 && (
-        <div className="pointer-events-none absolute bottom-4 left-1/2 z-10 flex -translate-x-1/2 flex-col items-center gap-1.5">
-          {feed.slice(0, 3).map((f, i) => (
-            <div
-              key={f.key}
-              className={`${CHIP} max-w-[400px] px-3.5 py-1.5 text-[11px] font-medium text-neutral-700 ${
-                i === 0 ? "opacity-100" : i === 1 ? "opacity-70" : "opacity-45"
-              }`}
-              style={{ transform: `scale(${1 - i * 0.04})` }}
-            >
-              <span className="shrink-0">
-                {f.tone === "merge" ? (
-                  <Trophy className="size-3 text-amber-500" />
-                ) : (
-                  <span
-                    className={`inline-block h-1.5 w-1.5 rounded-full ${
-                      f.tone === "test"
-                        ? "bg-sky-500"
-                        : f.tone === "pr"
-                          ? "bg-violet-500"
-                          : f.tone === "bump"
-                            ? "bg-amber-500"
-                            : f.tone === "focusing"
-                              ? "bg-purple-500"
-                              : "bg-emerald-500"
-                    }`}
-                  />
-                )}
-              </span>
-              <span className="min-w-0 truncate">{f.text}</span>
-            </div>
-          ))}
+        <div
+          role="status"
+          aria-live="polite"
+          className="pointer-events-none absolute bottom-4 left-1/2 z-10 hidden -translate-x-1/2 flex-col items-center gap-1.5 md:flex"
+        >
+          {feed
+            .filter((f) => Date.now() - f.at < 30_000)
+            .slice(0, 3)
+            .map((f, i) => (
+              <div
+                key={f.key}
+                className={`${CHIP} max-w-[400px] px-3.5 py-1.5 text-[11px] font-medium text-neutral-700 ${
+                  i === 0
+                    ? "opacity-100"
+                    : i === 1
+                      ? "opacity-70"
+                      : "opacity-45"
+                }`}
+                style={{ transform: `scale(${1 - i * 0.04})` }}
+              >
+                <span className="shrink-0">
+                  {f.tone === "merge" ? (
+                    <Trophy className="size-3 text-amber-500" />
+                  ) : (
+                    <span
+                      className={`inline-block h-1.5 w-1.5 rounded-full ${
+                        f.tone === "test"
+                          ? "bg-sky-500"
+                          : f.tone === "pr"
+                            ? "bg-violet-500"
+                            : f.tone === "bump"
+                              ? "bg-amber-500"
+                              : f.tone === "focusing"
+                                ? "bg-purple-500"
+                                : "bg-emerald-500"
+                      }`}
+                    />
+                  )}
+                </span>
+                <span className="min-w-0 truncate">{f.text}</span>
+              </div>
+            ))}
         </div>
       )}
 
       {/* Focus pod widget — presence, mute state and pairing (only inside a focus room) */}
       {focus.inFocus && (
-        <div className="pointer-events-none absolute left-1/2 top-16 z-10 flex -translate-x-1/2 flex-col items-center gap-1.5">
+        <div className="pointer-events-none absolute left-1/2 top-[4.5rem] z-10 flex -translate-x-1/2 flex-col items-center gap-1.5">
           {focus.partnerId ? (
             <div className={`${CHIP} pointer-events-auto px-3.5 py-2`}>
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-purple-500" />
-              <span className="text-[12px] font-semibold text-neutral-800">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-violet-500" />
+              <span className="max-w-[220px] truncate text-[12px] font-semibold text-neutral-800">
                 Focusing with {nameOf(focus.partnerId)}
-              </span>
-              <span className="hidden h-3.5 w-px shrink-0 bg-black/[0.09] sm:block" />
-              <span className="text-[10.5px] font-medium text-neutral-500">
-                audio on — spatial audio muted for everyone else
               </span>
               <button
                 type="button"
                 onClick={focus.endPartner}
-                className="rounded-lg bg-white px-2 py-1 text-[11px] font-semibold text-neutral-700 ring-1 ring-black/[0.09] shadow-[0_1px_0_rgba(28,25,18,0.18)] transition-colors hover:bg-neutral-50"
+                className="cursor-pointer rounded-lg bg-white px-2 py-1 text-[11px] font-semibold text-neutral-700 ring-1 ring-black/[0.09] transition-colors hover:bg-neutral-100"
               >
                 End
               </button>
             </div>
           ) : focus.pendingInvite ? (
             <div
-              className={`${CHIP} pointer-events-auto border-purple-500/30 bg-purple-50/95 px-3.5 py-2`}
+              className={`${CHIP} pointer-events-auto border-violet-500/30 bg-violet-50/95 px-3.5 py-2`}
             >
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-purple-500" />
-              <span className="text-[12px] font-semibold text-neutral-800">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-violet-500" />
+              <span className="max-w-[220px] truncate text-[12px] font-semibold text-neutral-800">
                 {focus.pendingInvite.name} wants to focus together
               </span>
               <button
                 type="button"
                 onClick={() => focus.accept(focus.pendingInvite!.id)}
-                className="rounded-lg bg-purple-600 px-2.5 py-1 text-[11px] font-semibold text-white shadow-[0_1px_0_rgba(28,25,18,0.25)] transition-colors hover:bg-purple-700"
+                className="rounded-lg bg-violet-600 px-2.5 py-1 text-[11px] font-semibold text-white transition-colors hover:bg-violet-700"
               >
                 Accept
               </button>
               <button
                 type="button"
                 onClick={() => focus.decline(focus.pendingInvite!.id)}
-                className="rounded-lg bg-white px-2.5 py-1 text-[11px] font-semibold text-neutral-700 ring-1 ring-black/[0.09] shadow-[0_1px_0_rgba(28,25,18,0.18)] transition-colors hover:bg-neutral-50"
+                className="rounded-lg bg-white px-2.5 py-1 text-[11px] font-semibold text-neutral-700 ring-1 ring-black/[0.09] transition-colors hover:bg-neutral-100"
               >
                 Decline
               </button>
@@ -956,7 +1058,7 @@ export function WorldCanvas({
             <>
               {focus.invitedId && (
                 <div className={`${CHIP} pointer-events-auto px-3.5 py-2`}>
-                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-purple-500" />
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-violet-500" />
                   <span className="text-[12px] font-semibold text-neutral-800">
                     Invite sent to {nameOf(focus.invitedId)}…
                   </span>
@@ -964,7 +1066,7 @@ export function WorldCanvas({
                     type="button"
                     onClick={() => focus.decline(focus.invitedId!)}
                     title="Cancel invite"
-                    className="rounded-lg bg-white px-2 py-1 text-[11px] font-semibold text-neutral-700 ring-1 ring-black/[0.09] shadow-[0_1px_0_rgba(28,25,18,0.18)] transition-colors hover:bg-neutral-50"
+                    className="rounded-lg bg-white px-2 py-1 text-[11px] font-semibold text-neutral-700 ring-1 ring-black/[0.09] transition-colors hover:bg-neutral-100"
                   >
                     Cancel
                   </button>
@@ -972,14 +1074,14 @@ export function WorldCanvas({
               )}
               {focus.suggestPartnerId && !focus.invitedId && (
                 <div className={`${CHIP} pointer-events-auto px-3.5 py-2`}>
-                  <span className="h-1.5 w-1.5 rounded-full bg-purple-500" />
+                  <span className="h-1.5 w-1.5 rounded-full bg-violet-500" />
                   <span className="text-[12px] font-semibold text-neutral-800">
                     {nameOf(focus.suggestPartnerId)} is focusing in here
                   </span>
                   <button
                     type="button"
                     onClick={() => focus.invite(focus.suggestPartnerId!)}
-                    className="rounded-lg bg-purple-600 px-2.5 py-1 text-[11px] font-semibold text-white shadow-[0_1px_0_rgba(28,25,18,0.25)] transition-colors hover:bg-purple-700"
+                    className="rounded-lg bg-violet-600 px-2.5 py-1 text-[11px] font-semibold text-white transition-colors hover:bg-violet-700"
                   >
                     Invite
                   </button>
@@ -989,7 +1091,7 @@ export function WorldCanvas({
                 !focus.pendingInvite &&
                 !focus.suggestPartnerId && (
                   <div className={`${CHIP} pointer-events-none px-3.5 py-2`}>
-                    <span className="h-1.5 w-1.5 rounded-full bg-purple-500" />
+                    <span className="h-1.5 w-1.5 rounded-full bg-violet-500" />
                     <span className="text-[11.5px] font-semibold text-neutral-700">
                       Focusing — mic muted until someone joins
                     </span>
@@ -1009,7 +1111,6 @@ export function WorldCanvas({
               .filter((m) => m.userId !== myUserId)
               .map((m) => m.name)}
             onEnd={() => void pair.end()}
-            onOpenLink={() => {}}
           />
         </div>
       )}
@@ -1075,7 +1176,18 @@ export function WorldCanvas({
           badgeColor={
             STATUS_DOT[myPresence?.status ?? "online"] ?? "bg-emerald-500"
           }
-          disabled={chatOpen || statusInputFocused}
+          disabled={
+            chatOpen ||
+            statusInputFocused ||
+            membersOpen ||
+            statusMenu ||
+            openMemberId !== null ||
+            workspaceOpen ||
+            ciOpen ||
+            chillScreenOpen ||
+            gamesOpen ||
+            whiteboardId !== null
+          }
           onRoomChange={handleRoomChange}
           onPositionUpdate={(pos) => setPlayerPos(pos)}
           roomAt={roomAt}
@@ -1177,12 +1289,18 @@ export function WorldCanvas({
             />
           </div>
           {call.error && onlineCount >= 2 && (
-            <div className="pointer-events-none rounded-full bg-rose-50/95 px-3 py-1.5 text-[11px] font-medium text-rose-700 ring-1 ring-rose-500/30">
-              Voice unavailable
+            <div
+              role="alert"
+              className="pointer-events-none rounded-full bg-rose-50/95 px-3 py-1.5 text-[11px] font-medium text-rose-700 ring-1 ring-rose-500/30 backdrop-blur-md"
+            >
+              Voice unavailable — check mic permissions
             </div>
           )}
           {call.mediaError && onlineCount >= 2 && (
-            <div className="pointer-events-none rounded-full bg-rose-50/95 px-3 py-1.5 text-[11px] font-medium text-rose-700 ring-1 ring-rose-500/30">
+            <div
+              role="alert"
+              className="pointer-events-none max-w-[420px] truncate rounded-full bg-rose-50/95 px-3 py-1.5 text-[11px] font-medium text-rose-700 ring-1 ring-rose-500/30 backdrop-blur-md"
+            >
               {call.mediaError}
             </div>
           )}
@@ -1206,18 +1324,22 @@ export function WorldCanvas({
         className="pointer-events-none fixed inset-0 z-[9999] h-full w-full"
       />
 
-      {/* Chill Space shared-screen volume — only while inside the room. */}
+      {/* Chill Space shared-screen volume — only while inside the room.
+          Sits above the legend so it never covers the top chips. */}
       {currentRoom === "Chill Space" && (
-        <div className="fixed left-1/2 top-4 z-30 -translate-x-1/2">
-          <div className="pointer-events-auto flex items-center gap-3 rounded-full bg-[#0b0d12]/85 py-2 pl-3 pr-2 text-neutral-200 ring-1 ring-white/10">
-            <Volume2 className="h-4 w-4 text-neutral-400" />
+        <div className="absolute bottom-36 left-4 z-10">
+          <div className="pointer-events-auto flex items-center gap-2.5 rounded-full bg-[#f4f2ed]/95 py-2 pl-3 pr-4 text-neutral-700 ring-1 ring-black/[0.09] backdrop-blur-md">
+            <Volume2 className="h-4 w-4 text-neutral-500" />
+            <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-neutral-500">
+              Screen
+            </span>
             <input
               type="range"
               min={0}
               max={100}
               value={Math.round(chill.volume * 100)}
               onChange={(e) => chill.setVolume(Number(e.target.value) / 100)}
-              className="h-1 w-32 cursor-pointer appearance-none rounded-full bg-neutral-700 accent-[#6ee7b7]"
+              className="h-1 w-32 cursor-pointer appearance-none rounded-full bg-neutral-900/15 accent-emerald-600"
               aria-label="Chill space volume"
             />
           </div>

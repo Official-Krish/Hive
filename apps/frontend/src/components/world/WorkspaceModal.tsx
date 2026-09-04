@@ -1,16 +1,13 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { FiGithub, FiGrid, FiActivity, FiX } from "react-icons/fi";
+import { FiGithub, FiGrid, FiActivity } from "react-icons/fi";
 import { http, type MapOverlay } from "@/lib/http";
 import { useGitHubNotifications } from "@/hooks/useGitHubNotifications";
 import type { RealtimeClient } from "@/lib/realtime";
-import { formatTokens } from "./MapHud";
+import { DModal, formatTokens, timeAgo } from "./chrome";
 import { cn } from "@/lib/utils";
 
-const EYEBROW =
-  "text-[9px] font-semibold uppercase tracking-[0.16em] text-neutral-400";
-const PILL =
-  "rounded-lg bg-white px-3 py-2 ring-1 ring-black/[0.08] shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]";
+const PILL = "rounded-lg bg-white px-3 py-2 ring-1 ring-black/[0.08]";
 
 type TabId = "github" | "workspace" | "activity";
 
@@ -21,14 +18,12 @@ interface WorkspaceModalProps {
   onClose: () => void;
 }
 
-function timeAgo(iso: string): string {
-  const ms = Date.now() - new Date(iso).getTime();
-  const mins = Math.max(1, Math.round(ms / 60_000));
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.round(mins / 60);
-  if (hrs < 48) return `${hrs}h ago`;
-  return `${Math.round(hrs / 24)}d ago`;
-}
+const SESSION_DOT: Record<string, string> = {
+  running: "bg-emerald-500 animate-pulse",
+  blocked: "bg-amber-500",
+  paused: "bg-sky-500",
+  failed: "bg-rose-500",
+};
 
 export function WorkspaceModal({
   workspaceId,
@@ -38,73 +33,47 @@ export function WorkspaceModal({
 }: WorkspaceModalProps) {
   const [tab, setTab] = useState<TabId>("github");
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
   return (
-    <div className="pointer-events-auto fixed inset-0 z-40 grid place-items-center bg-black/30 p-4 backdrop-blur-[2px]">
-      <div className="flex h-[min(72vh,680px)] w-[min(620px,94vw)] flex-col overflow-hidden rounded-2xl bg-[#f4f2ed]/97 ring-1 ring-black/[0.09] shadow-[inset_0_1px_0_rgba(255,255,255,0.7),0_28px_60px_-24px_rgba(28,25,18,0.5)]">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-black/[0.07] px-4 py-3">
-          <div>
-            <div className={EYEBROW}>Workspace</div>
-            <div className="font-serif text-[15px] leading-tight text-neutral-900">
-              Your desk
-            </div>
-          </div>
+    <DModal eyebrow="Workspace" title="Your desk" onClose={onClose} wide>
+      {/* Tabs */}
+      <div className="flex gap-1 border-b border-black/[0.06] px-3 py-2">
+        {(
+          [
+            ["github", "GitHub", FiGithub],
+            ["workspace", "My workspace", FiGrid],
+            ["activity", "Activity", FiActivity],
+          ] as const
+        ).map(([id, label, Icon]) => (
           <button
+            key={id}
             type="button"
-            onClick={onClose}
-            aria-label="Close workspace"
-            className="rounded-lg p-2 text-neutral-500 transition-colors hover:bg-black/[0.05] hover:text-neutral-900"
+            onClick={() => setTab(id)}
+            aria-selected={tab === id}
+            role="tab"
+            className={cn(
+              "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12px] font-semibold transition-colors",
+              tab === id
+                ? "bg-neutral-950 text-white"
+                : "text-neutral-600 hover:bg-black/[0.05]",
+            )}
           >
-            <FiX className="size-4" />
+            <Icon className="size-3.5" />
+            {label}
           </button>
-        </div>
-
-        {/* Tabs */}
-        <div className="flex gap-1 border-b border-black/[0.06] px-3 py-2">
-          {(
-            [
-              ["github", "GitHub", FiGithub],
-              ["workspace", "My workspace", FiGrid],
-              ["activity", "Activity", FiActivity],
-            ] as const
-          ).map(([id, label, Icon]) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => setTab(id)}
-              className={cn(
-                "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12px] font-semibold transition-colors",
-                tab === id
-                  ? "bg-neutral-950 text-white"
-                  : "text-neutral-600 hover:bg-black/[0.05]",
-              )}
-            >
-              <Icon className="size-3.5" />
-              {label}
-            </button>
-          ))}
-        </div>
-
-        {/* Body */}
-        <div className="flex-1 overflow-y-auto p-4">
-          {tab === "github" && (
-            <GitHubTab workspaceId={workspaceId} client={client} />
-          )}
-          {tab === "workspace" && (
-            <WorkspaceTab workspaceId={workspaceId} myUserId={myUserId} />
-          )}
-          {tab === "activity" && <ActivityTab workspaceId={workspaceId} />}
-        </div>
+        ))}
       </div>
-    </div>
+
+      {/* Body */}
+      <div className="flex-1 overflow-y-auto p-4" role="tabpanel">
+        {tab === "github" && (
+          <GitHubTab workspaceId={workspaceId} client={client} />
+        )}
+        {tab === "workspace" && (
+          <WorkspaceTab workspaceId={workspaceId} myUserId={myUserId} />
+        )}
+        {tab === "activity" && <ActivityTab workspaceId={workspaceId} />}
+      </div>
+    </DModal>
   );
 }
 
@@ -120,14 +89,15 @@ function GitHubTab({
 
   if (isLoading && notifications.length === 0) {
     return (
-      <div className="py-10 text-center text-[12px] text-neutral-400">
+      <div className="flex items-center justify-center gap-2.5 py-10 text-[12px] text-neutral-500">
+        <span className="inline-block size-4 animate-spin rounded-full border-2 border-neutral-900/15 border-t-neutral-900" />
         Loading GitHub notifications…
       </div>
     );
   }
   if (error && notifications.length === 0) {
     return (
-      <div className="py-10 text-center text-[12px] text-rose-600">
+      <div className="mx-auto max-w-sm rounded-lg border border-rose-500/30 bg-rose-50 px-3.5 py-3 text-center text-[12px] text-rose-700">
         GitHub isn&apos;t connected yet.
       </div>
     );
@@ -188,8 +158,23 @@ function WorkspaceTab({
 
   if (overlay.isLoading && !data) {
     return (
-      <div className="py-10 text-center text-[12px] text-neutral-400">
+      <div className="flex items-center justify-center gap-2.5 py-10 text-[12px] text-neutral-500">
+        <span className="inline-block size-4 animate-spin rounded-full border-2 border-neutral-900/15 border-t-neutral-900" />
         Reading your workspace…
+      </div>
+    );
+  }
+  if (overlay.isError && !data) {
+    return (
+      <div className="mx-auto max-w-sm rounded-lg border border-rose-500/30 bg-rose-50 px-3.5 py-3 text-center text-[12px] text-rose-700">
+        Couldn&apos;t load your workspace.{" "}
+        <button
+          type="button"
+          onClick={() => overlay.refetch()}
+          className="font-semibold underline underline-offset-2 hover:text-rose-900"
+        >
+          Retry
+        </button>
       </div>
     );
   }
@@ -206,23 +191,23 @@ function WorkspaceTab({
   return (
     <div className="flex flex-col gap-2">
       <div className={PILL}>
-        <div className={EYEBROW}>Active session</div>
+        <div className="text-[10px] font-medium uppercase tracking-[0.16em] text-neutral-500">
+          Active session
+        </div>
         {session ? (
           <div className="mt-1">
             <div className="flex items-center gap-2 text-[14px] font-semibold text-neutral-900">
               <span
                 className={cn(
-                  "h-2 w-2 rounded-full",
-                  session.status === "running"
-                    ? "bg-emerald-500 animate-pulse"
-                    : session.status === "blocked"
-                      ? "bg-amber-500"
-                      : "bg-neutral-300",
+                  "h-2 w-2 shrink-0 rounded-full",
+                  SESSION_DOT[session.status ?? ""] ?? "bg-neutral-300",
                 )}
               />
-              {session.title ?? "Agent session"}
+              <span className="truncate">
+                {session.title ?? "Agent session"}
+              </span>
             </div>
-            <div className="mt-0.5 text-[11.5px] text-neutral-500">
+            <div className="mt-0.5 text-[11.5px] capitalize text-neutral-500">
               {session.agent.name} · {session.status}
               {session.branch ? ` · ${session.branch}` : ""}
             </div>
@@ -235,22 +220,24 @@ function WorkspaceTab({
       </div>
 
       <div className={PILL}>
-        <div className={EYEBROW}>This session</div>
-        <div className="mt-1 flex items-center gap-4 text-[12.5px] text-neutral-700">
+        <div className="text-[10px] font-medium uppercase tracking-[0.16em] text-neutral-500">
+          This session
+        </div>
+        <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12.5px] text-neutral-700">
           <span>
-            <span className="font-semibold text-neutral-900">
+            <span className="font-semibold tabular-nums text-neutral-900">
               {formatTokens(data.inputTokens)}
             </span>{" "}
             in
           </span>
           <span>
-            <span className="font-semibold text-neutral-900">
+            <span className="font-semibold tabular-nums text-neutral-900">
               {formatTokens(data.outputTokens)}
             </span>{" "}
             out
           </span>
           <span>
-            <span className="font-semibold text-neutral-900">
+            <span className="font-semibold tabular-nums text-neutral-900">
               {data.costCents != null
                 ? `$${(data.costCents / 100).toFixed(2)}`
                 : "—"}
@@ -262,8 +249,10 @@ function WorkspaceTab({
 
       {s && (
         <div className={PILL}>
-          <div className={EYEBROW}>Today</div>
-          <div className="mt-1 flex flex-wrap items-center gap-3 text-[12.5px] text-neutral-700">
+          <div className="text-[10px] font-medium uppercase tracking-[0.16em] text-neutral-500">
+            Today
+          </div>
+          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12.5px] tabular-nums text-neutral-700">
             <span>
               <span className="font-semibold text-neutral-900">
                 {s.sessionsToday}
@@ -302,7 +291,7 @@ function WorkspaceTab({
               {s.modelMix.map((m) => (
                 <span
                   key={m.model}
-                  className="rounded-full bg-neutral-100 px-2 py-0.5 text-[10.5px] text-neutral-600 ring-1 ring-black/[0.06]"
+                  className="rounded-full bg-neutral-900/[0.04] px-2 py-0.5 font-mono text-[10.5px] lowercase text-neutral-600 ring-1 ring-black/[0.06]"
                 >
                   {m.model} {Math.round(m.share * 100)}%
                 </span>
@@ -324,8 +313,23 @@ function ActivityTab({ workspaceId }: { workspaceId: string }) {
 
   if (activities.isLoading && items.length === 0) {
     return (
-      <div className="py-10 text-center text-[12px] text-neutral-400">
+      <div className="flex items-center justify-center gap-2.5 py-10 text-[12px] text-neutral-500">
+        <span className="inline-block size-4 animate-spin rounded-full border-2 border-neutral-900/15 border-t-neutral-900" />
         Loading activity…
+      </div>
+    );
+  }
+  if (activities.isError && items.length === 0) {
+    return (
+      <div className="mx-auto max-w-sm rounded-lg border border-rose-500/30 bg-rose-50 px-3.5 py-3 text-center text-[12px] text-rose-700">
+        Couldn&apos;t load activity.{" "}
+        <button
+          type="button"
+          onClick={() => activities.refetch()}
+          className="font-semibold underline underline-offset-2 hover:text-rose-900"
+        >
+          Retry
+        </button>
       </div>
     );
   }
@@ -349,15 +353,15 @@ function ActivityTab({ workspaceId }: { workspaceId: string }) {
             </span>
             <span
               className={cn(
-                "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize",
                 a.status === "completed"
-                  ? "bg-emerald-100 text-emerald-800"
+                  ? "bg-emerald-600/10 text-emerald-700"
                   : a.status === "in_progress"
-                    ? "bg-sky-100 text-sky-800"
-                    : "bg-neutral-100 text-neutral-600",
+                    ? "bg-sky-500/10 text-sky-700"
+                    : "bg-neutral-900/[0.05] text-neutral-600",
               )}
             >
-              {a.status}
+              {a.status.replace(/_/g, " ")}
             </span>
           </div>
           {a.summary && (
@@ -365,7 +369,7 @@ function ActivityTab({ workspaceId }: { workspaceId: string }) {
               {a.summary}
             </div>
           )}
-          <div className="mt-1 text-[10.5px] text-neutral-400">
+          <div className="mt-1 text-[10.5px] tabular-nums text-neutral-400">
             {a.repository?.name ?? "Workspace"} · {timeAgo(a.startedAt)} ·{" "}
             {formatTokens(a.inputTokens)} in
           </div>

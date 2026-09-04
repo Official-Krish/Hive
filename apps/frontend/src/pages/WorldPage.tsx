@@ -3,11 +3,11 @@ import { useQuery } from "@tanstack/react-query";
 import { ApiError, http } from "@/lib/http";
 import { WorldCanvas } from "@/components/world/WorldCanvas";
 import {
+  Card,
   Note,
-  Panel,
   Spinner,
-  primaryBtnClass,
-} from "@/components/dashboard/ui";
+  btnPrimaryClass,
+} from "@/components/dashboard/kit";
 
 /**
  * Workspace-aware spatial office. Entry is deliberate: a workspaceId must be
@@ -41,7 +41,7 @@ export function WorldPage() {
 
   if (me.isLoading || workspace.isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center gap-3 bg-[#faf9f6] text-neutral-500">
+      <div className="flex min-h-screen items-center justify-center gap-3 bg-[#F4F3EF] text-sm text-neutral-500">
         <Spinner /> Loading spatial office…
       </div>
     );
@@ -55,7 +55,7 @@ export function WorldPage() {
         </Note>
         <button
           type="button"
-          className={primaryBtnClass}
+          className={btnPrimaryClass}
           onClick={() => navigate("/auth")}
         >
           Sign in
@@ -76,7 +76,7 @@ export function WorldPage() {
         </Note>
         <button
           type="button"
-          className={primaryBtnClass}
+          className={btnPrimaryClass}
           onClick={() => navigate("/dashboard")}
         >
           Back to dashboard
@@ -97,8 +97,8 @@ export function WorldPage() {
 
 function Centered({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#faf9f6] p-6">
-      <Panel className="max-w-md p-6">{children}</Panel>
+    <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#F4F3EF] p-6">
+      <Card className="w-full max-w-md space-y-4 p-6">{children}</Card>
     </div>
   );
 }

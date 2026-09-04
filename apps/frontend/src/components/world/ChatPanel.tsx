@@ -6,16 +6,10 @@ import { useChat } from "@/hooks/useChat";
 import type { MapAvatar } from "@/hooks/useRealtimeMap";
 import type { RealtimeClient } from "@/lib/realtime";
 import type { ConversationSummary } from "@hive/types";
-
-const PANEL =
-  "overflow-hidden rounded-2xl bg-[#f4f2ed]/97 ring-1 ring-black/[0.09] " +
-  "shadow-[inset_0_1px_0_rgba(255,255,255,0.7),0_24px_48px_-20px_rgba(28,25,18,0.45)] backdrop-blur-sm";
-const HEADER =
-  "flex items-center justify-between border-b border-black/[0.07] px-4 py-2.5 " +
-  "text-[10px] font-semibold uppercase tracking-[0.16em] text-neutral-500";
+import { notifyError } from "@/lib/toast";
 
 const STATUS_DOT: Record<string, string> = {
-  online: "bg-emerald-500",
+  online: "bg-emerald-600",
   away: "bg-amber-500",
   on_call: "bg-sky-500",
   busy: "bg-rose-500",
@@ -45,8 +39,12 @@ export function ChatPanel({
   const [selectedMembers, setSelectedMembers] = useState<Set<string>>(
     new Set(),
   );
+  const [opening, setOpening] = useState<string | null>(null);
+  const [failed, setFailed] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const listRef = useRef<HTMLUListElement>(null);
+  const coarsePointer =
+    typeof window !== "undefined" &&
+    window.matchMedia("(pointer: coarse)").matches;
 
   const active = chat.conversations.find((c) => c.id === activeId) ?? null;
   const messages = activeId ? (chat.threads[activeId] ?? []) : [];
@@ -60,35 +58,63 @@ export function ChatPanel({
     });
   }, [chat.typing, chat.conversations, activeId]);
 
-  // Autoscroll to newest.
+  // Autoscroll to newest (instant on thread switch, smooth on new message).
+  const prevLen = useRef(0);
   useEffect(() => {
-    scrollRef.current?.scrollTo({
-      top: scrollRef.current.scrollHeight,
-      behavior: "smooth",
+    const el = scrollRef.current;
+    if (!el) return;
+    const jump = messages.length < prevLen.current;
+    prevLen.current = messages.length;
+    el.scrollTo({
+      top: el.scrollHeight,
+      behavior: jump ? "auto" : "smooth",
     });
   }, [messages.length, activeId]);
 
-  // Workspace members directory for group creation.
   useEffect(() => {
     if (!newGroupOpen || !client) return;
     void chat.refreshMembers();
   }, [newGroupOpen, client, chat]);
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        if (activeId) setActiveId(null);
+        else onClose();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [activeId, onClose]);
+
   function openConversation(id: string) {
     setActiveId(id);
+    setFailed(null);
     chat.openThread(id);
   }
 
   async function openDirect(userId: string) {
-    const existing = byPartner.get(userId);
-    if (existing) {
-      openConversation(existing.id);
+    const convo = chat.conversations.find(
+      (c) => !c.isGroup && c.members.some((m) => m.userId === userId),
+    );
+    if (convo) {
+      openConversation(convo.id);
       return;
     }
-    const { http } = await import("@/lib/http");
-    const conv = await http.chat.create(workspaceId, { memberIds: [userId] });
-    await chat.refreshList();
-    openConversation(conv.id);
+    setOpening(userId);
+    setFailed(null);
+    try {
+      const { http } = await import("@/lib/http");
+      const conv = await http.chat.create(workspaceId, {
+        memberIds: [userId],
+      });
+      await chat.refreshList();
+      openConversation(conv.id);
+    } catch {
+      setFailed("Couldn't start that conversation. Try again.");
+    } finally {
+      setOpening(null);
+    }
   }
 
   function send() {
@@ -113,12 +139,10 @@ export function ChatPanel({
       setGroupName("");
       setSelectedMembers(new Set());
     } catch {
-      /* surfaced by refresh */
+      notifyError("Couldn't create the group. Try again.");
     }
   }
 
-  // All workspace members (server roster) — used for the DM list and the
-  // group-composer member picker, so everyone is reachable from the start.
   const directory = useMemo(
     () =>
       chat.members
@@ -131,8 +155,6 @@ export function ChatPanel({
     [chat.members, myUserId],
   );
 
-  // DM conversations indexed by the other party, so roster rows can show the
-  // matching thread (preview, time, unread badge) or a "start a chat" state.
   const byPartner = useMemo(() => {
     const map = new Map<string, ConversationSummary>();
     for (const c of chat.conversations)
@@ -143,8 +165,6 @@ export function ChatPanel({
     return map;
   }, [chat.conversations, myUserId]);
 
-  // Roster rows merged with live presence + their DM thread; online first,
-  // then most-recently active.
   const roster = useMemo(() => {
     const rows = directory.map((m) => {
       const conv = byPartner.get(m.userId) ?? null;
@@ -166,36 +186,38 @@ export function ChatPanel({
   );
 
   return (
-    <div
-      className={`pointer-events-auto flex h-[520px] max-h-[70vh] w-[360px] max-w-[calc(100vw-2rem)] flex-col ${PANEL}`}
-    >
+    <div className="pointer-events-auto flex h-[520px] max-h-[70vh] w-[360px] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl bg-[#f4f2ed]/97 ring-1 ring-black/[0.08] backdrop-blur-md">
       {/* header */}
-      <div className={HEADER}>
-        <span className="flex items-center gap-2">
+      <div className="flex items-center justify-between border-b border-black/[0.07] px-4 py-2.5 text-[10px] font-medium uppercase tracking-[0.18em] text-neutral-500">
+        <span className="flex min-w-0 items-center gap-2">
           {activeId && (
             <button
               type="button"
               onClick={() => setActiveId(null)}
-              className="rounded p-0.5 text-neutral-400 transition-colors hover:text-neutral-900"
+              className="rounded p-0.5 text-neutral-500 transition-colors hover:text-neutral-950"
               aria-label="Back to conversations"
             >
               <FiArrowLeft className="size-3.5" />
             </button>
           )}
-          {activeId
-            ? active?.isGroup
-              ? (active.title ?? "Group")
-              : (active?.members.find((m) => m.userId !== myUserId)?.name ??
-                "Direct message")
-            : "Messages"}
+          <span className="truncate">
+            {activeId
+              ? active?.isGroup
+                ? (active.title ?? "Group")
+                : (active?.members.find((m) => m.userId !== myUserId)?.name ??
+                  "Direct message")
+              : "Messages"}
+          </span>
         </span>
-        <span className="flex items-center gap-2">
+        <span className="flex flex-shrink-0 items-center gap-2">
           {!activeId && (
             <button
               type="button"
               onClick={() => setNewGroupOpen((v) => !v)}
               title="New group"
-              className="rounded p-0.5 text-neutral-400 transition-colors hover:text-neutral-900"
+              aria-label="New group"
+              aria-expanded={newGroupOpen}
+              className="rounded p-0.5 text-neutral-500 transition-colors hover:text-neutral-950"
             >
               <FiUsers className="size-3.5" />
             </button>
@@ -204,7 +226,7 @@ export function ChatPanel({
             type="button"
             onClick={onClose}
             aria-label="Close chat"
-            className="rounded p-0.5 text-neutral-400 transition-colors hover:text-neutral-900"
+            className="rounded p-0.5 text-neutral-500 transition-colors hover:text-neutral-950"
           >
             <X className="size-3.5" />
           </button>
@@ -218,7 +240,8 @@ export function ChatPanel({
             value={groupName}
             onChange={(e) => setGroupName(e.target.value)}
             placeholder="Group name…"
-            className="w-full rounded-lg border border-black/[0.09] text-neutral-700 bg-white px-2.5 py-1.5 text-[12.5px] outline-none focus:border-neutral-900/40"
+            aria-label="Group name"
+            className="w-full rounded-lg border border-black/[0.09] bg-white px-2.5 py-1.5 text-[12.5px] text-white outline-none placeholder:text-neutral-400 focus:border-neutral-900/40"
           />
           <div className="max-h-32 space-y-1 overflow-y-auto">
             {directory.map((m) => (
@@ -237,11 +260,11 @@ export function ChatPanel({
                   }}
                   className="accent-neutral-900"
                 />
-                <span className="truncate text-neutral-800">{m.name}</span>
+                <span className="truncate text-neutral-700">{m.name}</span>
               </label>
             ))}
             {directory.length === 0 && (
-              <p className="px-1 text-[11.5px] italic text-neutral-500">
+              <p className="px-1 text-[11.5px] text-neutral-500">
                 No other members in this workspace yet.
               </p>
             )}
@@ -250,21 +273,24 @@ export function ChatPanel({
             type="button"
             onClick={() => void createGroup()}
             disabled={!groupName.trim() || selectedMembers.size === 0}
-            className="w-full rounded-lg bg-neutral-950 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-neutral-800 disabled:opacity-40"
+            className="w-full rounded-lg bg-white py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-neutral-800 disabled:opacity-40"
           >
             Create group ({selectedMembers.size})
           </button>
         </div>
       )}
 
+      {failed && !activeId && (
+        <div className="border-b border-black/[0.07] px-4 py-2 text-[12px] text-rose-700">
+          {failed}
+        </div>
+      )}
+
       {/* body */}
       {!activeId ? (
-        <ul
-          ref={listRef}
-          className="flex-1 divide-y divide-black/[0.05] overflow-y-auto"
-        >
-          {roster.length === 0 && (
-            <li className="px-4 py-6 text-center text-[12.5px] italic text-neutral-500">
+        <ul className="flex-1 divide-y divide-black/[0.05] overflow-y-auto">
+          {roster.length === 0 && groups.length === 0 && (
+            <li className="px-4 py-6 text-center text-[12.5px] text-neutral-500">
               No other members in this workspace yet.
             </li>
           )}
@@ -272,11 +298,12 @@ export function ChatPanel({
             const typing = row.conv
               ? Object.keys(chat.typing[row.conv.id] ?? {}).length > 0
               : false;
+            const busy = opening === row.userId;
             return (
               <ConversationListItem
                 key={row.userId}
-                initial={row.name.charAt(0).toUpperCase()}
                 name={row.name}
+                avatarUrl={row.avatarUrl}
                 dotColor={STATUS_DOT[row.status] ?? "bg-neutral-300"}
                 time={
                   row.conv?.lastMessage
@@ -284,51 +311,50 @@ export function ChatPanel({
                     : undefined
                 }
                 preview={
-                  typing
-                    ? "typing…"
-                    : (row.conv?.lastMessage?.body ?? "Say hello")
+                  busy
+                    ? "Opening…"
+                    : typing
+                      ? "typing…"
+                      : (row.conv?.lastMessage?.body ?? "Say hello")
                 }
                 unread={row.conv?.unreadCount ?? 0}
-                isTyping={typing}
+                isTyping={typing && !busy}
                 onClick={() => void openDirect(row.userId)}
               />
             );
           })}
-          {groups.length > 0 && [
-            <li
-              key="groups-hdr"
-              className="px-4 py-1.5 text-[9px] font-semibold uppercase tracking-[0.16em] text-neutral-400"
-            >
+          {groups.length > 0 && (
+            <li className="px-4 pb-1 pt-3 text-[9px] font-medium uppercase tracking-[0.18em] text-neutral-400">
               Groups
-            </li>,
-            ...groups.map((c) => {
-              const typing = Object.keys(chat.typing[c.id] ?? {}).length > 0;
-              return (
-                <ConversationListItem
-                  key={c.id}
-                  initial={(c.title ?? "#").charAt(0).toUpperCase()}
-                  name={c.title ?? "Group"}
-                  time={
-                    c.lastMessage
-                      ? timeLabel(c.lastMessage.createdAt)
-                      : undefined
-                  }
-                  preview={
-                    typing ? "typing…" : (c.lastMessage?.body ?? "Say hello")
-                  }
-                  unread={c.unreadCount}
-                  isTyping={typing}
-                  onClick={() => openConversation(c.id)}
-                />
-              );
-            }),
-          ]}
+            </li>
+          )}
+          {groups.map((c) => {
+            const typing = Object.keys(chat.typing[c.id] ?? {}).length > 0;
+            return (
+              <ConversationListItem
+                key={c.id}
+                name={c.title ?? "Group"}
+                avatarUrl={null}
+                group
+                time={
+                  c.lastMessage ? timeLabel(c.lastMessage.createdAt) : undefined
+                }
+                preview={
+                  typing ? "typing…" : (c.lastMessage?.body ?? "Say hello")
+                }
+                unread={c.unreadCount}
+                isTyping={typing}
+                onClick={() => openConversation(c.id)}
+              />
+            );
+          })}
         </ul>
       ) : (
         <>
           <div
             ref={scrollRef}
             className="flex-1 space-y-2 overflow-y-auto px-4 py-3"
+            aria-live="polite"
           >
             {messages.map((m) => {
               const mine = m.senderId === myUserId;
@@ -345,7 +371,7 @@ export function ChatPanel({
                       "max-w-[78%] rounded-2xl px-3 py-2 text-[13px] leading-snug",
                       mine
                         ? "bg-neutral-950 text-white"
-                        : "bg-white text-neutral-900 ring-1 ring-black/[0.07]",
+                        : "bg-black/[0.04] text-white ring-1 ring-black/[0.08]",
                     )}
                   >
                     {!mine && active?.isGroup && (
@@ -359,7 +385,7 @@ export function ChatPanel({
                     <div
                       className={cn(
                         "mt-1 text-right text-[9.5px] tabular-nums",
-                        mine ? "text-white/60" : "text-neutral-400",
+                        mine ? "text-neutral-500" : "text-neutral-400",
                       )}
                     >
                       {timeLabel(m.createdAt)}
@@ -370,7 +396,7 @@ export function ChatPanel({
             })}
             {typingUsers.length > 0 && (
               <div className="flex justify-start">
-                <div className="rounded-2xl bg-white px-3 py-2 text-[11.5px] italic text-neutral-500 ring-1 ring-black/[0.07]">
+                <div className="rounded-2xl bg-black/[0.04] px-3 py-2 text-[11.5px] italic text-neutral-500 ring-1 ring-black/[0.08]">
                   {typingUsers.map((t) => t.name).join(", ")} typing…
                 </div>
               </div>
@@ -388,17 +414,18 @@ export function ChatPanel({
               value={draft}
               onChange={(e) => {
                 setDraft(e.target.value);
-                chat.notifyTyping(activeId!);
+                if (activeId) chat.notifyTyping(activeId);
               }}
               placeholder="Type a message…"
-              autoFocus
+              autoFocus={!coarsePointer}
               maxLength={4000}
-              className="min-w-0 flex-1 rounded-xl border border-black/[0.09] bg-white px-3 py-2 text-[13px] text-neutral-700 outline-none transition-colors focus:border-neutral-900/40"
+              aria-label="Type a message"
+              className="min-w-0 flex-1 rounded-xl border border-black/[0.09] bg-white px-3 py-2 text-[13px] text-white outline-none placeholder:text-neutral-400 focus:border-neutral-900/40"
             />
             <button
               type="submit"
               disabled={!draft.trim()}
-              aria-label="Send"
+              aria-label="Send message"
               className="flex size-9 flex-shrink-0 items-center justify-center rounded-full bg-neutral-950 text-white transition-colors hover:bg-neutral-800 disabled:opacity-30"
             >
               <FiSend className="size-4" />
@@ -422,10 +449,10 @@ function timeLabel(iso: string): string {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-/** WhatsApp-style row: avatar + status dot, name/time, preview + unread badge. */
 function ConversationListItem({
-  initial,
   name,
+  avatarUrl,
+  group,
   dotColor,
   time,
   preview,
@@ -433,8 +460,9 @@ function ConversationListItem({
   isTyping,
   onClick,
 }: {
-  initial: string;
   name: string;
+  avatarUrl?: string | null;
+  group?: boolean;
   dotColor?: string;
   time?: string;
   preview: string;
@@ -447,16 +475,24 @@ function ConversationListItem({
       <button
         type="button"
         onClick={onClick}
-        className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-black/[0.035]"
+        className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-black/[0.03]"
       >
-        <span className="relative">
-          <span className="flex size-9 items-center justify-center rounded-full bg-neutral-900/[0.06] font-serif text-[14px] text-neutral-700 ring-1 ring-black/[0.07]">
-            {initial}
-          </span>
-          {dotColor && (
+        <span className="relative flex-shrink-0">
+          {avatarUrl ? (
+            <img
+              src={avatarUrl}
+              alt=""
+              className="size-9 rounded-full object-cover ring-1 ring-black/[0.08]"
+            />
+          ) : (
+            <span className="flex size-9 items-center justify-center rounded-full bg-black/[0.04] text-[14px] font-medium text-neutral-700 ring-1 ring-black/[0.08]">
+              {group ? "#" : name.charAt(0).toUpperCase()}
+            </span>
+          )}
+          {dotColor && !group && (
             <span
               className={cn(
-                "absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full ring-2 ring-[#f4f2ed]",
+                "absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full ring-2 ring-[#0d1017]",
                 dotColor,
               )}
             />
@@ -468,7 +504,7 @@ function ConversationListItem({
               className={cn(
                 "truncate text-[13px]",
                 unread > 0
-                  ? "font-bold text-neutral-900"
+                  ? "font-bold text-white"
                   : "font-medium text-neutral-800",
               )}
             >
@@ -487,14 +523,14 @@ function ConversationListItem({
                 isTyping
                   ? "italic text-emerald-700"
                   : unread > 0
-                    ? "font-semibold text-neutral-900"
+                    ? "font-semibold text-white"
                     : "text-neutral-500",
               )}
             >
               {preview}
             </span>
             {unread > 0 && (
-              <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-emerald-600 px-1 text-[9.5px] font-bold text-white">
+              <span className="flex h-4 min-w-4 flex-shrink-0 items-center justify-center rounded-full bg-emerald-600 px-1 text-[9.5px] font-bold text-white">
                 {unread > 99 ? "99+" : unread}
               </span>
             )}

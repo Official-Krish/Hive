@@ -3,7 +3,14 @@ import { useState, useRef, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
-import { FiArrowUpRight, FiMenu, FiX, FiLogOut, FiGrid } from "react-icons/fi";
+import {
+  FiArrowUpRight,
+  FiMenu,
+  FiUser,
+  FiX,
+  FiLogOut,
+  FiGrid,
+} from "react-icons/fi";
 import { http } from "@/lib/http";
 
 const navLinks = [
@@ -160,6 +167,14 @@ export function AppBar() {
                   >
                     <FiGrid className="size-4" />
                     <span>Dashboard</span>
+                  </Link>
+                  <Link
+                    to="/dashboard/profile"
+                    onClick={() => setProfileOpen(false)}
+                    className="flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-slate-200 hover:bg-white/5 hover:text-white transition-colors"
+                  >
+                    <FiUser className="size-4" />
+                    <span>Profile</span>
                   </Link>
                   <div className="border-t border-white/10 my-2" />
                   <button

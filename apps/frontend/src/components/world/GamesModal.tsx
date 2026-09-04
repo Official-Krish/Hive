@@ -1,9 +1,5 @@
 import { useEffect } from "react";
-import { FiX, FiAward, FiCircle, FiGrid, FiTv } from "react-icons/fi";
-import { cn } from "@/lib/utils";
-
-const EYEBROW =
-  "text-[9px] font-semibold uppercase tracking-[0.16em] text-neutral-400";
+import { FiX, FiCommand, FiCircle, FiEdit3, FiActivity } from "react-icons/fi";
 
 interface GameCard {
   id: string;
@@ -19,7 +15,7 @@ const GAMES: GameCard[] = [
     name: "Chess",
     blurb: "Head-to-head on the big board.",
     seats: "2 players",
-    icon: <FiAward className="size-5" />,
+    icon: <FiCommand className="size-5" />,
   },
   {
     id: "connect4",
@@ -33,14 +29,14 @@ const GAMES: GameCard[] = [
     name: "Pictionary",
     blurb: "Draw it before the timer runs out.",
     seats: "2–8 players",
-    icon: <FiGrid className="size-5" />,
+    icon: <FiEdit3 className="size-5" />,
   },
   {
     id: "tabletennis",
     name: "Table Tennis",
     blurb: "Rally against your teammate.",
     seats: "2 or 4 players",
-    icon: <FiTv className="size-5" />,
+    icon: <FiActivity className="size-5" />,
   },
 ];
 
@@ -59,12 +55,14 @@ export function GamesModal({ onClose }: GamesModalProps) {
 
   return (
     <div className="pointer-events-auto fixed inset-0 z-40 grid place-items-center bg-black/30 p-4 backdrop-blur-[2px]">
-      <div className="flex h-[min(80vh,600px)] w-[min(620px,96vw)] flex-col overflow-hidden rounded-2xl bg-[#0b0d12] ring-1 ring-black/[0.5] shadow-[0_28px_70px_-24px_rgba(0,0,0,0.8)]">
+      <div className="flex h-[min(80vh,600px)] w-[min(620px,96vw)] flex-col overflow-hidden rounded-2xl bg-[#f4f2ed] shadow-[0_28px_70px_-24px_rgba(0,0,0,0.35)] ring-1 ring-black/[0.09]">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-white/[0.08] px-4 py-3">
+        <div className="flex items-center justify-between border-b border-black/[0.07] px-4 py-3">
           <div>
-            <div className={cn(EYEBROW, "text-neutral-500")}>Play Area</div>
-            <div className="font-serif text-[15px] leading-tight text-white">
+            <div className="text-[10px] font-medium uppercase tracking-[0.18em] text-neutral-500">
+              Play Area
+            </div>
+            <div className="text-[15px] font-semibold tracking-tight text-neutral-900">
               Multiplayer games
             </div>
           </div>
@@ -72,7 +70,7 @@ export function GamesModal({ onClose }: GamesModalProps) {
             type="button"
             onClick={onClose}
             aria-label="Close games"
-            className="rounded-lg p-2 text-neutral-400 transition-colors hover:bg-white/[0.08] hover:text-white"
+            className="rounded-lg p-2 text-neutral-500 transition-colors hover:bg-black/[0.05] hover:text-neutral-900"
           >
             <FiX className="size-4" />
           </button>
@@ -80,7 +78,7 @@ export function GamesModal({ onClose }: GamesModalProps) {
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto p-4">
-          <div className="rounded-xl bg-white/[0.03] px-3.5 py-3 text-[12px] text-neutral-300 ring-1 ring-white/[0.05]">
+          <div className="rounded-xl bg-white px-3.5 py-3 text-[12px] text-neutral-600 ring-1 ring-black/[0.07]">
             Grab a seat at any table — games are being built. Your avatars will
             play together live in the Chill Space.
           </div>
@@ -89,23 +87,24 @@ export function GamesModal({ onClose }: GamesModalProps) {
             {GAMES.map((g) => (
               <div
                 key={g.id}
-                className="flex flex-col rounded-xl bg-white/[0.04] p-4 ring-1 ring-white/[0.06]"
+                aria-disabled="true"
+                className="flex cursor-not-allowed flex-col rounded-xl bg-white p-4 opacity-90 ring-1 ring-black/[0.07]"
               >
                 <div className="flex items-start justify-between gap-3">
-                  <div className="flex size-10 items-center justify-center rounded-lg bg-white/[0.07] text-neutral-300">
+                  <div className="flex size-10 items-center justify-center rounded-lg bg-neutral-900/[0.04] text-neutral-500">
                     {g.icon}
                   </div>
-                  <span className="rounded-full bg-white/[0.06] px-2.5 py-1 text-[10.5px] font-medium uppercase tracking-wide text-neutral-400">
+                  <span className="rounded-full bg-neutral-900/[0.05] px-2.5 py-1 text-[10.5px] font-medium uppercase tracking-wide text-neutral-500">
                     Coming soon
                   </span>
                 </div>
-                <div className="mt-3 text-[14px] font-semibold text-white">
+                <div className="mt-3 text-[14px] font-semibold text-neutral-900">
                   {g.name}
                 </div>
-                <div className="mt-0.5 text-[12px] text-neutral-400">
+                <div className="mt-0.5 text-[12px] text-neutral-500">
                   {g.blurb}
                 </div>
-                <div className="mt-3 text-[10.5px] uppercase tracking-wide text-neutral-500">
+                <div className="mt-3 font-mono text-[10.5px] uppercase tracking-wide text-neutral-400">
                   {g.seats}
                 </div>
               </div>

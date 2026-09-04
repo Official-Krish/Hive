@@ -10,6 +10,13 @@ import {
 } from "react-router-dom";
 import { AuthPage } from "./pages/AuthPage";
 import { LandingPage } from "./pages/LandingPage";
+import { PrivacyPage } from "./pages/static/PrivacyPage";
+import { TermsPage } from "./pages/static/TermsPage";
+import { SecurityPage } from "./pages/static/SecurityPage";
+import { InstallPage } from "./pages/static/InstallPage";
+import { AboutPage } from "./pages/static/AboutPage";
+import { ContactPage } from "./pages/static/ContactPage";
+import { StatusPage } from "./pages/static/StatusPage";
 import { AppBar } from "./components/layout/AppBar";
 import { Footer } from "./components/layout/Footer";
 import { DashboardLayout } from "./components/dashboard/DashboardLayout";
@@ -24,6 +31,7 @@ import { OrgMembers } from "./pages/dashboard/OrgMembers";
 import { OrgWorkspaces } from "./pages/dashboard/OrgWorkspaces";
 import { OrgTeams } from "./pages/dashboard/OrgTeams";
 import { AvatarSelection } from "./pages/dashboard/AvatarSelection";
+import { ProfilePage } from "./pages/dashboard/ProfilePage";
 import WorldPage from "./pages/WorldPage";
 import { AuthGuard } from "./lib/ProtectedRoute";
 
@@ -65,6 +73,14 @@ const router = createBrowserRouter([
     element: <PublicLayout />,
     children: [
       { path: "/", element: <LandingPage /> },
+      { path: "/privacy", element: <PrivacyPage /> },
+      { path: "/terms", element: <TermsPage /> },
+      { path: "/security", element: <SecurityPage /> },
+      { path: "/install", element: <InstallPage /> },
+      { path: "/docs", element: <Navigate to="/install" replace /> },
+      { path: "/about", element: <AboutPage /> },
+      { path: "/contact", element: <ContactPage /> },
+      { path: "/status", element: <StatusPage /> },
       { path: "*", element: <Navigate to="/" replace /> },
     ],
   },
@@ -90,6 +106,7 @@ const router = createBrowserRouter([
       { path: "invite", element: <InviteUser /> },
       { path: "invites", element: <WorkspaceInvites /> },
       { path: "avatar", element: <AvatarSelection /> },
+      { path: "profile", element: <ProfilePage /> },
       { path: "w/:workspaceId", element: <WorkspaceDetail /> },
       { path: "w/:workspaceId/settings", element: <WorkspaceSettings /> },
       {
