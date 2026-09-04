@@ -8,6 +8,7 @@ import {
 import { useFBX, useGLTF, Html } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
+import { ASSET_BASE_URL } from "../../lib/config";
 
 /** Uniform scale applied to every avatar GLB. */
 const SCALE = 0.55;
@@ -47,7 +48,7 @@ const META_TONE: Record<string, string> = {
 };
 
 export default function Avatar({
-  modelUrl = "/avatars/male/hive_male_01.glb",
+  modelUrl = `${ASSET_BASE_URL}/avatars/male/hive_male_01.glb`,
   motionRef,
   position = [0, 0, 0],
   rotation = [0, 0, 0],
@@ -58,9 +59,9 @@ export default function Avatar({
   meta,
 }: AvatarProps) {
   const { scene } = useGLTF(modelUrl);
-  const idleFBX = useFBX("/Animations/idle.fbx");
-  const runFBX = useFBX("/Animations/run.fbx");
-  const jumpFBX = useFBX("/Animations/jump.fbx");
+  const idleFBX = useFBX(`${ASSET_BASE_URL}/Animations/idle.fbx`);
+  const runFBX = useFBX(`${ASSET_BASE_URL}/Animations/run.fbx`);
+  const jumpFBX = useFBX(`${ASSET_BASE_URL}/Animations/jump.fbx`);
 
   const mixerRef = useRef<THREE.AnimationMixer | null>(null);
   const actionsRef = useRef<{
@@ -290,7 +291,7 @@ export default function Avatar({
   );
 }
 
-useGLTF.preload("/avatars/male/hive_male_01.glb");
-useGLTF.preload("/avatars/male/hive_male_02.glb");
-useGLTF.preload("/avatars/female/hive_female_01.glb");
-useGLTF.preload("/avatars/female/hive_female_02.glb");
+useGLTF.preload(`${ASSET_BASE_URL}/avatars/male/hive_male_01.glb`);
+useGLTF.preload(`${ASSET_BASE_URL}/avatars/male/hive_male_02.glb`);
+useGLTF.preload(`${ASSET_BASE_URL}/avatars/female/hive_female_01.glb`);
+useGLTF.preload(`${ASSET_BASE_URL}/avatars/female/hive_female_02.glb`);

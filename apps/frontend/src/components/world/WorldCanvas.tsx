@@ -22,6 +22,7 @@ import {
   supportAt,
 } from "./office/layout";
 import { AVATARS } from "./AvatarConfig";
+import { ASSET_BASE_URL } from "@/lib/config";
 import { useRealtimeMap } from "@/hooks/useRealtimeMap";
 import { useLiveKitCall } from "@/hooks/useLiveKitCall";
 import { useNearbyTokens } from "@/hooks/useNearbyTokens";
@@ -65,7 +66,7 @@ import {
 import type { Interactable, InteractableIcon } from "./interactions";
 
 const DEFAULT_AVATAR =
-  AVATARS.male[0]?.model ?? "/avatars/male/hive_male_01.glb";
+  AVATARS.male[0]?.model ?? `${ASSET_BASE_URL}/avatars/male/hive_male_01.glb`;
 
 /* HUD material — warm bone paper floating over the 3D scene, same voice
    as the light dashboard. Shared tokens live in ./chrome; these two

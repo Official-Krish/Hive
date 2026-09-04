@@ -4,6 +4,7 @@ import * as THREE from "three";
 import Avatar, { type PlayerMotion } from "./Avatar";
 import { CoffeeCup } from "./CoffeeCup";
 import type { AABB } from "./office/layout";
+import { ASSET_BASE_URL } from "../../lib/config";
 
 interface PlayerControllerProps {
   cameraYaw: number;
@@ -52,7 +53,7 @@ export function PlayerController({
   cameraYaw,
   obstacles,
   spawn = [0, 0, 38],
-  modelUrl = "/avatars/male/hive_male_01.glb",
+  modelUrl = `${ASSET_BASE_URL}/avatars/male/hive_male_01.glb`,
   name = "You",
   status = "Online",
   badgeColor = "bg-emerald-400",

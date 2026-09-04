@@ -7,8 +7,9 @@ import { AvatarErrorBoundary } from "./AvatarErrorBoundary";
 import type { MapAvatar } from "@/hooks/useRealtimeMap";
 import { type NearbyTokens } from "@/hooks/useNearbyTokens";
 import { formatTokens } from "./MapHud";
+import { ASSET_BASE_URL } from "@/lib/config";
 
-const DEFAULT_AVATAR = "/avatars/male/hive_male_01.glb";
+const DEFAULT_AVATAR = `${ASSET_BASE_URL}/avatars/male/hive_male_01.glb`;
 
 /** Only genuine model files reach useGLTF — anything else gets the default. */
 function safeModelUrl(url: string | null | undefined): string {
