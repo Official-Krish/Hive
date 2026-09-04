@@ -1,12 +1,12 @@
 import { RedisClient } from "bun";
 
-const REDIS_HOST =
-  process.env.NODE_ENV === "production" ? "redis" : "localhost";
-
 let redis: RedisClient | null = null;
 
 export function getRedis(): RedisClient {
-  redis ??= new RedisClient(`redis://${REDIS_HOST}:6379`);
+  if (!redis) {
+    const host = process.env.NODE_ENV === "production" ? "redis" : "localhost";
+    redis = new RedisClient(`redis://${host}:6379`);
+  }
   return redis;
 }
 
