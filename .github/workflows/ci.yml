@@ -56,8 +56,15 @@ jobs:
 
       - name: Install Dependencies
         run: bun install
-        # packages/db postinstall generates the Prisma client, which the
-        # backend/worker builds import (gitignored, so it must be produced here).
+
+      - name: Generate Prisma Client
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/hive
+        # packages/db/src/generated is gitignored, so the client must be
+        # produced before the backend/worker builds that import it. (Runs via
+        # the root db:generate script; `bun --cwd <pkg> run <script>` does not
+        # reliably resolve scripts in Bun.)
+        run: bun run db:generate
 
       - name: Run Lint
         run: bun run lint
@@ -209,13 +216,13 @@ jobs:
         run: bun install
 
       - name: Generate Prisma Client
-        run: bun --cwd packages/db run generate
+        run: bun run db:generate
 
       - name: Apply Migrations
-        run: bun --cwd packages/db run db:deploy
+        run: bun run db:deploy
 
       - name: Run Backend Tests
-        run: bun --cwd apps/backend test
+        run: cd apps/backend && bun run test
 
   docker-build:
     name: Docker Build & Push

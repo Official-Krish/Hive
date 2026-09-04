@@ -11,6 +11,7 @@
     "db:up": "docker compose up -d postgres",
     "db:down": "docker compose down",
     "db:generate": "cd packages/db && bun --bun run generate",
+    "db:deploy": "cd packages/db && bun --bun run db:deploy",
     "db:migrate": "cd packages/db && bun --bun run migrate dev",
     "db:studio": "cd packages/db && bun --bun run studio",
     "db:seed": "cd packages/db && bun --bun run db:seed",
