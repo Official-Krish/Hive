@@ -32,10 +32,10 @@ concurrency:
 
 jobs:
   quality:
-    name: Lint / Build
+    name: Lint / Build / Typecheck
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -56,9 +56,14 @@ jobs:
 
       - name: Install Dependencies
         run: bun install
+        # packages/db postinstall generates the Prisma client, which the
+        # backend/worker builds import (gitignored, so it must be produced here).
 
       - name: Run Lint
         run: bun run lint
+
+      - name: Run Typecheck
+        run: bun run check-types
 
       - name: Run Build
         run: bun run build
@@ -71,8 +76,7 @@ jobs:
     outputs:
       backend: ${{ steps.filter.outputs.backend }}
       frontend: ${{ steps.filter.outputs.frontend }}
-      executor: ${{ steps.filter.outputs.executor }}
-      ai_builder: ${{ steps.filter.outputs.ai_builder }}
+      worker: ${{ steps.filter.outputs.worker }}
 
     steps:
       - name: Checkout
@@ -94,83 +98,45 @@ jobs:
 
           echo "backend=false" >> $GITHUB_OUTPUT
           echo "frontend=false" >> $GITHUB_OUTPUT
-          echo "executor=false" >> $GITHUB_OUTPUT
-          echo "ai_builder=false" >> $GITHUB_OUTPUT
+          echo "worker=false" >> $GITHUB_OUTPUT
 
-          if echo "$CHANGED_FILES" | grep -q '^apps/backend/'; then
-            echo "backend=true" >> $GITHUB_OUTPUT
-          fi
+          mark() {
+            local svc="$1"; local flag="$2"
+            if [ "$flag" = "true" ]; then
+              echo "${svc}=true" >> $GITHUB_OUTPUT
+            fi
+          }
 
-          if echo "$CHANGED_FILES" | grep -q '^apps/frontend/'; then
-            echo "frontend=true" >> $GITHUB_OUTPUT
-          fi
+          # ── apps/ ──
+          if echo "$CHANGED_FILES" | grep -q '^apps/backend/'; then mark backend true; fi
+          if echo "$CHANGED_FILES" | grep -q '^apps/frontend/'; then mark frontend true; fi
+          if echo "$CHANGED_FILES" | grep -q '^apps/worker/'; then mark worker true; fi
 
-          if echo "$CHANGED_FILES" | grep -q '^apps/executor/'; then
-            echo "executor=true" >> $GITHUB_OUTPUT
-          fi
-
-          if echo "$CHANGED_FILES" | grep -q '^apps/ai-builder/'; then
-            echo "ai_builder=true" >> $GITHUB_OUTPUT
-          fi
-
-          if echo "$CHANGED_FILES" | grep -q '^docker/Dockerfile\.backend$'; then
-            echo "backend=true" >> $GITHUB_OUTPUT
-          fi
-
-          if echo "$CHANGED_FILES" | grep -q '^docker/Dockerfile\.frontend$'; then
-            echo "frontend=true" >> $GITHUB_OUTPUT
-          fi
-
-          if echo "$CHANGED_FILES" | grep -q '^docker/Dockerfile\.executor$'; then
-            echo "executor=true" >> $GITHUB_OUTPUT
-          fi
-
-          if echo "$CHANGED_FILES" | grep -q '^docker/Dockerfile\.ai-builder$'; then
-            echo "ai_builder=true" >> $GITHUB_OUTPUT
-          fi
+          # ── dockerfiles (docker/*.dockerfile) ──
+          if echo "$CHANGED_FILES" | grep -q '^docker/backend\.dockerfile$'; then mark backend true; fi
+          if echo "$CHANGED_FILES" | grep -q '^docker/frontend\.dockerfile$'; then mark frontend true; fi
+          if echo "$CHANGED_FILES" | grep -q '^docker/worker\.dockerfile$'; then mark worker true; fi
+          if echo "$CHANGED_FILES" | grep -q '^docker/nginx\.frontend\.conf$'; then mark frontend true; fi
 
           # ── packages/ — map each package to services that consume it ──
           if echo "$CHANGED_FILES" | grep -q '^packages/db/'; then
-            echo "backend=true" >> $GITHUB_OUTPUT
-            echo "executor=true" >> $GITHUB_OUTPUT
-            echo "ai_builder=true" >> $GITHUB_OUTPUT
+            mark backend true; mark worker true
           fi
-          if echo "$CHANGED_FILES" | grep -q '^packages/executor-utils/'; then
-            echo "backend=true" >> $GITHUB_OUTPUT
-            echo "executor=true" >> $GITHUB_OUTPUT
+          if echo "$CHANGED_FILES" | grep -q '^packages/queue/'; then
+            mark backend true; mark worker true
+          fi
+          if echo "$CHANGED_FILES" | grep -q '^packages/events/'; then
+            mark backend true; mark worker true
           fi
           if echo "$CHANGED_FILES" | grep -q '^packages/types/'; then
-            echo "backend=true" >> $GITHUB_OUTPUT
-            echo "frontend=true" >> $GITHUB_OUTPUT
-            echo "executor=true" >> $GITHUB_OUTPUT
-            echo "ai_builder=true" >> $GITHUB_OUTPUT
+            mark backend true; mark frontend true; mark worker true
           fi
-          if echo "$CHANGED_FILES" | grep -q '^packages/redis/'; then
-            echo "backend=true" >> $GITHUB_OUTPUT
-            echo "executor=true" >> $GITHUB_OUTPUT
-          fi
-          if echo "$CHANGED_FILES" | grep -q '^packages/plan-guards/'; then
-            echo "backend=true" >> $GITHUB_OUTPUT
-            echo "ai_builder=true" >> $GITHUB_OUTPUT
-          fi
-          if echo "$CHANGED_FILES" | grep -q '^packages/node-registry/'; then
-            echo "executor=true" >> $GITHUB_OUTPUT
-            echo "ai_builder=true" >> $GITHUB_OUTPUT
-            echo "frontend=true" >> $GITHUB_OUTPUT
-          fi
-          if echo "$CHANGED_FILES" | grep -q '^packages/market/'; then
-            echo "executor=true" >> $GITHUB_OUTPUT
-          fi
-          if echo "$CHANGED_FILES" | grep -q '^packages/lighter-sdk-ts/'; then
-            echo "executor=true" >> $GITHUB_OUTPUT
-          fi
-          # packages/ui, packages/eslint-config, packages/typescript-config
-          # are not consumed by any service — changes there intentionally skipped
+          # packages/ui, packages/eslint-config, packages/typescript-config are
+          # not consumed by any service — changes there intentionally skipped.
 
       - name: Save Changed Services
         run: |
           mkdir -p changed
-
           echo '${{ steps.filter.outputs.backend }}' > changed/backend
           echo '${{ steps.filter.outputs.frontend }}' > changed/frontend
           echo '${{ steps.filter.outputs.worker }}' > changed/worker
@@ -180,6 +146,76 @@ jobs:
         with:
           name: changed-services
           path: changed/
+
+  test-backend:
+    name: Backend Tests
+    runs-on: ubuntu-latest
+    needs: quality
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: hive_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/hive_test
+      ACCESS_TOKEN_SECRET: __ci_only_secret_at_least_32_chars_000000
+      GITHUB_CLIENT_ID: ci-client-id
+      GITHUB_CLIENT_SECRET: ci-client-secret
+      GITHUB_WEBHOOK_SECRET: ci-webhook-secret
+      GITHUB_TOKEN_ENCRYPTION_KEY: __ci_encryption_key_00000000
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Cache Bun Dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.bun/install/cache
+            node_modules
+            .turbo
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+
+      - name: Install Dependencies
+        run: bun install
+
+      - name: Generate Prisma Client
+        run: bun --cwd packages/db run generate
+
+      - name: Apply Migrations
+        run: bun --cwd packages/db run db:deploy
+
+      - name: Run Backend Tests
+        run: bun --cwd apps/backend test
 
   docker-build:
     name: Docker Build & Push
@@ -199,17 +235,17 @@ jobs:
       matrix:
         include:
           - service: backend
-            dockerfile: docker/Dockerfile.backend
+            dockerfile: docker/backend.dockerfile
             image: hive-backend
             changed: ${{ needs.detect-changes.outputs.backend }}
 
           - service: frontend
-            dockerfile: docker/Dockerfile.frontend
+            dockerfile: docker/frontend.dockerfile
             image: hive-frontend
             changed: ${{ needs.detect-changes.outputs.frontend }}
 
           - service: worker
-            dockerfile: docker/Dockerfile.worker
+            dockerfile: docker/worker.dockerfile
             image: hive-worker
             changed: ${{ needs.detect-changes.outputs.worker }}
 

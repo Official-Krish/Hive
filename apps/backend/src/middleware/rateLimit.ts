@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { TooManyRequestsError } from "../core/errors";
+import { env } from "../config/env";
 
 /**
  * A small, dependency-free, in-memory sliding-window rate limiter.
@@ -93,6 +94,10 @@ export function rateLimit(
   }
 
   return (req, res, next) => {
+    // Rate limits are enforced in production/dev; bypassed under `bun test`
+    // so the suite can create many short-lived users/workspaces per run.
+    if (env.NODE_ENV === "test") return next();
+
     if (skip?.(req, res)) return next();
 
     const key = keyBy(req, res);
