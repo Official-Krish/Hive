@@ -22,7 +22,7 @@ spec:
     spec:
       containers:
         - name: hive-frontend
-          image: krishanand01/hive-frontend:v1.0.2
+          image: krishanand01/hive-frontend:v8ff705d37bf17194cb68e13ef03c32738831481d
           ports:
             - containerPort: 80
           livenessProbe:
@@ -71,7 +71,7 @@ spec:
     spec:
       containers:
         - name: hive-backend
-          image: krishanand01/hive-backend:v1.0.0
+          image: krishanand01/hive-backend:v8ff705d37bf17194cb68e13ef03c32738831481d
           ports:
             - containerPort: 3000
             - containerPort: 4001
@@ -137,7 +137,7 @@ spec:
     spec:
       containers:
         - name: hive-worker
-          image: krishanand01/hive-worker:v1.0.0
+          image: krishanand01/hive-worker:v8ff705d37bf17194cb68e13ef03c32738831481d
           resources:
             requests:
               cpu: "5m"
