@@ -7,6 +7,7 @@ import {
 } from "@hive/types";
 import { requireAuth } from "../../middleware/authenticate";
 import { requireOrgMember, requireOrgRole } from "../../middleware/org";
+import { writesLimiter } from "../../middleware/rateLimits";
 import { validateBody } from "../../middleware/validate";
 import { TeamController } from "./teams.controller";
 
@@ -15,6 +16,7 @@ const controller = new TeamController();
 export const teamsRouter = Router();
 
 teamsRouter.use(requireAuth());
+teamsRouter.use(writesLimiter);
 
 const member = requireOrgMember();
 

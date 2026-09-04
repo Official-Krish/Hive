@@ -12,16 +12,17 @@ datasource db {
 
 
 model User {
-  id              String    @id @default(cuid())
-  email           String    @unique
+  id              String      @id @default(cuid())
+  email           String      @unique
   passwordHash    String?
   name            String
   avatarUrl       String?
   mapAvatarModel  String?
   emailVerifiedAt DateTime?
   lastLoginAt     DateTime?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  globalRole      GlobalRole  @default(USER)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
 
   memberships             OrganizationMember[]
   workspaceMembers        WorkspaceMember[]
@@ -860,6 +861,11 @@ enum UserRole {
   DEVELOPER
   MEMBER
   VIEWER
+}
+
+enum GlobalRole {
+  USER
+  ADMIN
 }
 
 enum MembershipStatus {

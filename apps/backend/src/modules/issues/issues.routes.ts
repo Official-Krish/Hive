@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { issueFilterSchema } from "@hive/types";
 import { requireAuth } from "../../middleware/authenticate";
+import { readsLimiter, writesLimiter } from "../../middleware/rateLimits";
 import { validateQuery } from "../../middleware/validate";
 import { requireWorkspaceMember } from "../../middleware/workspace";
 import { IssuesController } from "./issues.controller";
@@ -10,6 +11,7 @@ const controller = new IssuesController();
 export const issuesRouter = Router();
 
 issuesRouter.use(requireAuth());
+issuesRouter.use(readsLimiter, writesLimiter);
 
 const member = requireWorkspaceMember();
 

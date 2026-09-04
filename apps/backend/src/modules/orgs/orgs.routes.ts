@@ -2,6 +2,7 @@ import { Router } from "express";
 import { updateOrgInputSchema, updateOrgMemberRoleSchema } from "@hive/types";
 import { requireAuth } from "../../middleware/authenticate";
 import { requireOrgMember, requireOrgRole } from "../../middleware/org";
+import { writesLimiter } from "../../middleware/rateLimits";
 import { validateBody } from "../../middleware/validate";
 import { OrgController } from "./orgs.controller";
 
@@ -10,6 +11,7 @@ const controller = new OrgController();
 export const orgsRouter = Router();
 
 orgsRouter.use(requireAuth());
+orgsRouter.use(writesLimiter);
 
 const member = requireOrgMember();
 

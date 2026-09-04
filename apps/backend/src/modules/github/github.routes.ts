@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { githubTokenSchema } from "@hive/types";
 import { requireAuth } from "../../middleware/authenticate";
+import { githubTokenLimiter } from "../../middleware/rateLimits";
 import {
   requireWorkspaceMember,
   requireWorkspaceRole,
@@ -19,6 +20,7 @@ githubRouter.get("/auth/callback", controller.callback);
 githubRouter.get("/callback", controller.callback);
 githubRouter.post(
   "/auth/token",
+  githubTokenLimiter,
   validateBody(githubTokenSchema),
   controller.exchangeToken,
 );

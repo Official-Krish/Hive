@@ -9,6 +9,7 @@ import {
   updateWorkspaceInputSchema,
 } from "@hive/types";
 import { requireAuth } from "../../middleware/authenticate";
+import { writesLimiter } from "../../middleware/rateLimits";
 import { validateBody } from "../../middleware/validate";
 import {
   requireWorkspaceMember,
@@ -23,6 +24,7 @@ const livekitController = new LivekitController();
 export const workspacesRouter = Router();
 
 workspacesRouter.use(requireAuth());
+workspacesRouter.use(writesLimiter);
 
 workspacesRouter.get("/", controller.list);
 workspacesRouter.post(
@@ -133,6 +135,7 @@ workspacesRouter.post(
 
 export const invitesRouter = Router();
 invitesRouter.use(requireAuth());
+invitesRouter.use(writesLimiter);
 invitesRouter.get("/", controller.listReceived);
 invitesRouter.post("/id/:inviteId/accept", controller.acceptById);
 invitesRouter.post("/:token/accept", controller.accept);

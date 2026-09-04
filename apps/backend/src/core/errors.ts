@@ -62,6 +62,29 @@ export class DeviceOfflineError extends AppError {
   }
 }
 
+/** Raised when a request exceeds its rate-limit budget. */
+export class TooManyRequestsError extends AppError {
+  constructor(
+    message = "Too many requests — slow down",
+    public readonly retryAfterMs?: number,
+    details?: unknown,
+  ) {
+    super(429, "RATE_LIMITED", message, details);
+  }
+}
+
+/** Raised when a user hits the owned-workspace creation cap. */
+export class WorkspaceLimitError extends AppError {
+  constructor(limit = 3) {
+    super(
+      403,
+      "WORKSPACE_LIMIT",
+      `Workspace limit reached (${limit} out of ${limit})`,
+      { limit },
+    );
+  }
+}
+
 /**
  * Raised when GitHub login succeeds but the user has no Hive account yet.
  * Accounts are created through the web app first; the collector login only

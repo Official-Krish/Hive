@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { updatePrivacySettingSchema } from "@hive/types";
 import { requireAuth } from "../../middleware/authenticate";
+import { writesLimiter } from "../../middleware/rateLimits";
 import { validateBody } from "../../middleware/validate";
 import {
   requireWorkspaceMember,
@@ -13,6 +14,7 @@ const controller = new PrivacyController();
 export const privacyRouter = Router();
 
 privacyRouter.use(requireAuth());
+privacyRouter.use(writesLimiter);
 
 const member = requireWorkspaceMember();
 

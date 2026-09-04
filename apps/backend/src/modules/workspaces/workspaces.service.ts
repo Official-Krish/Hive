@@ -1,4 +1,4 @@
-import { prisma, RepositoryProvider, UserRole } from "@hive/db";
+import { GlobalRole, prisma, RepositoryProvider, UserRole } from "@hive/db";
 import type {
   CreateGithubInviteInput,
   CreateInviteInput,
@@ -17,6 +17,7 @@ import {
   ConflictError,
   ForbiddenError,
   NotFoundError,
+  WorkspaceLimitError,
 } from "../../core/errors";
 import { env } from "../../config/env";
 import { generateRandomToken, hashToken } from "../../lib/crypto";
@@ -31,6 +32,7 @@ import {
 } from "../../middleware/workspace";
 
 const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const MAX_OWNED_WORKSPACES = 3;
 
 type WorkspaceWithCount = {
   id: string;
@@ -88,6 +90,8 @@ export class WorkspaceService {
     userId: string,
     input: CreateWorkspaceInput,
   ): Promise<WorkspaceSummary> {
+    await this.assertCanCreate(userId);
+
     const orgId = await this.primaryOrgId(userId);
     const slug = await this.uniqueWorkspaceSlug(
       orgId,
@@ -701,6 +705,21 @@ export class WorkspaceService {
       memberCount: workspace._count.members,
       createdAt: workspace.createdAt.toISOString(),
     };
+  }
+
+  private async assertCanCreate(userId: string): Promise<void> {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { globalRole: true },
+    });
+    if (!user || user.globalRole === GlobalRole.ADMIN) return;
+
+    const owned = await prisma.workspaceMember.count({
+      where: { userId, role: UserRole.OWNER },
+    });
+    if (owned >= MAX_OWNED_WORKSPACES) {
+      throw new WorkspaceLimitError(MAX_OWNED_WORKSPACES);
+    }
   }
 
   private async primaryOrgId(userId: string): Promise<string> {

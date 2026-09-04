@@ -7,6 +7,7 @@ import { csrfProtect } from "./middleware/csrfProtect";
 import { errorHandler } from "./middleware/errorHandler";
 import { notFound } from "./middleware/notFound";
 import { requestContext } from "./middleware/requestContext";
+import { globalLimiter, githubWebhookLimiter } from "./middleware/rateLimits";
 import { authRouter } from "./modules/auth/auth.routes";
 import { devicesRouter } from "./modules/devices/devices.routes";
 import { ingestRouter } from "./modules/ingest/ingest.routes";
@@ -47,11 +48,16 @@ export function createApp() {
   app.use(
     "/api/v1/github/webhooks",
     express.raw({ type: "*/*" }),
+    githubWebhookLimiter,
     githubWebhookRouter,
   );
   app.use(csrfProtect());
   app.use(express.json({ limit: "1mb" }));
   app.use(cookieParser());
+
+  // Whole-API rate-limit safety net (per peer IP). Route-specific budgets are
+  // applied inside individual routers after identity is resolved.
+  app.use("/api/v1", globalLimiter);
 
   app.use("/api/v1/health", healthRouter);
   app.use("/api/v1/auth", authRouter);

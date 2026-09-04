@@ -11,6 +11,11 @@ import {
 import { requireAuth } from "../../middleware/authenticate";
 import { validateQuery } from "../../middleware/validate";
 import {
+  readsLimiter,
+  readsWorkspaceLimiter,
+  writesLimiter,
+} from "../../middleware/rateLimits";
+import {
   requireWorkspaceMember,
   requireWorkspaceRole,
 } from "../../middleware/workspace";
@@ -21,8 +26,14 @@ const controller = new ReadsController();
 export const readsRouter = Router();
 
 readsRouter.use(requireAuth());
+// Per-user read budget for the whole reads router (auth is set above), and a
+// per-user writes budget that skips GET/HEAD.
+readsRouter.use(readsLimiter, writesLimiter);
 
 const member = requireWorkspaceMember();
+// Per-workspace read cap — run after membership resolves so the workspace key
+// is known for every read route.
+readsRouter.use("/:workspaceId", member, readsWorkspaceLimiter);
 
 readsRouter.get("/:workspaceId/map", member, controller.map);
 readsRouter.get(
@@ -106,5 +117,5 @@ readsRouter.get(
 
 // Workspace-agnostic reads (still require a valid session).
 export const modelsRouter = Router();
-modelsRouter.use(requireAuth());
+modelsRouter.use(requireAuth(), readsLimiter);
 modelsRouter.get("/", controller.listModels);

@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import type { Server } from "node:http";
 import { randomInt } from "node:crypto";
-import { prisma, RepositoryProvider } from "@hive/db";
+import { prisma, GlobalRole, RepositoryProvider } from "@hive/db";
 import { makeClient, startServer, stopServer, uniqueEmail } from "./helpers";
 import type { TestClient } from "./helpers";
 import { encryptSecret } from "../src/lib/encryption";
@@ -101,6 +101,107 @@ describe("workspace create + list", () => {
 
     const res = await c.api(`/api/v1/workspaces/${id}`);
     expect(res.status).toBe(403);
+  });
+});
+
+describe("workspace creation limit", () => {
+  const LIMIT = 3;
+
+  async function setGlobalRole(email: string, role: keyof typeof GlobalRole) {
+    await prisma.user.update({
+      where: { email },
+      data: { globalRole: GlobalRole[role] },
+    });
+  }
+
+  test("a normal user can own up to 3 workspaces, the 4th is rejected", async () => {
+    c.clearJar();
+    const email = await c.registerUser();
+
+    for (let i = 0; i < LIMIT; i++) {
+      const res = await c.api("/api/v1/workspaces", {
+        method: "POST",
+        body: { name: `limit-${i}` },
+      });
+      expect(res.status, await res.clone().text()).toBe(201);
+    }
+
+    const over = await c.api("/api/v1/workspaces", {
+      method: "POST",
+      body: { name: "limit-too-many" },
+    });
+    expect(over.status).toBe(403);
+    const body = await c.asJson<{ error: { code: string; details?: unknown } }>(
+      over,
+    );
+    expect(body.error.code).toBe("WORKSPACE_LIMIT");
+    expect(body.error.details).toEqual({ limit: LIMIT });
+
+    // Cleanup so subsequent tests aren't affected by shared-DB ownership count.
+    const memberships = await prisma.workspaceMember.findMany({
+      where: { user: { email }, role: "OWNER" },
+      select: { workspaceId: true },
+    });
+    await prisma.workspace.deleteMany({
+      where: { id: { in: memberships.map((m) => m.workspaceId) } },
+    });
+  });
+
+  test("deleting a workspace frees up a creation slot", async () => {
+    c.clearJar();
+    const email = await c.registerUser();
+    const ids: string[] = [];
+    for (let i = 0; i < LIMIT; i++) {
+      const res = await c.api("/api/v1/workspaces", {
+        method: "POST",
+        body: { name: `slot-${i}` },
+      });
+      ids.push((await c.asJson<{ data: { id: string } }>(res)).data.id);
+    }
+
+    const del = await c.api(`/api/v1/workspaces/${ids[0]}`, {
+      method: "DELETE",
+    });
+    expect(del.status).toBe(204);
+
+    const again = await c.api("/api/v1/workspaces", {
+      method: "POST",
+      body: { name: "slot-freed" },
+    });
+    expect(again.status, await again.clone().text()).toBe(201);
+
+    // Cleanup: delete the remaining owned workspaces for this user so the
+    // shared dev DB's ownership counts stay balanced for later tests.
+    const owned = await prisma.workspaceMember.findMany({
+      where: { user: { email }, role: "OWNER" },
+      select: { workspaceId: true },
+    });
+    await prisma.workspace.deleteMany({
+      where: { id: { in: owned.map((m) => m.workspaceId) } },
+    });
+  });
+
+  test("an admin user is not subject to the limit", async () => {
+    c.clearJar();
+    const email = await c.registerUser();
+    await setGlobalRole(email, "ADMIN");
+
+    for (let i = 0; i <= LIMIT; i++) {
+      const res = await c.api("/api/v1/workspaces", {
+        method: "POST",
+        body: { name: `admin-ws-${i}` },
+      });
+      expect(res.status, await res.clone().text()).toBe(201);
+    }
+
+    // Cleanup.
+    const memberships = await prisma.workspaceMember.findMany({
+      where: { user: { email }, role: "OWNER" },
+      select: { workspaceId: true },
+    });
+    await prisma.workspace.deleteMany({
+      where: { id: { in: memberships.map((m) => m.workspaceId) } },
+    });
   });
 });
 
