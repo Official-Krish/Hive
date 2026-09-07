@@ -1200,7 +1200,6 @@ export function WorldCanvas({
           stepUp={STEP_UP}
           onRealtimeMove={handleRealtimeMove}
           coffee={coffeeActive}
-          hidden={workspaceOpen || whiteboardId !== null}
         />
 
         <RemoteAvatars

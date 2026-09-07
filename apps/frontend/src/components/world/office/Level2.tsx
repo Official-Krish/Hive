@@ -107,7 +107,12 @@ function GlazingBatch({ walls }: { walls: Wall[] }) {
     <>
       {groups.map(([items, mat], gi) =>
         items.length === 0 ? null : (
-          <Instances key={gi} range={items.length} limit={items.length}>
+          <Instances
+            key={gi}
+            frustumCulled={false}
+            range={items.length}
+            limit={items.length}
+          >
             <boxGeometry args={[1, 1, 1]} />
             <primitive object={mat} attach="material" />
             {items.map((p, i) => (
@@ -451,7 +456,7 @@ export function Level2() {
       </group>
 
       {/* Slatted acoustic screens between the open bays */}
-      <Instances range={40} limit={40} castShadow>
+      <Instances frustumCulled={false} range={40} limit={40} castShadow>
         <boxGeometry args={[0.06, 1.35, 0.09]} />
         <primitive object={M.slat} attach="material" />
         {Array.from({ length: 40 }, (_, i) => {

@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useMemo,
   useRef,
   useState,
   type MutableRefObject,
@@ -8,6 +9,7 @@ import {
 import { useFBX, useGLTF, Html } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
+import * as SkeletonUtils from "three/examples/jsm/utils/SkeletonUtils.js";
 import { ASSET_BASE_URL } from "../../lib/config";
 
 /** Uniform scale applied to every avatar GLB. */
@@ -63,6 +65,8 @@ export default function Avatar({
   const runFBX = useFBX(`${ASSET_BASE_URL}/Animations/run.fbx`);
   const jumpFBX = useFBX(`${ASSET_BASE_URL}/Animations/jump.fbx`);
 
+  const clonedScene = useMemo(() => SkeletonUtils.clone(scene), [scene]);
+
   const mixerRef = useRef<THREE.AnimationMixer | null>(null);
   const actionsRef = useRef<{
     idle?: THREE.AnimationAction;
@@ -85,7 +89,7 @@ export default function Avatar({
   // --- Retarget FBX clips onto the GLB skeleton --------------------------------
   useEffect(() => {
     let skinnedMesh: THREE.SkinnedMesh | null = null;
-    scene.traverse((obj) => {
+    clonedScene.traverse((obj) => {
       if (obj instanceof THREE.SkinnedMesh) skinnedMesh = obj;
       // Shadows aren't inherited by children of <primitive>, so set them here.
       const m = obj as THREE.Mesh;
@@ -93,7 +97,7 @@ export default function Avatar({
         m.castShadow = true;
         m.receiveShadow = false;
         if (m.geometry) m.geometry.computeBoundingSphere();
-        m.frustumCulled = true;
+        m.frustumCulled = false;
       }
     });
     if (!skinnedMesh) return;
@@ -102,9 +106,9 @@ export default function Avatar({
     // Measure the rendered height so the nameplate clears the head. The box is
     // taken in the parent's space (scale already applied by the prop below), and
     // feet sit at y=0, so max.y is the head height directly.
-    scene.scale.setScalar(SCALE);
-    scene.updateWorldMatrix(true, true);
-    const bounds = new THREE.Box3().setFromObject(scene);
+    clonedScene.scale.setScalar(SCALE);
+    clonedScene.updateWorldMatrix(true, true);
+    const bounds = new THREE.Box3().setFromObject(clonedScene);
     if (Number.isFinite(bounds.max.y)) {
       setLabelY(bounds.max.y + 0.22);
     }
@@ -151,7 +155,7 @@ export default function Avatar({
     const runClip = prepareClip("Run", runFBX);
     const jumpClip = prepareClip("Jump", jumpFBX);
 
-    const mixer = new THREE.AnimationMixer(scene);
+    const mixer = new THREE.AnimationMixer(clonedScene);
     mixerRef.current = mixer;
 
     const actions: typeof actionsRef.current = {};
@@ -185,10 +189,10 @@ export default function Avatar({
     return () => {
       mixer.removeEventListener("finished", onFinished);
       mixer.stopAllAction();
-      mixer.uncacheRoot(scene);
+      mixer.uncacheRoot(clonedScene);
       mixerRef.current = null;
     };
-  }, [scene, idleFBX, runFBX, jumpFBX]);
+  }, [clonedScene, idleFBX, runFBX, jumpFBX]);
 
   // --- Legacy crossfade for static avatars (no motionRef) ----------------------
   useEffect(() => {
@@ -256,7 +260,7 @@ export default function Avatar({
 
   return (
     <group {...groupProps}>
-      <primitive object={scene} scale={SCALE} />
+      <primitive object={clonedScene} scale={SCALE} />
 
       {/* Minimal nameplate floating just above the head. No distanceFactor:
           the label keeps a constant, legible screen size at every zoom level. */}
