@@ -7,8 +7,8 @@ import { INTERACTABLES, type Interactable } from "./interactions";
 /* ─────────────────────────────────────────────────────────────
    MARKERS — soft floor rings + icon billboards over usable things.
    Driven by the existing INTERACTABLES registry (no new data).
-   Desk monitors are skipped — sixty rings would be noise; they keep
-   the HUD prompt + target highlight only.
+   Desk monitors get subtle proximity dots (nearest few within 5m);
+   everything else keeps the full ring + icon within 8m.
    ───────────────────────────────────────────────────────────── */
 
 const RING_COLOR: Record<Interactable["icon"], string> = {
@@ -22,6 +22,8 @@ const RING_COLOR: Record<Interactable["icon"], string> = {
 };
 
 const RANGE = 8;
+const DESK_DOT_RANGE = 5;
+const DESK_DOT_MAX = 3;
 
 function drawGlyph(ctx: CanvasRenderingContext2D, icon: Interactable["icon"]) {
   ctx.strokeStyle = "#ffffff";
@@ -109,12 +111,14 @@ function iconTexture(icon: Interactable["icon"]): THREE.CanvasTexture {
   const hit = iconCache.get(icon);
   if (hit) return hit;
   const el = document.createElement("canvas");
-  el.width = 128;
-  el.height = 128;
-  drawGlyph(el.getContext("2d")!, icon);
+  el.width = 256;
+  el.height = 256;
+  const c = el.getContext("2d")!;
+  c.scale(2, 2); // glyph paths are authored in 128-space
+  drawGlyph(c, icon);
   const tex = new THREE.CanvasTexture(el);
   tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = 4;
+  tex.anisotropy = 8;
   iconCache.set(icon, tex);
   return tex;
 }
@@ -183,6 +187,72 @@ function MarkerSpot({
   );
 }
 
+/** Subtle proximity dots for the nearest desks — discoverability without noise. */
+function DeskDots({
+  playerPos,
+  nearId,
+}: {
+  playerPos: [number, number, number];
+  nearId: string | null;
+}) {
+  const group = useRef<THREE.Group>(null);
+  const dots = useMemo(
+    () => INTERACTABLES.filter((s) => s.kind === "monitor"),
+    [],
+  );
+
+  useFrame(() => {
+    const g = group.current;
+    if (!g) return;
+    // pick the nearest few on the player's level
+    const ranked = dots
+      .map((s) => {
+        const dx = playerPos[0] - s.x;
+        const dz = playerPos[2] - s.z;
+        const dy = Math.abs(playerPos[1] - s.y);
+        return { s, d2: dx * dx + dz * dz, dy };
+      })
+      .filter((r) => r.dy < 1.2 && r.d2 < DESK_DOT_RANGE * DESK_DOT_RANGE)
+      .sort((a, b) => a.d2 - b.d2)
+      .slice(0, DESK_DOT_MAX);
+    const ids = new Set(ranked.map((r) => r.s.id));
+    if (nearId) ids.add(nearId);
+    g.children.forEach((child) => {
+      const id = child.userData.spotId as string | undefined;
+      const hit = ranked.find((r) => r.s.id === id);
+      child.visible = !!id && ids.has(id);
+      if (!hit || !id) return;
+      const targeted = nearId === id;
+      const closeness = 1 - Math.sqrt(hit.d2) / DESK_DOT_RANGE;
+      child.scale.setScalar(targeted ? 1.5 : 0.8 + closeness * 0.5);
+    });
+  });
+
+  return (
+    <group ref={group}>
+      {dots.map((s) => (
+        <group
+          key={s.id}
+          userData={{ spotId: s.id }}
+          position={[s.x, s.y, s.z]}
+          visible={false}
+        >
+          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.035, 0]}>
+            <ringGeometry args={[0.16, 0.24, 24]} />
+            <meshBasicMaterial
+              color={RING_COLOR.monitor}
+              transparent
+              opacity={nearId === s.id ? 1 : 0.55}
+              toneMapped={false}
+              depthWrite={false}
+            />
+          </mesh>
+        </group>
+      ))}
+    </group>
+  );
+}
+
 export function Markers({
   playerPos,
   nearId,
@@ -211,6 +281,7 @@ export function Markers({
           reducedMotion={reducedMotion}
         />
       ))}
+      <DeskDots playerPos={playerPos} nearId={nearId} />
     </group>
   );
 }

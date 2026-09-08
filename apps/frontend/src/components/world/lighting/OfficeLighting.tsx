@@ -17,7 +17,7 @@ export function OfficeLighting() {
   return (
     <>
       {/* Atmospheric depth for the courtyard / skyline */}
-      <fogExp2 attach="fog" args={["#cdd8e3", 0.0045]} />
+      <fogExp2 attach="fog" args={["#cdd8e3", 0.0028]} />
 
       {/* Baked-once environment (IBL fill + reflections), no network fetch */}
       <Environment resolution={192} frames={1}>
@@ -71,15 +71,15 @@ export function OfficeLighting() {
       <ambientLight intensity={0.28} />
       <hemisphereLight args={["#bcd3ff", "#2c2820", 0.55]} />
 
-      {/* Sun — the only shadow caster (2k map over the 140m span) */}
+      {/* Sun — the only shadow caster (1k map: soft/cheap over the 140m span) */}
       <directionalLight
         position={SUN}
         intensity={2.75}
         color="#fff4e2"
         castShadow
-        shadow-mapSize={[2048, 2048]}
+        shadow-mapSize={[1024, 1024]}
         shadow-bias={-0.0004}
-        shadow-normalBias={0.02}
+        shadow-normalBias={0.03}
       >
         <orthographicCamera
           attach="shadow-camera"
@@ -124,10 +124,10 @@ export function OfficeLighting() {
       <ContactShadows
         position={[cx, 0.02, cz]}
         scale={Math.max(maxX - minX, maxZ - minZ) + 6}
-        resolution={512}
+        resolution={256}
         frames={1}
         far={3.2}
-        blur={2.0}
+        blur={1.6}
         opacity={0.4}
         color="#1a1712"
       />

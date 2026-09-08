@@ -318,25 +318,7 @@ export interface Pod {
 }
 
 export const PODS: Pod[] = [
-  // --- Level 1: pair programming rooms in the lounge, focus rooms off the meeting wing
-  {
-    id: "pair-1",
-    name: "Pair Programming A",
-    level: 1,
-    rect: [-33.4, -28.6, -8.4, -4.8],
-    door: { side: "e", at: -6.6, width: 1.1 },
-    kind: "pair",
-    accent: "#6366f1",
-  },
-  {
-    id: "pair-2",
-    name: "Pair Programming B",
-    level: 1,
-    rect: [-33.4, -28.6, -4.4, -0.8],
-    door: { side: "e", at: -2.6, width: 1.1 },
-    kind: "pair",
-    accent: "#6366f1",
-  },
+  // --- Level 1: focus rooms off the meeting wing
   {
     id: "focus-1",
     name: "Focus 1",
@@ -596,7 +578,21 @@ export function roomAt(x: number, z: number, y = 0): string {
     const [x0, x1, z0, z1] = r.rect;
     if (x >= x0 && x <= x1 && z >= z0 && z <= z1) return r.name;
   }
-  return "Hive Campus";
+  // Gap between zones (doorways, atrium edges) — return the nearest room so
+  // the HUD never says a bare "Hive Campus" that reads as lost.
+  let best: string | null = null;
+  let bestD2 = Infinity;
+  for (const r of level === 2 ? ROOMS_L2 : ROOMS) {
+    const [x0, x1, z0, z1] = r.rect;
+    const cx = Math.max(x0, Math.min(x1, x));
+    const cz = Math.max(z0, Math.min(z1, z));
+    const d2 = (x - cx) * (x - cx) + (z - cz) * (z - cz);
+    if (d2 < bestD2) {
+      bestD2 = d2;
+      best = r.name;
+    }
+  }
+  return best ?? "Hive Campus";
 }
 
 /** Maps a room name (from `roomAt`) to its pod kind, if any. */
@@ -720,9 +716,11 @@ export const RUGS: [number, number, number, number][] = [
 ];
 
 // --- Chill Space / Play Area (carved from the lounge south-east) -------------
-/** The big shared screen on the chill-space south wall (faces +Z into the room). */
+/** The big shared screen on the chill-space north wall (faces +Z into the room).
+ *  Sits just off the wall's inner face (-19.8) so neither the bezel nor the
+ *  YouTube projection plane ends up buried in the masonry. */
 export const CHILL_SCREEN: WallPanel = {
-  position: [-14, 2.4, -20],
+  position: [-14, 2.4, -19.72],
   rotation: [0, 0, 0],
   size: [5.6, 3.1],
   variant: "b",
@@ -783,59 +781,63 @@ export interface WallPanel {
   position: Vec3;
   rotation: Vec3;
   size: [number, number]; // width, height
-  variant: "a" | "b" | "c";
+  // a: build chart · b: agenda · c: pipeline · d: gpu heatmap · e: menu · f: logs
+  variant: "a" | "b" | "c" | "d" | "e" | "f";
 }
 
 export const TV_PANELS: WallPanel[] = [
-  // Reception video wall (faces the entrance, +Z)
+  // Reception video wall (faces the entrance, +Z) — off the feature-wall face (17.9)
+  // Lowered so the brand hexes (y≈3.35) clear the top of the bezel.
   {
-    position: [10.5, 1.95, 17.72],
+    position: [10.5, 1.75, 17.83],
     rotation: [0, 0, 0],
     size: [6, 2.7],
     variant: "a",
   },
   // Meeting rooms — screen on the north end wall, facing +Z into the room
+  // (wall face at -7.87, bezel half-depth 0.035 + 0.03 gap)
   {
-    position: [11.5, 1.7, -7.7],
+    position: [11.5, 1.7, -7.8],
     rotation: [0, 0, 0],
     size: [3.4, 1.9],
     variant: "b",
   },
   {
-    position: [26.5, 1.7, -7.7],
+    position: [26.5, 1.7, -7.8],
     rotation: [0, 0, 0],
     size: [3.4, 1.9],
     variant: "c",
   },
-  // AI lab mission-control wall on the north exterior wall
+  // AI lab mission-control wall on the north exterior wall (inner face -19.8)
+  // Three distinct feeds so the wall reads as mission control, not wallpaper.
   {
-    position: [11, 2.25, -19.6],
+    position: [11, 2.25, -19.73],
     rotation: [0, 0, 0],
     size: [4.2, 2.3],
-    variant: "c",
+    variant: "d",
   },
   {
-    position: [17.5, 2.25, -19.6],
+    position: [17.5, 2.25, -19.73],
     rotation: [0, 0, 0],
     size: [4.2, 2.3],
     variant: "a",
   },
   {
-    position: [24, 2.25, -19.6],
+    position: [24, 2.25, -19.73],
     rotation: [0, 0, 0],
     size: [4.2, 2.3],
-    variant: "b",
+    variant: "f",
   },
-  // Cafeteria
+  // Cafeteria (divider south face at 2.13)
   {
-    position: [29, 2.05, 2.25],
+    position: [29, 2.05, 2.2],
     rotation: [0, 0, 0],
     size: [2.9, 1.7],
-    variant: "a",
+    variant: "e",
   },
-  // Workspace: west wall + divider
+  // Workspace: west wall (inner face -33.8) + divider (face 0.13, already flush)
   {
-    position: [-33.65, 1.95, 6],
+    position: [-33.73, 1.95, 6],
     rotation: [0, Math.PI / 2, 0],
     size: [3.2, 1.8],
     variant: "b",
@@ -846,9 +848,9 @@ export const TV_PANELS: WallPanel[] = [
     size: [3, 1.7],
     variant: "c",
   },
-  // Lounge
+  // Lounge (west wall inner face -33.8)
   {
-    position: [-33.65, 1.85, -10],
+    position: [-33.73, 1.85, -10],
     rotation: [0, Math.PI / 2, 0],
     size: [3.4, 1.9],
     variant: "a",
@@ -856,26 +858,28 @@ export const TV_PANELS: WallPanel[] = [
 ];
 
 export const WHITEBOARDS: WallPanel[] = [
+  // Meeting divider north face is at 1.87 — bezel sits just off it, facing -Z.
   {
-    position: [11.5, 1.65, 1.78],
+    position: [11.5, 1.65, 1.81],
     rotation: [0, Math.PI, 0],
     size: [3.2, 1.7],
     variant: "a",
   },
   {
-    position: [26.5, 1.65, 1.78],
+    position: [26.5, 1.65, 1.81],
     rotation: [0, Math.PI, 0],
     size: [3.2, 1.7],
     variant: "a",
   },
+  // Corridor west wall, west face at -4.13 — boards face west into the rooms.
   {
-    position: [-4.25, 1.65, 10],
+    position: [-4.19, 1.65, 10],
     rotation: [0, -Math.PI / 2, 0],
     size: [3, 1.6],
     variant: "a",
   },
   {
-    position: [-4.25, 1.65, -13],
+    position: [-4.19, 1.65, -13],
     rotation: [0, -Math.PI / 2, 0],
     size: [3, 1.6],
     variant: "a",
@@ -910,11 +914,11 @@ export const ROOM_SIGNS: RoomSign[] = [
     label: "Cafeteria",
   }, // cafeteria
   {
-    position: [3.8, 2.45, -3.6],
+    position: [3.91, 2.45, -3.6],
     rotation: [0, -Math.PI / 2, 0],
     accent: "#34d399",
     label: "Meeting Rooms",
-  }, // meeting
+  }, // meeting (glazed partition — visual face at 3.97)
   {
     position: [3.8, 2.45, -10.4],
     rotation: [0, -Math.PI / 2, 0],
@@ -928,17 +932,17 @@ export const ROOM_SIGNS: RoomSign[] = [
     label: "Reception",
   }, // lobby (east corridor wall segment z9-12)
   {
-    position: [-3.8, 6.75, 6],
+    position: [-3.92, 6.75, 6],
     rotation: [0, Math.PI / 2, 0],
     accent: "#818cf8",
     label: "Leadership",
-  }, // L2 west gallery (y = L2_Y + 2.45)
+  }, // L2 west gallery (y = L2_Y + 2.45, glass face at -3.975)
   {
-    position: [3.8, 6.75, 6],
+    position: [3.92, 6.75, 6],
     rotation: [0, -Math.PI / 2, 0],
     accent: "#22d3ee",
     label: "Executive",
-  }, // L2 east gallery (y = L2_Y + 2.45)
+  }, // L2 east gallery (y = L2_Y + 2.45, glass face at 3.975)
 ];
 
 // --- Acoustic ceiling baffles (workspace + lounge) --------------------------
@@ -1407,6 +1411,8 @@ export const SOLID_PROPS: AABB[] = [
   { min: [4.6, 17.9], max: [16.4, 18.5], y0: 0, y1: 3.6 },
   // Lobby directory totem (freestanding, west of the entrance path)
   { min: [-5.95, 19.4], max: [-5.05, 19.6], y0: 0, y1: 2 },
+  // Courtyard entrance totem (east of the runway, faces spawn)
+  { min: [5.55, 27.9], max: [6.45, 28.1], y0: 0, y1: 2 },
   // Cafeteria service counter
   { min: [6, 3], max: [9, 11], y0: 0, y1: 1.2 },
   // Coffee-bar island

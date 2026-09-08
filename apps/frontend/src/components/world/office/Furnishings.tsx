@@ -80,12 +80,16 @@ function PhoneBooth({
         </mesh>
       ))}
       {/* glazing on three sides (the fourth is the doorway) */}
-      <mesh position={[0, H / 2, -D / 2 + 0.03]}>
+      <mesh position={[0, H / 2, -D / 2 + 0.03]} renderOrder={20}>
         <boxGeometry args={[W - 0.1, H - 0.24, 0.03]} />
         <primitive object={M.glassCheap} attach="material" />
       </mesh>
       {[-1, 1].map((s) => (
-        <mesh key={s} position={[(s * W) / 2 - s * 0.03, H / 2, 0]}>
+        <mesh
+          key={s}
+          position={[(s * W) / 2 - s * 0.03, H / 2, 0]}
+          renderOrder={20}
+        >
           <boxGeometry args={[0.03, H - 0.24, D - 0.1]} />
           <primitive object={M.glassCheap} attach="material" />
         </mesh>
@@ -163,7 +167,7 @@ function WaterCooler({ x, z }: { x: number; z: number }) {
         <cylinderGeometry args={[0.15, 0.13, 0.07, 16]} />
         <primitive object={M.blackAnodized} attach="material" />
       </mesh>
-      <mesh position={[0, 1.75, 0]}>
+      <mesh position={[0, 1.75, 0]} renderOrder={20}>
         <cylinderGeometry args={[0.125, 0.125, 0.42, 16]} />
         <primitive object={M.glassCheap} attach="material" />
       </mesh>
@@ -212,7 +216,7 @@ export function Furnishings() {
           <primitive object={M.reception} attach="material" />
         </mesh>
         {/* Fluted timber front */}
-        <Instances range={26} limit={26} castShadow>
+        <Instances frustumCulled={false} range={26} limit={26} castShadow>
           <boxGeometry args={[0.2, 1.0, 0.12]} />
           <primitive object={M.oak} attach="material" />
           {Array.from({ length: 26 }, (_, i) => (
@@ -252,9 +256,9 @@ export function Furnishings() {
           <primitive object={M.featureWall} attach="material" />
         </mesh>
         {/* Brand hexes above the display */}
-        <HexLogo x={9.1} y={3.28} z={17.88} s={0.26} />
-        <HexLogo x={10.5} y={3.28} z={17.88} s={0.26} />
-        <HexLogo x={11.9} y={3.28} z={17.88} s={0.26} />
+        <HexLogo x={9.1} y={3.35} z={17.88} s={0.26} />
+        <HexLogo x={10.5} y={3.35} z={17.88} s={0.26} />
+        <HexLogo x={11.9} y={3.35} z={17.88} s={0.26} />
         {/* Wall-wash strip at the base */}
         <mesh position={[10.5, 0.06, 17.84]}>
           <boxGeometry args={[11.2, 0.05, 0.06]} />
@@ -304,12 +308,12 @@ export function Furnishings() {
           <primitive object={M.stoneCounter} attach="material" />
         </mesh>
         {/* Sneeze guard */}
-        <mesh position={[8.5, 1.55, 7]}>
+        <mesh position={[8.5, 1.55, 7]} renderOrder={20}>
           <boxGeometry args={[0.04, 0.75, 7.4]} />
           <primitive object={M.glassCheap} attach="material" />
         </mesh>
         {/* Food wells */}
-        <Instances range={5} limit={5}>
+        <Instances frustumCulled={false} range={5} limit={5}>
           <boxGeometry args={[1.4, 0.1, 1.1]} />
           <primitive object={M.metalBrushed} attach="material" />
           {[4.2, 5.6, 7, 8.4, 9.8].map((z, i) => (
@@ -374,6 +378,7 @@ export function Furnishings() {
 
       {/* Round dining tables */}
       <Instances
+        frustumCulled={false}
         range={CAFE_TABLES.length}
         limit={CAFE_TABLES.length}
         castShadow
@@ -385,7 +390,11 @@ export function Furnishings() {
           <Instance key={i} position={[t.position[0], 0.74, t.position[2]]} />
         ))}
       </Instances>
-      <Instances range={CAFE_TABLES.length} limit={CAFE_TABLES.length}>
+      <Instances
+        frustumCulled={false}
+        range={CAFE_TABLES.length}
+        limit={CAFE_TABLES.length}
+      >
         <cylinderGeometry args={[0.08, 0.12, 0.74, 12]} />
         <primitive object={M.metalBrushed} attach="material" />
         {CAFE_TABLES.map((t, i) => (
@@ -394,6 +403,7 @@ export function Furnishings() {
       </Instances>
       {/* Stools: seat + leg */}
       <Instances
+        frustumCulled={false}
         range={CAFE_STOOLS.length}
         limit={CAFE_STOOLS.length}
         castShadow
@@ -404,7 +414,11 @@ export function Furnishings() {
           <Instance key={i} position={[s.position[0], 0.5, s.position[2]]} />
         ))}
       </Instances>
-      <Instances range={CAFE_STOOLS.length} limit={CAFE_STOOLS.length}>
+      <Instances
+        frustumCulled={false}
+        range={CAFE_STOOLS.length}
+        limit={CAFE_STOOLS.length}
+      >
         <cylinderGeometry args={[0.05, 0.05, 0.5, 10]} />
         <primitive object={M.metalDark} attach="material" />
         {CAFE_STOOLS.map((s, i) => (
@@ -419,7 +433,7 @@ export function Furnishings() {
             <boxGeometry args={[0.9, 1.9, 0.75]} />
             <primitive object={M.metalBrushed} attach="material" />
           </mesh>
-          <mesh position={[0, 1.1, 0.39]}>
+          <mesh position={[0, 1.1, 0.39]} renderOrder={20}>
             <boxGeometry args={[0.72, 1.1, 0.03]} />
             <primitive object={M.glassCheap} attach="material" />
           </mesh>
@@ -466,6 +480,7 @@ export function Furnishings() {
 
       {/* ---------------- AI Lab: server racks ---------------- */}
       <Instances
+        frustumCulled={false}
         range={SERVER_RACKS.length}
         limit={SERVER_RACKS.length}
         castShadow
@@ -478,7 +493,11 @@ export function Furnishings() {
         ))}
       </Instances>
       {/* LED strips facing the aisle */}
-      <Instances range={SERVER_RACKS.length} limit={SERVER_RACKS.length}>
+      <Instances
+        frustumCulled={false}
+        range={SERVER_RACKS.length}
+        limit={SERVER_RACKS.length}
+      >
         <boxGeometry args={[0.9, 1.6, 0.04]} />
         <primitive object={M.ledCyan} attach="material" />
         {SERVER_RACKS.map((r, i) => {
@@ -492,7 +511,11 @@ export function Furnishings() {
         })}
       </Instances>
       {/* Status LEDs on the rack tops */}
-      <Instances range={SERVER_RACKS.length} limit={SERVER_RACKS.length}>
+      <Instances
+        frustumCulled={false}
+        range={SERVER_RACKS.length}
+        limit={SERVER_RACKS.length}
+      >
         <boxGeometry args={[0.5, 0.03, 0.06]} />
         <primitive object={M.ledGreen} attach="material" />
         {SERVER_RACKS.map((r, i) => (

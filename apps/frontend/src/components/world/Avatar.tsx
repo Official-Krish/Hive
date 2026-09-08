@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useMemo,
   useRef,
   useState,
   type MutableRefObject,
@@ -8,6 +9,7 @@ import {
 import { useFBX, useGLTF, Html } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
+import * as SkeletonUtils from "three/examples/jsm/utils/SkeletonUtils.js";
 import { ASSET_BASE_URL } from "../../lib/config";
 
 /** Uniform scale applied to every avatar GLB. */
@@ -47,6 +49,71 @@ const META_TONE: Record<string, string> = {
   neutral: "bg-black/40 text-white/80",
 };
 
+const _nameplateWorld = new THREE.Vector3();
+
+/** Nameplate with wall occlusion + distance culling (meta <15m, all <32m). */
+function Nameplate({
+  labelY,
+  name,
+  status,
+  badgeColor,
+  meta,
+}: {
+  labelY: number;
+  name: string;
+  status: string;
+  badgeColor: string;
+  meta: AvatarProps["meta"];
+}) {
+  const anchor = useRef<THREE.Group>(null);
+  const wrap = useRef<HTMLDivElement>(null);
+  const metaEl = useRef<HTMLDivElement>(null);
+
+  useFrame(({ camera }) => {
+    const g = anchor.current;
+    if (!g) return;
+    g.getWorldPosition(_nameplateWorld);
+    const d = camera.position.distanceTo(_nameplateWorld);
+    if (wrap.current) wrap.current.style.display = d < 32 ? "" : "none";
+    if (metaEl.current) metaEl.current.style.display = d < 15 ? "" : "none";
+  });
+
+  return (
+    <group ref={anchor} position={[0, labelY, 0]}>
+      {/* occlude hides the label behind walls/floors instead of X-raying. */}
+      <Html
+        center
+        occlude
+        zIndexRange={[50, 0]}
+        style={{ pointerEvents: "none" }}
+      >
+        <div ref={wrap} className="flex flex-col items-center gap-1">
+          <div
+            title={status}
+            className="flex items-center gap-1.5 whitespace-nowrap rounded-full bg-black/55 px-2 py-[2px] text-[9.5px] font-medium leading-none tracking-[0.01em] text-white/95 shadow-sm backdrop-blur-[2px] select-none"
+          >
+            <span className={`h-1 w-1 rounded-full ${badgeColor}`} />
+            <span>{name}</span>
+          </div>
+          <div ref={metaEl} className="flex flex-col items-center gap-1">
+            {meta?.slice(0, 4).map((m, i) => (
+              <div
+                key={i}
+                className={`flex items-center gap-[3px] whitespace-nowrap rounded-full px-1.5 py-[1.5px] text-[8.5px] font-semibold leading-none tabular-nums shadow-sm select-none ${
+                  META_TONE[m.tone ?? "neutral"]
+                }`}
+              >
+                {m.icon}
+                <span>{m.text}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </Html>
+    </group>
+  );
+}
+
 export default function Avatar({
   modelUrl = `${ASSET_BASE_URL}/avatars/male/hive_male_01.glb`,
   motionRef,
@@ -62,6 +129,8 @@ export default function Avatar({
   const idleFBX = useFBX(`${ASSET_BASE_URL}/Animations/idle.fbx`);
   const runFBX = useFBX(`${ASSET_BASE_URL}/Animations/run.fbx`);
   const jumpFBX = useFBX(`${ASSET_BASE_URL}/Animations/jump.fbx`);
+
+  const clonedScene = useMemo(() => SkeletonUtils.clone(scene), [scene]);
 
   const mixerRef = useRef<THREE.AnimationMixer | null>(null);
   const actionsRef = useRef<{
@@ -85,7 +154,7 @@ export default function Avatar({
   // --- Retarget FBX clips onto the GLB skeleton --------------------------------
   useEffect(() => {
     let skinnedMesh: THREE.SkinnedMesh | null = null;
-    scene.traverse((obj) => {
+    clonedScene.traverse((obj) => {
       if (obj instanceof THREE.SkinnedMesh) skinnedMesh = obj;
       // Shadows aren't inherited by children of <primitive>, so set them here.
       const m = obj as THREE.Mesh;
@@ -93,7 +162,7 @@ export default function Avatar({
         m.castShadow = true;
         m.receiveShadow = false;
         if (m.geometry) m.geometry.computeBoundingSphere();
-        m.frustumCulled = true;
+        m.frustumCulled = false;
       }
     });
     if (!skinnedMesh) return;
@@ -102,9 +171,9 @@ export default function Avatar({
     // Measure the rendered height so the nameplate clears the head. The box is
     // taken in the parent's space (scale already applied by the prop below), and
     // feet sit at y=0, so max.y is the head height directly.
-    scene.scale.setScalar(SCALE);
-    scene.updateWorldMatrix(true, true);
-    const bounds = new THREE.Box3().setFromObject(scene);
+    clonedScene.scale.setScalar(SCALE);
+    clonedScene.updateWorldMatrix(true, true);
+    const bounds = new THREE.Box3().setFromObject(clonedScene);
     if (Number.isFinite(bounds.max.y)) {
       setLabelY(bounds.max.y + 0.22);
     }
@@ -151,7 +220,7 @@ export default function Avatar({
     const runClip = prepareClip("Run", runFBX);
     const jumpClip = prepareClip("Jump", jumpFBX);
 
-    const mixer = new THREE.AnimationMixer(scene);
+    const mixer = new THREE.AnimationMixer(clonedScene);
     mixerRef.current = mixer;
 
     const actions: typeof actionsRef.current = {};
@@ -185,10 +254,10 @@ export default function Avatar({
     return () => {
       mixer.removeEventListener("finished", onFinished);
       mixer.stopAllAction();
-      mixer.uncacheRoot(scene);
+      mixer.uncacheRoot(clonedScene);
       mixerRef.current = null;
     };
-  }, [scene, idleFBX, runFBX, jumpFBX]);
+  }, [clonedScene, idleFBX, runFBX, jumpFBX]);
 
   // --- Legacy crossfade for static avatars (no motionRef) ----------------------
   useEffect(() => {
@@ -256,37 +325,17 @@ export default function Avatar({
 
   return (
     <group {...groupProps}>
-      <primitive object={scene} scale={SCALE} />
+      <primitive object={clonedScene} scale={SCALE} />
 
       {/* Minimal nameplate floating just above the head. No distanceFactor:
           the label keeps a constant, legible screen size at every zoom level. */}
-      <Html
-        position={[0, labelY, 0]}
-        center
-        zIndexRange={[100, 0]}
-        style={{ pointerEvents: "none" }}
-      >
-        <div className="flex flex-col items-center gap-1">
-          <div
-            title={status}
-            className="flex items-center gap-1.5 whitespace-nowrap rounded-full bg-black/55 px-2 py-[2px] text-[9.5px] font-medium leading-none tracking-[0.01em] text-white/95 shadow-sm backdrop-blur-[2px] select-none"
-          >
-            <span className={`h-1 w-1 rounded-full ${badgeColor}`} />
-            <span>{name}</span>
-          </div>
-          {meta?.slice(0, 4).map((m, i) => (
-            <div
-              key={i}
-              className={`flex items-center gap-[3px] whitespace-nowrap rounded-full px-1.5 py-[1.5px] text-[8.5px] font-semibold leading-none tabular-nums shadow-sm select-none ${
-                META_TONE[m.tone ?? "neutral"]
-              }`}
-            >
-              {m.icon}
-              <span>{m.text}</span>
-            </div>
-          ))}
-        </div>
-      </Html>
+      <Nameplate
+        labelY={labelY}
+        name={name}
+        status={status}
+        badgeColor={badgeColor}
+        meta={meta}
+      />
     </group>
   );
 }
@@ -295,3 +344,7 @@ useGLTF.preload(`${ASSET_BASE_URL}/avatars/male/hive_male_01.glb`);
 useGLTF.preload(`${ASSET_BASE_URL}/avatars/male/hive_male_02.glb`);
 useGLTF.preload(`${ASSET_BASE_URL}/avatars/female/hive_female_01.glb`);
 useGLTF.preload(`${ASSET_BASE_URL}/avatars/female/hive_female_02.glb`);
+// Animations stream on first spawn without these — preload to avoid the hitch.
+useFBX.preload(`${ASSET_BASE_URL}/Animations/idle.fbx`);
+useFBX.preload(`${ASSET_BASE_URL}/Animations/run.fbx`);
+useFBX.preload(`${ASSET_BASE_URL}/Animations/jump.fbx`);

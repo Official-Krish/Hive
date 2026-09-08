@@ -96,18 +96,24 @@ function GlazingBatch({ walls }: { walls: Wall[] }) {
     return { glass, rails, posts, caps };
   }, [walls]);
 
-  const groups: [Part[], THREE.Material][] = [
-    [parts.glass, M.glassCheap],
-    [parts.rails, M.blackAnodized],
-    [parts.posts, M.mullion],
-    [parts.caps, M.metalBrushed],
+  const groups: [Part[], THREE.Material, number][] = [
+    [parts.glass, M.glassCheap, 20],
+    [parts.rails, M.blackAnodized, 0],
+    [parts.posts, M.mullion, 0],
+    [parts.caps, M.metalBrushed, 0],
   ];
 
   return (
     <>
-      {groups.map(([items, mat], gi) =>
+      {groups.map(([items, mat, order], gi) =>
         items.length === 0 ? null : (
-          <Instances key={gi} range={items.length} limit={items.length}>
+          <Instances
+            key={gi}
+            frustumCulled={false}
+            range={items.length}
+            limit={items.length}
+            renderOrder={order}
+          >
             <boxGeometry args={[1, 1, 1]} />
             <primitive object={mat} attach="material" />
             {items.map((p, i) => (
@@ -299,7 +305,11 @@ function PodTrim({ pod }: { pod: Pod }) {
         ] as const
       ).map(([s, zz]) =>
         side === s ? null : (
-          <mesh key={s} position={[(x0 + x1) / 2, base + 1.25, zz]}>
+          <mesh
+            key={s}
+            position={[(x0 + x1) / 2, base + 1.25, zz]}
+            renderOrder={20}
+          >
             <boxGeometry args={[x1 - x0, 0.5, 0.11]} />
             <primitive object={M.glassCheap} attach="material" />
           </mesh>
@@ -324,9 +334,9 @@ export function PodDoorPlate({ pod }: { pod: Pod }) {
   const outward = side === "n" ? -1 : side === "s" ? 1 : 0;
   const outwardX = side === "w" ? -1 : side === "e" ? 1 : 0;
   const signPos: [number, number, number] = [
-    cx + outwardX * 0.09 + (horizontal ? width / 2 + 0.45 : 0),
-    base + 1.55,
-    cz + outward * 0.09 + (horizontal ? 0 : width / 2 + 0.45),
+    cx + outwardX * 0.09 + (horizontal ? width / 2 + 0.62 : 0),
+    base + 1.6,
+    cz + outward * 0.09 + (horizontal ? 0 : width / 2 + 0.62),
   ];
   const face = useMemo(
     () => plateTexture(pod.name, pod.accent),
@@ -343,22 +353,22 @@ export function PodDoorPlate({ pod }: { pod: Pod }) {
           : Math.PI / 2;
   const off: [number, number, number] =
     side === "n"
-      ? [0, 0, -0.02]
+      ? [0, 0, -0.025]
       : side === "s"
-        ? [0, 0, 0.02]
+        ? [0, 0, 0.025]
         : side === "w"
-          ? [-0.02, 0, 0]
-          : [0.02, 0, 0];
+          ? [-0.025, 0, 0]
+          : [0.025, 0, 0];
   return (
     <group position={signPos}>
       <mesh castShadow>
         <boxGeometry
-          args={[horizontal ? 0.84 : 0.03, 0.18, horizontal ? 0.03 : 0.84]}
+          args={[horizontal ? 1.16 : 0.04, 0.28, horizontal ? 0.04 : 1.16]}
         />
         <primitive object={M.blackAnodized} attach="material" />
       </mesh>
       <mesh position={off} rotation={[0, rotY, 0]}>
-        <planeGeometry args={[0.78, 0.15]} />
+        <planeGeometry args={[1.1, 0.22]} />
         <meshBasicMaterial map={face} transparent toneMapped={false} />
       </mesh>
     </group>
@@ -451,7 +461,7 @@ export function Level2() {
       </group>
 
       {/* Slatted acoustic screens between the open bays */}
-      <Instances range={40} limit={40} castShadow>
+      <Instances frustumCulled={false} range={40} limit={40} castShadow>
         <boxGeometry args={[0.06, 1.35, 0.09]} />
         <primitive object={M.slat} attach="material" />
         {Array.from({ length: 40 }, (_, i) => {

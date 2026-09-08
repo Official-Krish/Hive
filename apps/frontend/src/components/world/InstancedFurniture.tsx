@@ -426,6 +426,7 @@ export function InstancedFurniture({
           <instancedMesh
             ref={deskTopRef}
             args={[undefined, undefined, desks.length]}
+            frustumCulled={false}
             castShadow
             receiveShadow
           >
@@ -437,6 +438,7 @@ export function InstancedFurniture({
           <instancedMesh
             ref={deskPadRef}
             args={[undefined, undefined, desks.length]}
+            frustumCulled={false}
             receiveShadow
           >
             <boxGeometry args={[1.2, 0.005, 0.5]} />
@@ -447,6 +449,7 @@ export function InstancedFurniture({
           <instancedMesh
             ref={deskLegsRef}
             args={[undefined, undefined, desks.length * 4]}
+            frustumCulled={false}
             castShadow
           >
             <boxGeometry args={[0.06, 0.7, 0.06]} />
@@ -461,6 +464,7 @@ export function InstancedFurniture({
           <instancedMesh
             ref={chairSeatRef}
             args={[undefined, undefined, chairs.length]}
+            frustumCulled={false}
             castShadow
           >
             <boxGeometry args={[0.48, 0.06, 0.48]} />
@@ -470,6 +474,7 @@ export function InstancedFurniture({
           <instancedMesh
             ref={chairBackRef}
             args={[undefined, undefined, chairs.length]}
+            frustumCulled={false}
             castShadow
           >
             <boxGeometry args={[0.46, 0.48, 0.05]} />
@@ -479,6 +484,7 @@ export function InstancedFurniture({
           <instancedMesh
             ref={chairBaseRef}
             args={[undefined, undefined, chairs.length]}
+            frustumCulled={false}
           >
             <cylinderGeometry args={[0.03, 0.03, 0.4, 8]} />
             <primitive object={chairAccentMaterial} attach="material" />
@@ -492,6 +498,7 @@ export function InstancedFurniture({
           <instancedMesh
             ref={monitorFrameRef}
             args={[undefined, undefined, monitors.length]}
+            frustumCulled={false}
             castShadow
           >
             <boxGeometry args={[0.65, 0.38, 0.03]} />
@@ -501,6 +508,7 @@ export function InstancedFurniture({
           <instancedMesh
             ref={monitorScreenRef}
             args={[undefined, undefined, monitors.length]}
+            frustumCulled={false}
           >
             <planeGeometry args={[0.61, 0.34]} />
             <primitive object={screenGlowMaterial} attach="material" />
@@ -509,6 +517,7 @@ export function InstancedFurniture({
           <instancedMesh
             ref={monitorArmRef}
             args={[undefined, undefined, monitors.length]}
+            frustumCulled={false}
           >
             <boxGeometry args={[0.06, 0.22, 0.06]} />
             <primitive object={darkMetalMaterial} attach="material" />
@@ -522,6 +531,7 @@ export function InstancedFurniture({
           <instancedMesh
             ref={plantPotRef}
             args={[undefined, undefined, plants.length]}
+            frustumCulled={false}
             castShadow
           >
             <cylinderGeometry args={[0.22, 0.18, 0.5, 12]} />
@@ -531,6 +541,7 @@ export function InstancedFurniture({
           <instancedMesh
             ref={plantLeavesRef}
             args={[undefined, undefined, plants.length]}
+            frustumCulled={false}
             castShadow
           >
             <dodecahedronGeometry args={[0.42, 1]} />
@@ -545,6 +556,7 @@ export function InstancedFurniture({
           <instancedMesh
             ref={sofaSeatRef}
             args={[undefined, undefined, sofas.length]}
+            frustumCulled={false}
             castShadow
           >
             <boxGeometry args={[1.8, 0.3, 0.8]} />
@@ -554,6 +566,7 @@ export function InstancedFurniture({
           <instancedMesh
             ref={sofaBackRef}
             args={[undefined, undefined, sofas.length]}
+            frustumCulled={false}
             castShadow
           >
             <boxGeometry args={[1.8, 0.6, 0.25]} />
@@ -568,6 +581,7 @@ export function InstancedFurniture({
           <instancedMesh
             ref={coffeeTableRef}
             args={[undefined, undefined, coffeeTables.length]}
+            frustumCulled={false}
             castShadow
             receiveShadow
           >
@@ -583,6 +597,7 @@ export function InstancedFurniture({
           <instancedMesh
             ref={lightBarRef}
             args={[undefined, undefined, lightFixtures.length]}
+            frustumCulled={false}
           >
             <boxGeometry args={[2.5, 0.08, 0.15]} />
             <primitive object={lightBarMaterial} attach="material" />
@@ -591,6 +606,7 @@ export function InstancedFurniture({
           <instancedMesh
             ref={lightStripRef}
             args={[undefined, undefined, lightFixtures.length]}
+            frustumCulled={false}
           >
             <boxGeometry args={[2.4, 0.01, 0.1]} />
             <primitive object={lightEmitterMaterial} attach="material" />

@@ -1,5 +1,7 @@
-import { useMemo } from "react";
-import { Instances, Instance } from "@react-three/drei";
+import { useMemo, useRef } from "react";
+import { Billboard, Instances, Instance } from "@react-three/drei";
+import { useFrame } from "@react-three/fiber";
+import * as THREE from "three";
 import {
   CEILING_RUNS,
   CEILING_RUNS_L2,
@@ -21,7 +23,14 @@ import { M } from "./materials";
 import { bladeTexture, directoryTexture } from "./signage";
 import { PodDoorPlate } from "./Level2";
 
-const SCREEN_MAT = { a: M.tvA, b: M.tvB, c: M.tvC } as const;
+const SCREEN_MAT = {
+  a: M.tvA,
+  b: M.tvB,
+  c: M.tvC,
+  d: M.tvD,
+  e: M.tvE,
+  f: M.tvF,
+} as const;
 
 /** Recessed linear luminaire, flush with the suspended ceiling. */
 function CeilingRun({
@@ -124,8 +133,11 @@ function Screen({ p }: { p: WallPanel }) {
 }
 
 /** Whiteboard with an aluminium frame and a marker tray. */
-function Whiteboard({ p }: { p: WallPanel }) {
+function Whiteboard({ p, index = 0 }: { p: WallPanel; index?: number }) {
   const [w, h] = p.size;
+  const face =
+    M.whiteboardMarked[index % M.whiteboardMarked.length] ??
+    M.whiteboardMarked[0]!;
   return (
     <group position={p.position} rotation={p.rotation}>
       <mesh castShadow>
@@ -134,7 +146,7 @@ function Whiteboard({ p }: { p: WallPanel }) {
       </mesh>
       <mesh position={[0, 0, 0.031]}>
         <planeGeometry args={[w, h]} />
-        <primitive object={M.whiteboardMarked} attach="material" />
+        <primitive object={face} attach="material" />
       </mesh>
       <mesh position={[0, -h / 2 - 0.09, 0.06]}>
         <boxGeometry args={[w * 0.55, 0.04, 0.1]} />
@@ -184,7 +196,8 @@ function SlatWall({
   );
 }
 
-/** Backlit blade sign beside a doorway — real room name, accent kept. */
+/** Backlit blade sign beside a doorway — real room name, accent kept.
+ *  1.7m wide, double-sided so it reads walking either way down the corridor. */
 function RoomSignBlade({
   position,
   rotation,
@@ -200,35 +213,100 @@ function RoomSignBlade({
   return (
     <group position={position} rotation={rotation}>
       <mesh castShadow>
-        <boxGeometry args={[1.5, 0.34, 0.05]} />
+        <boxGeometry args={[1.7, 0.4, 0.06]} />
         <primitive object={M.blackAnodized} attach="material" />
       </mesh>
-      <mesh position={[0.02, 0, 0.032]}>
-        <planeGeometry args={[1.34, 0.3]} />
+      <mesh position={[0, 0, 0.036]}>
+        <planeGeometry args={[1.54, 0.31]} />
+        <meshBasicMaterial map={face} transparent toneMapped={false} />
+      </mesh>
+      <mesh position={[0, 0, -0.036]} rotation={[0, Math.PI, 0]}>
+        <planeGeometry args={[1.54, 0.31]} />
         <meshBasicMaterial map={face} transparent toneMapped={false} />
       </mesh>
     </group>
   );
 }
 
-/** Freestanding lobby directory totem — zones, accents, you-are-here. */
-function DirectoryTotem() {
-  const face = useMemo(
+/** Pulsing stair beacon: floor ring + floating L2 label at the stair base. */
+function StairBeacon() {
+  const ring = useRef<THREE.Mesh>(null);
+  const reduced = useMemo(
     () =>
-      directoryTexture([
-        { name: "Reception", accent: "#38bdf8", note: "you are here" },
-        { name: "Engineering Floor", accent: "#818cf8", note: "west wing" },
-        { name: "Lounge & Breakout", accent: "#f59e0b", note: "west wing" },
-        { name: "Chill Space", accent: "#f472b6", note: "inside lounge" },
-        { name: "Cafeteria", accent: "#fb923c", note: "east wing" },
-        { name: "Meeting Rooms", accent: "#34d399", note: "east wing" },
-        { name: "AI Lab", accent: "#22d3ee", note: "east wing" },
-        { name: "Stairs · L2", accent: "#e8eaf0", note: "west end" },
-      ]),
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches,
     [],
   );
+  const face = useMemo(() => bladeTexture("Stairs · L2 ↑", "#e8eaf0"), []);
+  useFrame(({ clock }) => {
+    const m = ring.current;
+    if (!m || reduced) return;
+    const t = clock.elapsedTime * 2;
+    const s = 1 + 0.08 * Math.sin(t);
+    m.scale.setScalar(s);
+  });
   return (
-    <group position={[-5.5, 0, 19.5]}>
+    <group position={[-29.5, 0, 18.9]}>
+      <mesh ref={ring} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.03, 0]}>
+        <ringGeometry args={[1.1, 1.35, 48]} />
+        <meshBasicMaterial
+          color="#e8eaf0"
+          transparent
+          opacity={0.85}
+          toneMapped={false}
+          depthWrite={false}
+        />
+      </mesh>
+      <Billboard position={[0, 2.6, 0]}>
+        <mesh>
+          <boxGeometry args={[1.7, 0.4, 0.05]} />
+          <primitive object={M.blackAnodized} attach="material" />
+        </mesh>
+        <mesh position={[0, 0, 0.031]}>
+          <planeGeometry args={[1.54, 0.31]} />
+          <meshBasicMaterial
+            map={face}
+            transparent
+            toneMapped={false}
+            depthWrite={false}
+          />
+        </mesh>
+      </Billboard>
+    </group>
+  );
+}
+
+/** Freestanding lobby directory totem — zones, accents, you-are-here. */
+function DirectoryTotem({
+  position = [-5.5, 0, 19.5] as [number, number, number],
+  rows,
+  footer,
+}: {
+  position?: [number, number, number];
+  rows?: { name: string; accent: string; note?: string }[];
+  footer?: string;
+}) {
+  const face = useMemo(
+    () =>
+      directoryTexture(
+        rows ?? [
+          { name: "Reception", accent: "#38bdf8", note: "you are here" },
+          { name: "Engineering Floor", accent: "#818cf8", note: "west wing" },
+          { name: "Lounge & Breakout", accent: "#f59e0b", note: "west wing" },
+          { name: "Chill Space", accent: "#f472b6", note: "inside lounge" },
+          { name: "Cafeteria", accent: "#fb923c", note: "east wing" },
+          { name: "Meeting Rooms", accent: "#34d399", note: "east wing" },
+          { name: "AI Lab", accent: "#22d3ee", note: "east wing" },
+          { name: "Stairs · L2", accent: "#e8eaf0", note: "west end" },
+          { name: "Leadership — West", accent: "#818cf8", note: "level 2" },
+          { name: "Executive — East", accent: "#22d3ee", note: "level 2" },
+        ],
+        footer,
+      ),
+    [rows, footer],
+  );
+  return (
+    <group position={position}>
       {/* pylon */}
       <mesh position={[0, 0.95, 0]} castShadow>
         <boxGeometry args={[0.9, 1.9, 0.12]} />
@@ -236,6 +314,11 @@ function DirectoryTotem() {
       </mesh>
       {/* face toward the entrance (+Z) */}
       <mesh position={[0, 0.98, 0.065]}>
+        <planeGeometry args={[0.78, 1.56]} />
+        <meshBasicMaterial map={face} toneMapped={false} />
+      </mesh>
+      {/* face toward the lobby (-Z) so the directory reads from both sides */}
+      <mesh position={[0, 0.98, -0.065]} rotation={[0, Math.PI, 0]}>
         <planeGeometry args={[0.78, 1.56]} />
         <meshBasicMaterial map={face} toneMapped={false} />
       </mesh>
@@ -328,7 +411,7 @@ export function Fittings() {
         <Screen key={i} p={p} />
       ))}
       {WHITEBOARDS.map((p, i) => (
-        <Whiteboard key={i} p={p} />
+        <Whiteboard key={i} p={p} index={i} />
       ))}
 
       {/* Room signage */}
@@ -347,8 +430,21 @@ export function Fittings() {
         <PodDoorPlate key={p.id} pod={p} />
       ))}
 
-      {/* Lobby directory totem */}
+      {/* Lobby directory totem + courtyard entrance totem (dual-face, no rotation needed) */}
       <DirectoryTotem />
+      <DirectoryTotem
+        position={[6, 0, 28]}
+        footer="●  YOU ARE HERE — COURTYARD"
+        rows={[
+          { name: "Entrance", accent: "#38bdf8", note: "straight ahead" },
+          { name: "Reception", accent: "#38bdf8", note: "inside, east" },
+          { name: "Engineering Floor", accent: "#818cf8", note: "west wing" },
+          { name: "Cafeteria", accent: "#fb923c", note: "east wing" },
+          { name: "Stairs · L2", accent: "#e8eaf0", note: "lobby west end" },
+        ]}
+      />
+      {/* Stair beacon so L2 is discoverable from the lobby floor */}
+      <StairBeacon />
 
       {/* Rugs anchoring the lounge clusters */}
       {RUGS.map(([x, z, w, d], i) => (
