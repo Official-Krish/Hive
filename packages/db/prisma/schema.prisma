@@ -91,6 +91,7 @@ model Workspace {
   conversations     Conversation[]
   presences         Presence[]
   pairSessions      PairSession[]
+  gameSessions      GameSession[]
   chillMedia        ChillMedia?
   privacySetting    PrivacySetting?
   invites           Invite[]
@@ -713,6 +714,43 @@ enum PairSessionStatus {
   ENDED
 }
 
+model GameSession {
+  id           String     @id @default(cuid())
+  workspaceId  String
+  kind         GameKind
+  status       GameStatus @default(ACTIVE)
+  firstUserId  String
+  secondUserId String
+  turnUserId   String?
+  board        String
+  winnerUserId String?
+  resultReason String?
+  moveCount    Int        @default(0)
+  startedBy    String
+  startedAt    DateTime   @default(now())
+  endedAt      DateTime?
+
+  workspace Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  moves     GameMove[]
+
+  @@index([workspaceId, status])
+  @@index([workspaceId, startedAt])
+}
+
+model GameMove {
+  id            String   @id @default(cuid())
+  gameSessionId String
+  byUserId      String
+  ply           Int
+  payload       Json
+  createdAt     DateTime @default(now())
+
+  session GameSession @relation(fields: [gameSessionId], references: [id], onDelete: Cascade)
+
+  @@unique([gameSessionId, ply])
+  @@index([gameSessionId])
+}
+
 model PairSession {
   id           String            @id @default(cuid())
   workspaceId  String
@@ -866,6 +904,17 @@ enum UserRole {
 enum GlobalRole {
   USER
   ADMIN
+}
+
+enum GameKind {
+  CHESS
+  CONNECT4
+}
+
+enum GameStatus {
+  PENDING
+  ACTIVE
+  FINISHED
 }
 
 enum MembershipStatus {

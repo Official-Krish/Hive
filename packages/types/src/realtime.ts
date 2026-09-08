@@ -78,6 +78,65 @@ export const whiteboardStrokeSchema = z.object({
 });
 export type WhiteboardStroke = z.infer<typeof whiteboardStrokeSchema>;
 
+// ---------------------------------------------------------------------------
+// Mini-games — server-authoritative Chess + Connect 4.
+// HTTP owns match lifecycle (create/list/resign); WS carries moves + state.
+// Board payloads are engine strings: FEN for chess, 42-char grid for C4.
+// ---------------------------------------------------------------------------
+
+export const gameKindSchema = z.enum(["chess", "connect4"]);
+export type GameKind = z.infer<typeof gameKindSchema>;
+
+export const gameStatusSchema = z.enum(["pending", "active", "finished"]);
+export type GameStatus = z.infer<typeof gameStatusSchema>;
+
+export const gameSessionMemberSchema = z.object({
+  userId: z.string(),
+  name: z.string(),
+  /** First seat moves first (White in chess, Red in Connect 4). */
+  seat: z.enum(["first", "second"]),
+});
+
+export const gameSessionSchema = z.object({
+  id: z.string(),
+  workspaceId: z.string(),
+  kind: gameKindSchema,
+  status: gameStatusSchema,
+  members: z.array(gameSessionMemberSchema).min(2).max(2),
+  turnUserId: z.string().nullable(),
+  board: z.string().min(1).max(512),
+  winnerUserId: z.string().nullable(),
+  /** Machine-readable end reason (checkmate, stalemate, resign, ...). */
+  resultReason: z.string().max(60).nullable(),
+  moveCount: z.number().int().min(0),
+  startedBy: z.string(),
+  startedAt: z.string(),
+  endedAt: z.string().nullable(),
+});
+export type GameSession = z.infer<typeof gameSessionSchema>;
+
+export const gameSessionCreateSchema = z.object({
+  kind: gameKindSchema,
+  /** The opponent — must be a workspace member; creator takes the other seat. */
+  opponentId: z.string().min(1),
+});
+export type GameSessionCreate = z.infer<typeof gameSessionCreateSchema>;
+
+/** One client-submitted move, validated semantically by the rules engine. */
+export const gameMoveSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("chess"),
+    from: z.number().int().min(0).max(63),
+    to: z.number().int().min(0).max(63),
+    promote: z.enum(["n", "b", "r", "q"]).optional(),
+  }),
+  z.object({
+    kind: z.literal("connect4"),
+    col: z.number().int().min(0).max(6),
+  }),
+]);
+export type GameMove = z.infer<typeof gameMoveSchema>;
+
 export const realtimeEventSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("hello"),
@@ -271,6 +330,19 @@ export const realtimeEventSchema = z.discriminatedUnion("type", [
     setByName: z.string().nullable().optional(),
     timestamp: z.number(),
   }),
+  z.object({
+    type: z.literal("game.state"),
+    workspaceId: z.string(),
+    session: gameSessionSchema,
+    timestamp: z.number(),
+  }),
+  z.object({
+    type: z.literal("game.move.rejected"),
+    workspaceId: z.string(),
+    gameId: z.string(),
+    reason: z.string().max(120),
+    timestamp: z.number(),
+  }),
 ]);
 
 export type RealtimeEvent = z.infer<typeof realtimeEventSchema>;
@@ -349,6 +421,15 @@ export const realtimeClientMessageSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("chill.media.seek"),
     playheadMs: z.number().min(0),
+  }),
+  z.object({
+    type: z.literal("game.move"),
+    gameId: z.string().min(1).max(80),
+    move: gameMoveSchema,
+  }),
+  z.object({
+    type: z.literal("game.state.request"),
+    gameId: z.string().min(1).max(80),
   }),
 ]);
 
