@@ -39,6 +39,7 @@ import { usePairSession } from "@/hooks/usePairSession";
 import { http } from "@/lib/http";
 import RemoteAvatars from "./RemoteAvatars";
 import { Markers } from "./Markers";
+import { WaterPour } from "./WaterPour";
 import { WorldTour, markTourSeen, shouldShowTour } from "./WorldTour";
 import { MemberDetailPopup } from "./MapHud";
 import { ChatPanel } from "./ChatPanel";
@@ -562,6 +563,7 @@ export function WorldCanvas({
     SPAWN[2],
   ]);
   const [coffeeActive, setCoffeeActive] = useState(false);
+  const [waterActive, setWaterActive] = useState(false);
   const [toast, setToast] = useState<React.ReactNode | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
@@ -645,12 +647,19 @@ export function WorldCanvas({
               +10 energy — freshly roasted
             </span>,
           );
-          window.setTimeout(() => setCoffeeActive(false), 4500);
+          window.setTimeout(() => setCoffeeActive(false), 4200);
           break;
         }
         case "cooler": {
           client?.sendBump(currentRoom || null);
-          pushFeed("You're at the water cooler", "bump");
+          setWaterActive(true);
+          showToast(
+            <span className="inline-flex items-center gap-1.5">
+              <Droplets className="size-3.5" />
+              Hydrated — filing that cup
+            </span>,
+          );
+          window.setTimeout(() => setWaterActive(false), 3800);
           break;
         }
         case "monitor":
@@ -1338,6 +1347,9 @@ export function WorldCanvas({
 
         {/* Wayfinding markers over usable things + desk proximity dots */}
         <Markers playerPos={playerPos} nearId={interaction.near?.id ?? null} />
+
+        {/* Transient water pour at the cooler */}
+        {waterActive && <WaterPour />}
 
         <ThirdPersonCamera
           targetRef={playerGroupRef}

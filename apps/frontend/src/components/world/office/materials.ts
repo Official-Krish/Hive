@@ -39,15 +39,19 @@ function tex(
   opts: { srgb?: boolean; seed?: number } = {},
 ): THREE.Texture | null {
   if (!HAS_DOM) return null;
+  // 2x backing store over the nominal size — crisper floors/screens at
+  // glancing angles. Draw recipes scale with `s`, so one multiplier upgrades
+  // every procedural texture at once.
+  const S = size * 2;
   const canvas = document.createElement("canvas");
-  canvas.width = canvas.height = size;
+  canvas.width = canvas.height = S;
   const ctx = canvas.getContext("2d");
   if (!ctx) return null;
-  draw(ctx, size, lcg(opts.seed ?? 1));
+  draw(ctx, S, lcg(opts.seed ?? 1));
   const t = new THREE.CanvasTexture(canvas);
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
   t.repeat.set(repeat[0], repeat[1]);
-  t.anisotropy = 8;
+  t.anisotropy = 16;
   if (opts.srgb !== false) t.colorSpace = THREE.SRGBColorSpace;
   return t;
 }
@@ -264,9 +268,9 @@ const grassTex = tex(
       ctx.lineTo(x + (rnd() - 0.5) * 3, y - 2 - rnd() * 3);
       ctx.stroke();
     }
-    // mower stripes
+    // mower stripes (subtle — the tile repeats far beyond the plaza)
     for (let b = 0; b < 4; b++) {
-      ctx.fillStyle = `rgba(255,255,255,${b % 2 ? 0.035 : 0})`;
+      ctx.fillStyle = `rgba(255,255,255,${b % 2 ? 0.02 : 0})`;
       ctx.fillRect(0, (b * s) / 4, s, s / 4);
     }
   },
@@ -626,9 +630,10 @@ function tvMat(map: THREE.Texture | null) {
 }
 
 // Tower facades — generated once each and reused as both map and emissiveMap.
-const gridA = windowGrid(10, 26, 11, 0.42);
-const gridB = windowGrid(7, 18, 29, 0.34);
-const gridC = windowGrid(14, 34, 47, 0.5);
+// Dense grids so tall stretched towers keep believable window sizes.
+const gridA = windowGrid(16, 40, 11, 0.42);
+const gridB = windowGrid(12, 30, 29, 0.34);
+const gridC = windowGrid(20, 48, 47, 0.5);
 
 // ============================================================================
 // MATERIALS
@@ -891,12 +896,26 @@ export const M = {
     color: "#8d918a",
     roughness: 0.88,
   }),
+  roadPaint: new THREE.MeshStandardMaterial({
+    color: "#e8e9ea",
+    roughness: 0.7,
+  }),
+  roadYellow: new THREE.MeshStandardMaterial({
+    color: "#d9a62e",
+    roughness: 0.7,
+  }),
+  drainCover: new THREE.MeshStandardMaterial({
+    color: "#3a3f45",
+    roughness: 0.6,
+    metalness: 0.5,
+  }),
   asphalt: new THREE.MeshStandardMaterial({
     color: "#3a3d42",
     roughness: 0.95,
     roughnessMap: rmap,
   }),
   curb: new THREE.MeshStandardMaterial({ color: "#c4c2b8", roughness: 0.85 }),
+  mulch: new THREE.MeshStandardMaterial({ color: "#4a3826", roughness: 1 }),
   lampPost: new THREE.MeshStandardMaterial({
     color: "#2b3037",
     roughness: 0.4,
@@ -1048,9 +1067,9 @@ const FLOOR_SPEC: Record<FloorKind, FloorSpec> = {
     metalness: 0.02,
   },
   lawn: {
-    color: "#5f8a52",
+    color: "#67784f",
     map: grassTex,
-    tile: 7,
+    tile: 12,
     roughness: 0.96,
     metalness: 0,
   },

@@ -111,12 +111,14 @@ function iconTexture(icon: Interactable["icon"]): THREE.CanvasTexture {
   const hit = iconCache.get(icon);
   if (hit) return hit;
   const el = document.createElement("canvas");
-  el.width = 128;
-  el.height = 128;
-  drawGlyph(el.getContext("2d")!, icon);
+  el.width = 256;
+  el.height = 256;
+  const c = el.getContext("2d")!;
+  c.scale(2, 2); // glyph paths are authored in 128-space
+  drawGlyph(c, icon);
   const tex = new THREE.CanvasTexture(el);
   tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = 4;
+  tex.anisotropy = 8;
   iconCache.set(icon, tex);
   return tex;
 }

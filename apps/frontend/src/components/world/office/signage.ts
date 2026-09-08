@@ -23,7 +23,7 @@ function canvas(
 function toTexture(el: HTMLCanvasElement): THREE.CanvasTexture {
   const tex = new THREE.CanvasTexture(el);
   tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = 8;
+  tex.anisotropy = 16;
   return tex;
 }
 
@@ -137,6 +137,93 @@ export function directoryTexture(
   ctx.fillStyle = "#f2f4f8";
   ctx.font = "600 26px system-ui, -apple-system, 'Segoe UI', sans-serif";
   ctx.fillText(footer, 48, 972);
+  const tex = toTexture(el);
+  cache.set(key, tex);
+  return tex;
+}
+
+/** Neighbour marquee: tenant name on near-black, 8:1 canvas for the sign band. */
+const MARQUEE_NAMES = [
+  "NORTHGATE",
+  "FOUNDRY",
+  "MERIDIAN",
+  "ATLAS",
+  "KESTREL",
+  "FOUNDRY EAST",
+  "HALCYON",
+  "VANTAGE",
+];
+export function marqueeTexture(
+  index: number,
+  accent: string,
+): THREE.CanvasTexture {
+  const name = MARQUEE_NAMES[index % MARQUEE_NAMES.length]!;
+  const key = `marquee:${name}:${accent}`;
+  const hit = cache.get(key);
+  if (hit) return hit;
+  const [el, ctx] = canvas(1024, 128);
+  ctx.fillStyle = "#101318";
+  ctx.fillRect(0, 0, 1024, 128);
+  ctx.fillStyle = accent;
+  ctx.fillRect(36, 38, 52, 52);
+  ctx.fillStyle = "#eef1f6";
+  ctx.font = "700 64px system-ui, -apple-system, 'Segoe UI', sans-serif";
+  ctx.textBaseline = "middle";
+  ctx.fillText(name, 116, 68, 870);
+  const tex = toTexture(el);
+  cache.set(key, tex);
+  return tex;
+}
+/** Courtyard monument face: Hive mark (pillars + nodes) + HIVE wordmark.
+ *  1024×256 canvas maps to the 3.6×0.9m face without stretch. */
+export function monumentTexture(): THREE.CanvasTexture {
+  const key = "monument:hive-v1";
+  const hit = cache.get(key);
+  if (hit) return hit;
+  const [el, ctx] = canvas(1024, 256);
+  ctx.clearRect(0, 0, 1024, 256);
+  // mark — five nodes converging on a hub, H in negative space (see HiveMark)
+  const k = 2.5;
+  const ox = 70;
+  const oy = 48;
+  ctx.strokeStyle = "#eaf6ff";
+  ctx.fillStyle = "#eaf6ff";
+  ctx.lineWidth = 6 * k;
+  ctx.lineCap = "round";
+  ctx.shadowColor = "rgba(125,211,252,0.8)";
+  ctx.shadowBlur = 24;
+  const px = (v: number) => ox + v * k;
+  const py = (v: number) => oy + v * k;
+  ctx.beginPath();
+  ctx.moveTo(px(18), py(16));
+  ctx.lineTo(px(18), py(48));
+  ctx.moveTo(px(46), py(16));
+  ctx.lineTo(px(46), py(48));
+  ctx.moveTo(px(18), py(29));
+  ctx.lineTo(px(46), py(29));
+  ctx.stroke();
+  for (const [cx, cy, r] of [
+    [18, 16, 7],
+    [18, 48, 7],
+    [46, 16, 7],
+    [46, 48, 7],
+    [32, 29, 9],
+  ] as const) {
+    ctx.beginPath();
+    ctx.arc(px(cx), py(cy), r * k, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.shadowBlur = 0;
+  // wordmark
+  ctx.fillStyle = "#f2f4f8";
+  ctx.font = "800 118px system-ui, -apple-system, 'Segoe UI', sans-serif";
+  ctx.textBaseline = "middle";
+  try {
+    (ctx as unknown as { letterSpacing: string }).letterSpacing = "14px";
+  } catch {
+    /* older canvas — plain tracking */
+  }
+  ctx.fillText("HIVE", 300, 140);
   const tex = toTexture(el);
   cache.set(key, tex);
   return tex;

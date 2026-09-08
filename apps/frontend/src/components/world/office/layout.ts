@@ -318,25 +318,7 @@ export interface Pod {
 }
 
 export const PODS: Pod[] = [
-  // --- Level 1: pair programming rooms in the lounge, focus rooms off the meeting wing
-  {
-    id: "pair-1",
-    name: "Pair Programming A",
-    level: 1,
-    rect: [-33.4, -28.6, -8.4, -4.8],
-    door: { side: "e", at: -6.6, width: 1.1 },
-    kind: "pair",
-    accent: "#6366f1",
-  },
-  {
-    id: "pair-2",
-    name: "Pair Programming B",
-    level: 1,
-    rect: [-33.4, -28.6, -4.4, -0.8],
-    door: { side: "e", at: -2.6, width: 1.1 },
-    kind: "pair",
-    accent: "#6366f1",
-  },
+  // --- Level 1: focus rooms off the meeting wing
   {
     id: "focus-1",
     name: "Focus 1",
