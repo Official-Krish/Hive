@@ -30,6 +30,8 @@ interface PlayerControllerProps {
   coffee?: boolean;
   /** Hides the avatar + name tag (e.g. under a full-screen modal). */
   hidden?: boolean;
+  /** First-person: hide the whole own avatar so the head never clips the lens. */
+  firstPerson?: boolean;
 }
 
 // --- Movement tuning --------------------------------------------------------
@@ -67,6 +69,7 @@ export function PlayerController({
   disabled = false,
   coffee = false,
   hidden = false,
+  firstPerson = false,
 }: PlayerControllerProps) {
   const internalGroupRef = useRef<THREE.Group>(null);
   const groupRef = playerRef || internalGroupRef;
@@ -298,7 +301,7 @@ export function PlayerController({
 
   return (
     <group ref={groupRef} position={spawn}>
-      {!hidden && (
+      {!hidden && !firstPerson && (
         <>
           <Avatar
             modelUrl={modelUrl}

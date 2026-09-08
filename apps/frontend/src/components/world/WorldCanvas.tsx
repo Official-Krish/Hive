@@ -359,6 +359,7 @@ export function WorldCanvas({
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [cameraYaw, setCameraYaw] = useState(0);
+  const [fpp, setFpp] = useState(false);
   const [currentRoom, setCurrentRoom] = useState("Courtyard");
   const [openMemberId, setOpenMemberId] = useState<string | null>(null);
   const playerGroupRef = useRef<THREE.Group>(null);
@@ -591,6 +592,37 @@ export function WorldCanvas({
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     toastTimerRef.current = setTimeout(() => setToast(null), 3000);
   }, []);
+
+  // First-person toggle (V) — same guards as E so typing never toggles it.
+  const fppBlocked =
+    !worldReady ||
+    tourOpen ||
+    chatOpen ||
+    statusInputFocused ||
+    membersOpen ||
+    statusMenu ||
+    openMemberId !== null ||
+    workspaceOpen ||
+    ciOpen ||
+    chillScreenOpen ||
+    gamesOpen ||
+    whiteboardId !== null;
+  const fppBlockedRef = useRef(fppBlocked);
+  fppBlockedRef.current = fppBlocked;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code !== "KeyV") return;
+      const t = e.target as HTMLElement | null;
+      if (t?.closest?.("input,textarea,select,[contenteditable]")) return;
+      if (fppBlockedRef.current) return;
+      setFpp((v) => {
+        if (!v) showToast("First-person — V or Esc to exit");
+        return !v;
+      });
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [showToast]);
 
   useEffect(
     () => () => {
@@ -1029,8 +1061,24 @@ export function WorldCanvas({
             <span className="font-semibold text-neutral-900">Drag</span> Look ·{" "}
             <span className="font-semibold text-neutral-900">Scroll</span> Zoom
           </span>
+          <span className="h-3.5 w-px bg-black/[0.09]" />
+          <span>
+            <kbd className="rounded-md bg-white px-1.5 py-0.5 font-mono text-[10px] font-semibold text-neutral-800 ring-1 ring-black/[0.09]">
+              V
+            </kbd>{" "}
+            <span className="font-semibold text-neutral-900">
+              {fpp ? "Exit first-person" : "First-person"}
+            </span>
+          </span>
         </div>
       </div>
+
+      {/* First-person crosshair */}
+      {fpp && (
+        <div className="pointer-events-none absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2">
+          <div className="h-1.5 w-1.5 rounded-full bg-white/90 ring-1 ring-black/40" />
+        </div>
+      )}
 
       {/* First-run tour */}
       {tourOpen && (
@@ -1277,6 +1325,7 @@ export function WorldCanvas({
           stepUp={STEP_UP}
           onRealtimeMove={handleRealtimeMove}
           coffee={coffeeActive}
+          firstPerson={fpp}
         />
 
         <RemoteAvatars
@@ -1294,6 +1343,8 @@ export function WorldCanvas({
           targetRef={playerGroupRef}
           colliders={CAMERA_COLLIDERS}
           onYawChange={setCameraYaw}
+          mode={fpp ? "first" : "third"}
+          onPointerLockExit={() => setFpp(false)}
         />
 
         <Preload all />

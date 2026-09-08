@@ -8,6 +8,12 @@ interface ThirdPersonCameraProps {
   targetRef?: React.RefObject<THREE.Object3D | null>;
   colliders?: Box3Spec[];
   onYawChange?: (yaw: number) => void;
+  /** "first" puts the lens at eye height, looking along yaw/pitch. */
+  mode?: "third" | "first";
+  /** Eye height above the feet in first-person. */
+  eyeHeight?: number;
+  /** Fired when the browser exits pointer lock (Esc) while in first-person. */
+  onPointerLockExit?: () => void;
 }
 
 const MIN_DIST = 1.6;
@@ -15,6 +21,10 @@ const MAX_DIST = 13;
 const DEFAULT_DIST = 6.5;
 const TARGET_HEIGHT = 1.35; // shoulder/head height above feet
 const CAM_MARGIN = 0.35; // keep the lens off the wall
+const EYE_PROBE = 0.5; // nose-against-wall clamp distance in first-person
+// First-person pitch range (look up/down); third-person stays top-down only.
+const FPP_PITCH_MIN = -1.2;
+const FPP_PITCH_MAX = 1.35;
 
 /**
  * Smooth third-person follow camera.
@@ -26,6 +36,9 @@ export function ThirdPersonCamera({
   targetRef,
   colliders = [],
   onYawChange,
+  mode = "third",
+  eyeHeight = 1.62,
+  onPointerLockExit,
 }: ThirdPersonCameraProps) {
   const { camera, gl } = useThree();
 
@@ -34,6 +47,31 @@ export function ThirdPersonCamera({
   const distanceRef = useRef(DEFAULT_DIST);
   const draggingRef = useRef(false);
   const prevMouse = useRef({ x: 0, y: 0 });
+  const modeRef = useRef(mode);
+  modeRef.current = mode;
+
+  // Entering/exiting FPP resets any in-flight drag so yaw can't jump.
+  useEffect(() => {
+    draggingRef.current = false;
+    if (mode === "first") {
+      gl.domElement.requestPointerLock?.();
+    } else if (document.pointerLockElement === gl.domElement) {
+      document.exitPointerLock?.();
+    }
+  }, [mode, gl]);
+
+  // Pointer-lock exit (Esc) bubbles up so the app can leave FPP.
+  useEffect(() => {
+    if (mode !== "first") return;
+    const onLockChange = () => {
+      if (document.pointerLockElement !== gl.domElement) {
+        onPointerLockExit?.();
+      }
+    };
+    document.addEventListener("pointerlockchange", onLockChange);
+    return () =>
+      document.removeEventListener("pointerlockchange", onLockChange);
+  }, [mode, gl, onPointerLockExit]);
 
   const currentTarget = useRef(
     new THREE.Vector3(...(targetPosition ?? [0, 0, 0])),
@@ -50,21 +88,31 @@ export function ThirdPersonCamera({
     };
     const onUp = () => (draggingRef.current = false);
     const onMove = (e: MouseEvent) => {
-      if (!draggingRef.current) return;
-      const dx = e.clientX - prevMouse.current.x;
-      const dy = e.clientY - prevMouse.current.y;
-      prevMouse.current = { x: e.clientX, y: e.clientY };
+      const locked =
+        document.pointerLockElement === gl.domElement &&
+        modeRef.current === "first";
+      if (!draggingRef.current && !locked) return;
       const sens = 0.005;
-      yawRef.current -= dx * sens;
-      pitchRef.current += dy * sens;
+      if (locked) {
+        yawRef.current -= e.movementX * sens;
+        pitchRef.current += e.movementY * sens;
+      } else {
+        const dx = e.clientX - prevMouse.current.x;
+        const dy = e.clientY - prevMouse.current.y;
+        prevMouse.current = { x: e.clientX, y: e.clientY };
+        yawRef.current -= dx * sens;
+        pitchRef.current += dy * sens;
+      }
+      const fp = modeRef.current === "first";
       pitchRef.current = Math.max(
-        0.05,
-        Math.min(Math.PI / 2 - 0.08, pitchRef.current),
+        fp ? FPP_PITCH_MIN : 0.05,
+        Math.min(fp ? FPP_PITCH_MAX : Math.PI / 2 - 0.08, pitchRef.current),
       );
       onYawChange?.(yawRef.current);
     };
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
+      if (modeRef.current === "first") return; // zoom has no meaning at the eye
       distanceRef.current = Math.max(
         MIN_DIST,
         Math.min(MAX_DIST, distanceRef.current + e.deltaY * 0.006),
@@ -149,6 +197,22 @@ export function ThirdPersonCamera({
       Math.sin(pitch),
       Math.cos(yaw) * Math.cos(pitch),
     ).normalize();
+
+    // First-person: lens at the eye, looking along yaw/pitch. Movement stays
+    // yaw-only (PlayerController never reads pitch), so nothing else changes.
+    if (modeRef.current === "first") {
+      const eye = new THREE.Vector3(tx, ty + eyeHeight, tz);
+      // viewDir points from behind-camera to in-front; negate orbit dir.
+      const view = new THREE.Vector3(-dir.x, -dir.y, -dir.z);
+      // Keep the near plane out of the wall when nose-against it.
+      const clear = rayHit(eye, view, EYE_PROBE);
+      const back = clear < EYE_PROBE ? EYE_PROBE - clear : 0;
+      eye.addScaledVector(view, -back);
+      eye.y = Math.max(0.5, eye.y);
+      camera.position.copy(eye);
+      camera.lookAt(eye.x + view.x, eye.y + view.y, eye.z + view.z);
+      return;
+    }
 
     // Collision: shrink distance if a wall is between target and desired camera.
     const wanted = distanceRef.current;
