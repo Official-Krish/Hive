@@ -54,7 +54,7 @@ import { PairModeBar } from "./PairModeBar";
 import { PeerCursorOverlay } from "./PeerCursorOverlay";
 import { Confetti, type ConfettiRef } from "@/components/ui/confetti";
 import { cn } from "@/lib/utils";
-import { statusLabel, useDismiss } from "./chrome";
+import { STATUS_DOT, statusLabel, useDismiss } from "./chrome";
 import { useChillMedia } from "@/hooks/useChillMedia";
 import { ChillScreenProjection } from "./ChillScreenProjection";
 import { ChillScreenModal } from "./ChillScreenModal";
@@ -109,24 +109,6 @@ const safePointerEvents: typeof createPointerEvents = (store) => {
     connect?.(target);
   };
   return manager;
-};
-
-const STATUS_DOT: Record<string, string> = {
-  online: "bg-emerald-500",
-  away: "bg-amber-500",
-  on_call: "bg-sky-500",
-  busy: "bg-rose-500",
-  focusing: "bg-purple-500",
-  offline: "bg-neutral-300",
-};
-
-const STATUS_LABEL: Record<string, string> = {
-  online: "Online",
-  away: "Away",
-  on_call: "On call",
-  busy: "Busy",
-  focusing: "Focusing",
-  offline: "Offline",
 };
 
 /** Members directory popup — Escape or outside click dismisses. */
@@ -336,11 +318,14 @@ function InlineTextRow({
 /** TEMP dev probe: exposes the renderer + scene for perf measurement. */
 function PerfProbe() {
   const { gl, scene, camera } = useThree();
-  (window as unknown as Record<string, unknown>).__three = {
-    gl,
-    scene,
-    camera,
-  };
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    (window as unknown as Record<string, unknown>).__three = {
+      gl,
+      scene,
+      camera,
+    };
+  }, [gl, scene, camera]);
   return null;
 }
 
@@ -406,7 +391,9 @@ export function WorldCanvas({
 
   // Pair-session collaborative cursor: forward my pointer to the active
   // session as normalised window coordinates (throttled inside the hook).
+  // Listener only exists while a session is active.
   useEffect(() => {
+    if (!pair.active) return;
     const onMove = (e: MouseEvent) => {
       pair.sendCursor(
         e.clientX / window.innerWidth,
@@ -415,7 +402,7 @@ export function WorldCanvas({
     };
     window.addEventListener("mousemove", onMove);
     return () => window.removeEventListener("mousemove", onMove);
-  }, [pair.sendCursor]);
+  }, [pair.sendCursor, pair.active]);
 
   const CURSOR_COLORS = ["#6366f1", "#0ea5e9", "#10b981", "#f59e0b"];
   const cursorColorOf = (id: string): string =>
@@ -464,8 +451,7 @@ export function WorldCanvas({
   const myPresence = avatars.get(myUserId);
   const myStatusLabel =
     (myPresence?.label as string | undefined) ??
-    STATUS_LABEL[myPresence?.status ?? "online"] ??
-    "Online";
+    statusLabel(myPresence?.status ?? "online");
 
   // Members directory: full workspace roster stamped with live presence.
   const roster = useMemo(() => {
@@ -516,6 +502,11 @@ export function WorldCanvas({
   const confettiRef = useRef<ConfettiRef>(null);
 
   const fireConfetti = useCallback(() => {
+    if (
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    )
+      return;
     void confettiRef.current?.fire({
       particleCount: 140,
       spread: 75,
@@ -685,6 +676,8 @@ export function WorldCanvas({
   const interaction = useInteractions({
     pos: playerPos,
     blocked:
+      !worldReady ||
+      tourOpen ||
       chatOpen ||
       statusInputFocused ||
       membersOpen ||
@@ -694,7 +687,8 @@ export function WorldCanvas({
       ciOpen ||
       chillScreenOpen ||
       gamesOpen ||
-      whiteboardId !== null,
+      whiteboardId !== null ||
+      pair.open,
     onPress: handleInteract,
   });
 
@@ -1292,7 +1286,7 @@ export function WorldCanvas({
         <color attach="background" args={["#cdd8e3"]} />
 
         <Suspense fallback={null}>
-          <OfficeLighting />
+          <OfficeLighting level={playerPos[1] > 3.1 ? 2 : 1} />
           <OfficeBuilding />
         </Suspense>
         {/* The YouTube player is a DOM surface, so it cannot participate in
@@ -1300,6 +1294,7 @@ export function WorldCanvas({
             is in the Chill Space; elsewhere the real TV wall stays untouched. */}
         <ChillScreenProjection
           active={!!chill.state.videoId && currentRoom === "Chill Space"}
+          mounted={!!chill.state.videoId}
         />
 
         <PlayerController

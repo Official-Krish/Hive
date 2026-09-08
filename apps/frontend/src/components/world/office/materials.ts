@@ -1090,6 +1090,17 @@ const FLOOR_SPEC: Record<FloorKind, FloorSpec> = {
 };
 
 const floorCache = new Map<string, THREE.MeshStandardMaterial>();
+const MAX_CACHED_MATERIALS = 64;
+
+/** Evict the oldest cached material when the cap is hit (dispose GPU state). */
+function capCache(cache: Map<string, THREE.MeshStandardMaterial>) {
+  if (cache.size < MAX_CACHED_MATERIALS) return;
+  const oldest = cache.keys().next();
+  if (!oldest.done) {
+    cache.get(oldest.value)?.dispose();
+    cache.delete(oldest.value);
+  }
+}
 
 /**
  * Floor material for a room, with the texture repeat derived from the room's
@@ -1122,6 +1133,7 @@ export function floorFor(
     metalness: spec.metalness,
     roughnessMap: rmap,
   });
+  capCache(floorCache);
   floorCache.set(key, mat);
   return mat;
 }
@@ -1224,6 +1236,7 @@ export function facadeFor(
     roughness: 0.34,
     metalness: 0.36,
   });
+  capCache(facadeCache);
   facadeCache.set(key, mat);
   return mat;
 }

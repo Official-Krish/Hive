@@ -254,7 +254,9 @@ export function PlayerController({
       }
     }
 
-    posRef.current = [nextX, nextY, nextZ];
+    posRef.current[0] = nextX;
+    posRef.current[1] = nextY;
+    posRef.current[2] = nextZ;
 
     // --- Heading (face movement direction) ---------------------------------
     const speed = Math.hypot(vx, vz);
@@ -279,13 +281,15 @@ export function PlayerController({
     hudAccum.current += delta;
     if (hudAccum.current > 0.08) {
       hudAccum.current = 0;
-      (window as unknown as Record<string, unknown>).__dbg = {
-        pos: [nextX, nextY, nextZ],
-        vel: [velRef.current.x, velRef.current.z],
-        keys: Object.entries(keys.current).filter(([, v]) => v),
-        grounded: groundedRef.current,
-        support,
-      };
+      if (import.meta.env.DEV) {
+        (window as unknown as Record<string, unknown>).__dbg = {
+          pos: [nextX, nextY, nextZ],
+          vel: [velRef.current.x, velRef.current.z],
+          keys: Object.entries(keys.current).filter(([, v]) => v),
+          grounded: groundedRef.current,
+          support,
+        };
+      }
       const room = roomAt ? roomAt(nextX, nextZ, nextY) : "";
       if (onRoomChange) {
         onRoomChange(room);

@@ -70,6 +70,7 @@ function Nameplate({
   const metaEl = useRef<HTMLDivElement>(null);
 
   useFrame(({ camera }) => {
+    if (document.hidden) return;
     const g = anchor.current;
     if (!g) return;
     g.getWorldPosition(_nameplateWorld);
@@ -161,8 +162,18 @@ export default function Avatar({
       if (m.isMesh) {
         m.castShadow = true;
         m.receiveShadow = false;
-        if (m.geometry) m.geometry.computeBoundingSphere();
-        m.frustumCulled = false;
+        if (m.geometry) {
+          m.geometry.computeBoundingSphere();
+          const sphere = m.geometry.boundingSphere;
+          if (sphere) {
+            // Inflate for animation range (limbs leave the bind pose), then
+            // allow frustum culling — off-screen avatars skip main + shadow.
+            sphere.radius *= 1.6;
+          }
+          m.frustumCulled = true;
+        } else {
+          m.frustumCulled = false;
+        }
       }
     });
     if (!skinnedMesh) return;

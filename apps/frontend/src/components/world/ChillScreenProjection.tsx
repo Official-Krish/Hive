@@ -26,10 +26,18 @@ const facePosition = new THREE.Vector3(...CHILL_SCREEN.position).add(
  * world transform and perspective, so camera motion cannot make it slide away
  * from the wall like a floating HUD panel.
  */
-export function ChillScreenProjection({ active }: { active: boolean }) {
+export function ChillScreenProjection({
+  active,
+  mounted,
+}: {
+  active: boolean;
+  /** False when no video is set — skips the CSS-3D host + per-frame check. */
+  mounted: boolean;
+}) {
   const playerMountRef = useRef<HTMLDivElement>(null);
 
   useFrame(() => {
+    if (!mounted) return;
     const player = chillScreenOverlay.node;
     const mount = playerMountRef.current;
     if (player && mount && player.parentElement !== mount) {
@@ -49,6 +57,7 @@ export function ChillScreenProjection({ active }: { active: boolean }) {
     chillScreenOverlay.videoActive = active;
   });
 
+  if (!mounted || !active) return null;
   return (
     <Html
       transform

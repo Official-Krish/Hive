@@ -21,11 +21,16 @@ export function PeerCursorOverlay({
   colorOf,
 }: PeerCursorOverlayProps) {
   // Re-render on a beat so stale cursors expire even without parent updates.
+  // No cursors, no timer.
+  const empty = Array.isArray(cursors)
+    ? cursors.length === 0
+    : cursors.size === 0;
   const [, setTick] = useState(0);
   useEffect(() => {
+    if (empty) return;
     const t = setInterval(() => setTick((n) => n + 1), 1000);
     return () => clearInterval(t);
-  }, []);
+  }, [empty]);
 
   const list = Array.isArray(cursors)
     ? cursors

@@ -8,8 +8,11 @@ const SUN: [number, number, number] = [60, 80, -40];
  * image-based fill + glass/metal reflections, a single shadow-casting sun gives
  * crisp grounding, and the layout's accent point lights pool warm/cool light
  * into each room. ContactShadows softly grounds furniture on the interior floor.
+ *
+ * Perf: accent pools are storey-culled (only the player's level mounts its
+ * lights), so the forward renderer shades ≤8 points + 2 spots per frame.
  */
-export function OfficeLighting() {
+export function OfficeLighting({ level = 1 }: { level?: 1 | 2 }) {
   const { minX, maxX, minZ, maxZ } = INTERIOR;
   const cx = (minX + maxX) / 2;
   const cz = (minZ + maxZ) / 2;
@@ -87,8 +90,8 @@ export function OfficeLighting() {
         />
       </directionalLight>
 
-      {/* Room accent pools (no shadows — kept cheap), both storeys */}
-      {[...ACCENT_LIGHTS, ...ACCENT_LIGHTS_L2].map((l, i) => (
+      {/* Room accent pools (no shadows — kept cheap), current storey only */}
+      {(level === 2 ? ACCENT_LIGHTS_L2 : ACCENT_LIGHTS).map((l, i) => (
         <pointLight
           key={i}
           position={l.position}
