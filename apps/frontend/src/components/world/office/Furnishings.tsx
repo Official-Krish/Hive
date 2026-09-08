@@ -80,12 +80,16 @@ function PhoneBooth({
         </mesh>
       ))}
       {/* glazing on three sides (the fourth is the doorway) */}
-      <mesh position={[0, H / 2, -D / 2 + 0.03]}>
+      <mesh position={[0, H / 2, -D / 2 + 0.03]} renderOrder={20}>
         <boxGeometry args={[W - 0.1, H - 0.24, 0.03]} />
         <primitive object={M.glassCheap} attach="material" />
       </mesh>
       {[-1, 1].map((s) => (
-        <mesh key={s} position={[(s * W) / 2 - s * 0.03, H / 2, 0]}>
+        <mesh
+          key={s}
+          position={[(s * W) / 2 - s * 0.03, H / 2, 0]}
+          renderOrder={20}
+        >
           <boxGeometry args={[0.03, H - 0.24, D - 0.1]} />
           <primitive object={M.glassCheap} attach="material" />
         </mesh>
@@ -163,7 +167,7 @@ function WaterCooler({ x, z }: { x: number; z: number }) {
         <cylinderGeometry args={[0.15, 0.13, 0.07, 16]} />
         <primitive object={M.blackAnodized} attach="material" />
       </mesh>
-      <mesh position={[0, 1.75, 0]}>
+      <mesh position={[0, 1.75, 0]} renderOrder={20}>
         <cylinderGeometry args={[0.125, 0.125, 0.42, 16]} />
         <primitive object={M.glassCheap} attach="material" />
       </mesh>
@@ -252,9 +256,9 @@ export function Furnishings() {
           <primitive object={M.featureWall} attach="material" />
         </mesh>
         {/* Brand hexes above the display */}
-        <HexLogo x={9.1} y={3.28} z={17.88} s={0.26} />
-        <HexLogo x={10.5} y={3.28} z={17.88} s={0.26} />
-        <HexLogo x={11.9} y={3.28} z={17.88} s={0.26} />
+        <HexLogo x={9.1} y={3.35} z={17.88} s={0.26} />
+        <HexLogo x={10.5} y={3.35} z={17.88} s={0.26} />
+        <HexLogo x={11.9} y={3.35} z={17.88} s={0.26} />
         {/* Wall-wash strip at the base */}
         <mesh position={[10.5, 0.06, 17.84]}>
           <boxGeometry args={[11.2, 0.05, 0.06]} />
@@ -304,7 +308,7 @@ export function Furnishings() {
           <primitive object={M.stoneCounter} attach="material" />
         </mesh>
         {/* Sneeze guard */}
-        <mesh position={[8.5, 1.55, 7]}>
+        <mesh position={[8.5, 1.55, 7]} renderOrder={20}>
           <boxGeometry args={[0.04, 0.75, 7.4]} />
           <primitive object={M.glassCheap} attach="material" />
         </mesh>
@@ -429,7 +433,7 @@ export function Furnishings() {
             <boxGeometry args={[0.9, 1.9, 0.75]} />
             <primitive object={M.metalBrushed} attach="material" />
           </mesh>
-          <mesh position={[0, 1.1, 0.39]}>
+          <mesh position={[0, 1.1, 0.39]} renderOrder={20}>
             <boxGeometry args={[0.72, 1.1, 0.03]} />
             <primitive object={M.glassCheap} attach="material" />
           </mesh>

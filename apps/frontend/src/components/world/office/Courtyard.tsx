@@ -65,11 +65,7 @@ function Block({ n }: { n: Neighbor }) {
       </mesh>
 
       {/* Curtain-walled body */}
-      <mesh
-        position={[0, PLINTH_H + bodyH / 2, 0]}
-        castShadow
-        receiveShadow
-      >
+      <mesh position={[0, PLINTH_H + bodyH / 2, 0]} castShadow receiveShadow>
         <boxGeometry args={[n.w, bodyH, n.d]} />
         <primitive object={facade} attach="material" />
       </mesh>
@@ -81,11 +77,7 @@ function Block({ n }: { n: Neighbor }) {
             <boxGeometry args={[n.w + 0.3, 0.2, n.d + 0.3]} />
             <primitive object={M.precastDark} attach="material" />
           </mesh>
-          <mesh
-            position={[0, upperY + topH / 2, 0]}
-            castShadow
-            receiveShadow
-          >
+          <mesh position={[0, upperY + topH / 2, 0]} castShadow receiveShadow>
             <boxGeometry
               args={[n.w - n.setback * 2, topH, n.d - n.setback * 2]}
             />
@@ -117,7 +109,7 @@ function Block({ n }: { n: Neighbor }) {
         position={[ex * (half + 0.28), 0, ez * (half + 0.28)]}
         rotation={[0, ex !== 0 ? Math.PI / 2 : 0, 0]}
       >
-        <mesh position={[0, 1.9, 0]}>
+        <mesh position={[0, 1.9, 0]} renderOrder={10}>
           <boxGeometry args={[Math.min(faceW * 0.5, 11), 3.6, 0.12]} />
           <primitive object={M.glassCheap} attach="material" />
         </mesh>

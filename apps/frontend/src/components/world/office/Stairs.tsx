@@ -33,7 +33,7 @@ function Guard({ side }: { side: -1 | 1 }) {
         <primitive object={M.concrete} attach="material" />
       </mesh>
       {/* glazing */}
-      <mesh position={[0, BALUSTRADE_H / 2 + 0.08, 0]}>
+      <mesh position={[0, BALUSTRADE_H / 2 + 0.08, 0]} renderOrder={30}>
         <boxGeometry args={[SLOPE_LEN - 0.1, BALUSTRADE_H, 0.04]} />
         <primitive object={M.glassCheap} attach="material" />
       </mesh>

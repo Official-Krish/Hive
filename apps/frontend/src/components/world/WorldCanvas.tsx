@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   Canvas,
   events as createPointerEvents,
@@ -32,6 +39,7 @@ import { usePairSession } from "@/hooks/usePairSession";
 import { http } from "@/lib/http";
 import RemoteAvatars from "./RemoteAvatars";
 import { Markers } from "./Markers";
+import { WorldTour, markTourSeen, shouldShowTour } from "./WorldTour";
 import { MemberDetailPopup } from "./MapHud";
 import { ChatPanel } from "./ChatPanel";
 import { GitHubNotificationBell } from "./GitHubNotificationBell";
@@ -560,6 +568,23 @@ export function WorldCanvas({
   const [whiteboardId, setWhiteboardId] = useState<string | null>(null);
   const [chillScreenOpen, setChillScreenOpen] = useState(false);
   const [gamesOpen, setGamesOpen] = useState(false);
+  // Onboarding: renderer ready, spawn fade, first-run tour.
+  const [worldReady, setWorldReady] = useState(false);
+  const [spawnFaded, setSpawnFaded] = useState(false);
+  const [tourOpen, setTourOpen] = useState(() => shouldShowTour());
+  const [loadingTip, setLoadingTip] = useState(0);
+
+  useEffect(() => {
+    if (worldReady) return;
+    const t = window.setInterval(() => setLoadingTip((v) => v + 1), 2600);
+    return () => window.clearInterval(t);
+  }, [worldReady]);
+
+  useEffect(() => {
+    if (!worldReady || spawnFaded) return;
+    const t = window.setTimeout(() => setSpawnFaded(true), 900);
+    return () => window.clearTimeout(t);
+  }, [worldReady, spawnFaded]);
 
   const showToast = useCallback((node: React.ReactNode) => {
     setToast(node);
@@ -714,6 +739,30 @@ export function WorldCanvas({
 
   return (
     <div className="relative w-full h-screen overflow-hidden font-sans select-none">
+      {/* Loading overlay — covers the flat background while GLBs stream in */}
+      {!worldReady && (
+        <div className="absolute inset-0 z-40 flex flex-col items-center justify-center gap-3 bg-[#14171d]">
+          <div className="text-[11px] font-medium uppercase tracking-[0.22em] text-neutral-400">
+            Loading Hive
+          </div>
+          <div className="h-1 w-44 overflow-hidden rounded-full bg-white/10">
+            <div className="h-full w-1/2 animate-pulse rounded-full bg-emerald-400" />
+          </div>
+          <div className="max-w-[300px] text-center text-[12px] text-neutral-400">
+            {
+              [
+                "Tip: walk north (W) through the glass entrance.",
+                "Tip: press E at any glowing desk to open it.",
+                "Tip: the west-end stairs lead up to L2.",
+              ][loadingTip % 3]
+            }
+          </div>
+        </div>
+      )}
+      {/* Spawn fade — eases in over the first second in-world */}
+      {worldReady && !spawnFaded && (
+        <div className="pointer-events-none absolute inset-0 z-30 animate-pulse bg-black/30" />
+      )}
       {/* Top bar: back · workspace · location · you */}
       <div className="absolute top-4 left-4 right-4 z-10 flex flex-wrap items-center gap-2 pointer-events-none">
         <button
@@ -781,6 +830,16 @@ export function WorldCanvas({
         )}
 
         <div className="pointer-events-auto ml-auto flex items-center gap-2">
+          {/* Tour — reopens the first-run walkthrough */}
+          <button
+            type="button"
+            onClick={() => setTourOpen(true)}
+            aria-label="Show tour"
+            title="Show tour"
+            className={`${CHIP} px-3 py-2 text-[13px] font-semibold text-neutral-700 transition-colors hover:bg-white/70`}
+          >
+            ?
+          </button>
           {/* GitHub notifications */}
           <GitHubNotificationBell
             workspaceId={workspaceId}
@@ -941,11 +1000,11 @@ export function WorldCanvas({
           </div>
         )}
 
-      {/* Controls legend */}
+      {/* Controls legend — contextual hint follows room + target */}
       <div className="absolute bottom-4 left-4 z-10 pointer-events-none">
         <div
           className={`${CHIP} rounded-full px-4 py-2.5 text-[11px] font-medium text-neutral-500`}
-          aria-label="Keyboard controls: WASD to move, Shift to run, Space to jump, drag to look, scroll to zoom"
+          aria-label="Controls and current hint"
         >
           {["W", "A", "S", "D"].map((k) => (
             <kbd
@@ -957,20 +1016,33 @@ export function WorldCanvas({
           ))}
           <span className="ml-0.5">Move</span>
           <span className="h-3.5 w-px bg-black/[0.09]" />
-          <span>
-            <span className="font-semibold text-neutral-900">Shift</span> Run
+          <span className="max-w-[220px] truncate font-semibold text-neutral-700">
+            {interaction.near
+              ? `E — ${interaction.near.prompt}`
+              : currentRoom === "Courtyard"
+                ? "Walk north → entrance"
+                : playerPos[1] > 3.1
+                  ? "Upper floor — stairs go back down"
+                  : "Stairs at lobby west end → L2"}
           </span>
-          <span className="h-3.5 w-px bg-black/[0.09]" />
-          <span>
-            <span className="font-semibold text-neutral-900">Space</span> Jump
-          </span>
-          <span className="h-3.5 w-px bg-black/[0.09]" />
           <span className="hidden sm:inline">
             <span className="font-semibold text-neutral-900">Drag</span> Look ·{" "}
             <span className="font-semibold text-neutral-900">Scroll</span> Zoom
           </span>
         </div>
       </div>
+
+      {/* First-run tour */}
+      {tourOpen && (
+        <div className="absolute bottom-24 left-1/2 z-20 -translate-x-1/2">
+          <WorldTour
+            onClose={() => {
+              markTourSeen();
+              setTourOpen(false);
+            }}
+          />
+        </div>
+      )}
 
       {/* Office ticker — pushes / PRs / test pulses (hidden while a call is active) */}
       {feed.length > 0 && nearIds.size === 0 && (
@@ -1158,11 +1230,14 @@ export function WorldCanvas({
         }}
         events={safePointerEvents}
         className="w-full h-full"
+        onCreated={() => setWorldReady(true)}
       >
         <color attach="background" args={["#cdd8e3"]} />
 
-        <OfficeLighting />
-        <OfficeBuilding />
+        <Suspense fallback={null}>
+          <OfficeLighting />
+          <OfficeBuilding />
+        </Suspense>
         {/* The YouTube player is a DOM surface, so it cannot participate in
             WebGL wall occlusion. Keep it visible only while the local player
             is in the Chill Space; elsewhere the real TV wall stays untouched. */}
@@ -1182,6 +1257,8 @@ export function WorldCanvas({
             STATUS_DOT[myPresence?.status ?? "online"] ?? "bg-emerald-500"
           }
           disabled={
+            !worldReady ||
+            tourOpen ||
             chatOpen ||
             statusInputFocused ||
             membersOpen ||
@@ -1210,7 +1287,7 @@ export function WorldCanvas({
           onAvatarClick={(id) => setOpenMemberId(id)}
         />
 
-        {/* Wayfinding markers over usable things (desks excluded — too many) */}
+        {/* Wayfinding markers over usable things + desk proximity dots */}
         <Markers playerPos={playerPos} nearId={interaction.near?.id ?? null} />
 
         <ThirdPersonCamera

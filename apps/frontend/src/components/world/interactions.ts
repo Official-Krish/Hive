@@ -52,11 +52,11 @@ const COOLER: Interactable = {
 };
 
 /** Whiteboards hang on walls; the standing point sits ~1.2m off the face. */
-const WHITEBOARD_SPOTS: Array<[number, number]> = [
+export const WHITEBOARD_SPOTS: Array<[number, number]> = [
   [11.5, 0.55], // meeting room divider (north face)
   [26.5, 0.55], // meeting room divider (north face)
-  [-2.7, 10], // corridor west wall
-  [-2.7, -13], // corridor west wall (south)
+  [-5.7, 10], // corridor west wall — board faces west into the workspace
+  [-5.7, -13], // corridor west wall — board faces west into the lounge
 ];
 
 /**

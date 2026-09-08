@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import * as THREE from "three";
+import { MeshReflectorMaterial } from "@react-three/drei";
 import {
   WALLS,
   ROOMS,
@@ -83,7 +84,7 @@ function GlassSeg({ w }: { w: Wall }) {
         const cy = (y0 + y1) / 2;
         return (
           <group key={i} position={[0, cy, 0]}>
-            <mesh>
+            <mesh renderOrder={10}>
               <boxGeometry args={[len, bh, 0.06]} />
               <primitive object={M.glassCheap} attach="material" />
             </mesh>
@@ -168,7 +169,6 @@ function SolidSeg({ w }: { w: Wall }) {
 /** Export the segment renderers so the level 2 layer draws identical walls. */
 export { GlassSeg, SolidSeg };
 
-
 /** A flat roof panel (used four times to leave the skylight opening). */
 function RoofPanel({
   x0,
@@ -237,6 +237,21 @@ export function Shell() {
     return t;
   }, [lobbyW, lobbyD]);
 
+  // Real planar reflection is an extra render pass — gate it to capable
+  // desktops so weak GPUs keep the polished-stone fallback below.
+  const reflectOK = useMemo(() => {
+    if (typeof window === "undefined") return false;
+    const coarse = window.matchMedia("(pointer: coarse)").matches;
+    const reduced = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    return (
+      !coarse &&
+      !reduced &&
+      Math.min(window.innerWidth, window.innerHeight) >= 700
+    );
+  }, []);
+
   return (
     <group name="office-shell">
       {/* Foundation slab, slightly proud of the courtyard so there's a threshold */}
@@ -264,7 +279,8 @@ export function Shell() {
         );
       })}
 
-      {/* Lobby: polished stone with a real reflection */}
+      {/* Lobby: polished stone with a real planar reflection (lobby rect only).
+          Falls back to plain polished stone on touch / reduced-motion / small screens. */}
       <mesh
         position={[
           (lobbyRoom.rect[0] + lobbyRoom.rect[1]) / 2,
@@ -275,12 +291,29 @@ export function Shell() {
         receiveShadow
       >
         <planeGeometry args={[lobbyW, lobbyD]} />
-        <meshStandardMaterial
-          map={lobbyMap}
-          color="#ded9ce"
-          roughness={0.3}
-          metalness={0.15}
-        />
+        {reflectOK ? (
+          <MeshReflectorMaterial
+            map={lobbyMap}
+            color="#ded9ce"
+            roughness={0.32}
+            metalness={0.15}
+            blur={[280, 60]}
+            mixBlur={0.9}
+            mixStrength={6}
+            resolution={512}
+            mirror={0.45}
+            depthScale={1.1}
+            minDepthThreshold={0.4}
+            maxDepthThreshold={1.4}
+          />
+        ) : (
+          <meshStandardMaterial
+            map={lobbyMap}
+            color="#ded9ce"
+            roughness={0.3}
+            metalness={0.15}
+          />
+        )}
       </mesh>
 
       {/* Walls */}
@@ -304,7 +337,7 @@ export function Shell() {
         <primitive object={M.wall} attach="material" />
       </mesh>
       {/* Glazed transom filling the facade above the entrance */}
-      <mesh position={[0, (3.6 + EXT_H) / 2, maxZ]}>
+      <mesh position={[0, (3.6 + EXT_H) / 2, maxZ]} renderOrder={10}>
         <boxGeometry args={[DOOR.x1 - DOOR.x0, EXT_H - 3.6, 0.06]} />
         <primitive object={M.glassCheap} attach="material" />
       </mesh>
@@ -428,10 +461,7 @@ export function Shell() {
         <primitive object={M.ceiling} attach="material" />
       </mesh>
       {/* Bulkhead where the level 2 ceiling meets the open atrium */}
-      <mesh
-        position={[0, (CEILING_Y2 + ROOF_TOP) / 2, MEZZ.z1]}
-        castShadow
-      >
+      <mesh position={[0, (CEILING_Y2 + ROOF_TOP) / 2, MEZZ.z1]} castShadow>
         <boxGeometry args={[width, ROOF_TOP - CEILING_Y2, 0.5]} />
         <primitive object={M.wall} attach="material" />
       </mesh>
@@ -479,6 +509,7 @@ export function Shell() {
           (SKYLIGHT.z0 + SKYLIGHT.z1) / 2,
         ]}
         rotation={[-Math.PI / 2, 0, 0]}
+        renderOrder={10}
       >
         <planeGeometry
           args={[SKYLIGHT.x1 - SKYLIGHT.x0, SKYLIGHT.z1 - SKYLIGHT.z0]}

@@ -389,12 +389,22 @@ function windowGrid(cols: number, rows: number, seed: number, lit = 0.5) {
   );
 }
 
-/** Procedural dashboard content for wall TVs. */
-function screenContent(seed: number, hue: "blue" | "green" | "violet") {
+/** Procedural dashboard content for wall TVs. `layout` picks the composition
+ *  so adjacent screens never show the same wallpaper. */
+export type ScreenLayout =
+  "chart" | "pipeline" | "agenda" | "menu" | "heatmap" | "logs";
+function screenContent(
+  seed: number,
+  hue: "blue" | "green" | "violet" | "cyan" | "amber" | "rose",
+  layout: ScreenLayout = "chart",
+) {
   const palettes: Record<typeof hue, Palette> = {
     blue: ["#38bdf8", "#0ea5e9", "#60a5fa"],
     green: ["#34d399", "#10b981", "#6ee7b7"],
     violet: ["#a78bfa", "#8b5cf6", "#c4b5fd"],
+    cyan: ["#22d3ee", "#06b6d4", "#67e8f9"],
+    amber: ["#fbbf24", "#f59e0b", "#fcd34d"],
+    rose: ["#fb7185", "#f43f5e", "#fda4af"],
   };
   const accents = palettes[hue];
   const lead = accents[0];
@@ -404,11 +414,151 @@ function screenContent(seed: number, hue: "blue" | "green" | "violet") {
     (ctx, s, rnd) => {
       ctx.fillStyle = "#0b1220";
       ctx.fillRect(0, 0, s, s);
-      // header bar
+      // header bar (shared chrome so the wall reads as one system)
       ctx.fillStyle = "#131c2b";
       ctx.fillRect(0, 0, s, s * 0.11);
       ctx.fillStyle = lead;
       ctx.fillRect(s * 0.03, s * 0.04, s * 0.16, s * 0.035);
+      ctx.fillStyle = "rgba(148,163,184,0.5)";
+      ctx.fillRect(s * 0.75, s * 0.045, s * 0.22, s * 0.025);
+
+      if (layout === "pipeline") {
+        // CI stages left→right with pass/fail dots
+        const stages = 5;
+        for (let i = 0; i < stages; i++) {
+          const x = s * (0.08 + i * 0.18);
+          const y = s * 0.45;
+          const pass = rnd() > 0.25;
+          ctx.fillStyle = "#152033";
+          ctx.fillRect(x - s * 0.07, y - s * 0.14, s * 0.15, s * 0.3);
+          ctx.fillStyle = pass ? lead : "#f43f5e";
+          ctx.beginPath();
+          ctx.arc(x, y - s * 0.05, s * 0.028, 0, 6.3);
+          ctx.fill();
+          ctx.fillStyle = "rgba(148,163,184,0.55)";
+          ctx.fillRect(x - s * 0.05, y + s * 0.03, s * 0.1, s * 0.014);
+          ctx.fillRect(x - s * 0.05, y + s * 0.06, s * 0.07 * rnd(), s * 0.014);
+          if (i < stages - 1) {
+            ctx.fillStyle = "rgba(148,163,184,0.4)";
+            ctx.fillRect(x + s * 0.08, y - s * 0.06, s * 0.03, s * 0.02);
+          }
+        }
+        // footer bars
+        for (let i = 0; i < 9; i++) {
+          ctx.fillStyle = swatch(accents, i);
+          ctx.globalAlpha = 0.8;
+          const bh = s * (0.04 + rnd() * 0.12);
+          ctx.fillRect(s * 0.05 + i * s * 0.1, s * 0.94 - bh, s * 0.06, bh);
+        }
+        ctx.globalAlpha = 1;
+        return;
+      }
+
+      if (layout === "agenda") {
+        // meeting agenda rows with time blocks
+        for (let i = 0; i < 5; i++) {
+          const y = s * (0.18 + i * 0.15);
+          ctx.fillStyle = i === 1 ? lead : "rgba(148,163,184,0.5)";
+          ctx.fillRect(s * 0.05, y, s * 0.1, s * 0.05);
+          ctx.fillStyle = "#152033";
+          ctx.fillRect(s * 0.18, y - s * 0.01, s * 0.5, s * 0.09);
+          ctx.fillStyle = "rgba(226,232,240,0.75)";
+          ctx.fillRect(
+            s * 0.2,
+            y + s * 0.015,
+            s * (0.2 + rnd() * 0.22),
+            s * 0.02,
+          );
+          if (i === 1) {
+            ctx.fillStyle = lead;
+            ctx.globalAlpha = 0.25;
+            ctx.fillRect(s * 0.18, y - s * 0.01, s * 0.5, s * 0.09);
+            ctx.globalAlpha = 1;
+          }
+        }
+        // attendees strip
+        for (let i = 0; i < 6; i++) {
+          ctx.fillStyle = swatch(accents, i);
+          ctx.beginPath();
+          ctx.arc(s * (0.08 + i * 0.07), s * 0.93, s * 0.025, 0, 6.3);
+          ctx.fill();
+        }
+        return;
+      }
+
+      if (layout === "menu") {
+        // cafeteria menu list with prices
+        const items = 5;
+        for (let i = 0; i < items; i++) {
+          const y = s * (0.18 + i * 0.15);
+          ctx.fillStyle = swatch(accents, i);
+          ctx.fillRect(s * 0.05, y, s * 0.05, s * 0.05);
+          ctx.fillStyle = "rgba(226,232,240,0.8)";
+          ctx.fillRect(
+            s * 0.13,
+            y + s * 0.008,
+            s * (0.25 + rnd() * 0.2),
+            s * 0.02,
+          );
+          ctx.fillStyle = lead;
+          ctx.fillRect(s * 0.82, y + s * 0.008, s * 0.08, s * 0.02);
+        }
+        ctx.fillStyle = "rgba(148,163,184,0.4)";
+        ctx.fillRect(s * 0.05, s * 0.9, s * 0.9, s * 0.008);
+        return;
+      }
+
+      if (layout === "heatmap") {
+        // GPU cluster heatmap + side load bars
+        const n = 8;
+        for (let r = 0; r < 5; r++) {
+          for (let c = 0; c < n; c++) {
+            const v = rnd();
+            ctx.fillStyle = lead;
+            ctx.globalAlpha = 0.15 + v * 0.85;
+            ctx.fillRect(
+              s * 0.05 + c * s * 0.073,
+              s * 0.17 + r * s * 0.12,
+              s * 0.06,
+              s * 0.09,
+            );
+          }
+        }
+        ctx.globalAlpha = 1;
+        for (let i = 0; i < 3; i++) {
+          ctx.fillStyle = "#152033";
+          ctx.fillRect(s * 0.7, s * 0.17 + i * s * 0.2, s * 0.25, s * 0.15);
+          ctx.fillStyle = lead;
+          ctx.fillRect(
+            s * 0.72,
+            s * 0.28 + i * s * 0.2,
+            s * 0.2 * rnd(),
+            s * 0.02,
+          );
+        }
+        return;
+      }
+
+      if (layout === "logs") {
+        // terminal log lines with level ticks
+        for (let i = 0; i < 12; i++) {
+          const y = s * (0.16 + i * 0.065);
+          const lvl = rnd();
+          ctx.fillStyle =
+            lvl > 0.85 ? "#f43f5e" : lvl > 0.6 ? lead : "rgba(148,163,184,0.5)";
+          ctx.fillRect(s * 0.05, y, s * 0.03, s * 0.03);
+          ctx.fillStyle = `rgba(148,163,184,${0.25 + rnd() * 0.4})`;
+          ctx.fillRect(
+            s * 0.1,
+            y + s * 0.006,
+            s * (0.3 + rnd() * 0.5),
+            s * 0.014,
+          );
+        }
+        return;
+      }
+
+      // default "chart" composition (build overview)
       // line chart
       ctx.strokeStyle = lead;
       ctx.lineWidth = 4;
@@ -457,9 +607,23 @@ function screenContent(seed: number, hue: "blue" | "green" | "violet") {
   );
 }
 
-const tvA = screenContent(101, "blue");
-const tvB = screenContent(202, "green");
-const tvC = screenContent(303, "violet");
+const tvA = screenContent(101, "blue", "chart");
+const tvB = screenContent(202, "green", "agenda");
+const tvC = screenContent(303, "violet", "pipeline");
+const tvD = screenContent(404, "cyan", "heatmap");
+const tvE = screenContent(505, "amber", "menu");
+const tvF = screenContent(606, "rose", "logs");
+
+function tvMat(map: THREE.Texture | null) {
+  return new THREE.MeshStandardMaterial({
+    color: "#ffffff",
+    map: map ?? undefined,
+    emissive: "#ffffff",
+    emissiveMap: map ?? undefined,
+    emissiveIntensity: 1.15,
+    roughness: 0.25,
+  });
+}
 
 // Tower facades — generated once each and reused as both map and emissiveMap.
 const gridA = windowGrid(10, 26, 11, 0.42);
@@ -520,6 +684,10 @@ export const M = {
   }),
 
   // --- Glass ----------------------------------------------------------------
+  // depthWrite off on all glass so stacked panes (facade / pods / guards)
+  // blend in draw order instead of flickering against each other's depth.
+  // Tiers, far→near: facade/exterior < pod partitions < balustrades/guards
+  // (set via mesh renderOrder at the call site; see Shell/Level2/Stairs).
   glassHero: new THREE.MeshPhysicalMaterial({
     color: "#e2f0f4",
     transparent: true,
@@ -531,6 +699,7 @@ export const M = {
     reflectivity: 0.55,
     thickness: 0.25,
     side: THREE.DoubleSide,
+    depthWrite: false,
   }),
   glassCheap: new THREE.MeshStandardMaterial({
     color: "#cfe3ea",
@@ -539,6 +708,7 @@ export const M = {
     roughness: 0.08,
     metalness: 0.25,
     side: THREE.DoubleSide,
+    depthWrite: false,
   }),
   mullion: new THREE.MeshStandardMaterial({
     color: "#2f343b",
@@ -647,41 +817,26 @@ export const M = {
     roughness: 0.35,
     metalness: 0.6,
   }),
-  tvA: new THREE.MeshStandardMaterial({
-    color: "#ffffff",
-    map: tvA ?? undefined,
-    emissive: "#ffffff",
-    emissiveMap: tvA ?? undefined,
-    emissiveIntensity: 1.15,
-    roughness: 0.25,
-  }),
-  tvB: new THREE.MeshStandardMaterial({
-    color: "#ffffff",
-    map: tvB ?? undefined,
-    emissive: "#ffffff",
-    emissiveMap: tvB ?? undefined,
-    emissiveIntensity: 1.15,
-    roughness: 0.25,
-  }),
-  tvC: new THREE.MeshStandardMaterial({
-    color: "#ffffff",
-    map: tvC ?? undefined,
-    emissive: "#ffffff",
-    emissiveMap: tvC ?? undefined,
-    emissiveIntensity: 1.15,
-    roughness: 0.25,
-  }),
+  tvA: tvMat(tvA),
+  tvB: tvMat(tvB),
+  tvC: tvMat(tvC),
+  tvD: tvMat(tvD),
+  tvE: tvMat(tvE),
+  tvF: tvMat(tvF),
   whiteboard: new THREE.MeshStandardMaterial({
     color: "#f7f8fa",
     roughness: 0.14,
     metalness: 0.05,
   }),
-  // Same face with faint marker scribbles baked in (one shared texture).
-  whiteboardMarked: new THREE.MeshStandardMaterial({
-    map: whiteboardTexture(),
-    roughness: 0.14,
-    metalness: 0.05,
-  }),
+  // Four scribble variants — assigned round-robin so neighbours differ.
+  whiteboardMarked: [0, 1, 2, 3].map(
+    (v) =>
+      new THREE.MeshStandardMaterial({
+        map: whiteboardTexture(v),
+        roughness: 0.14,
+        metalness: 0.05,
+      }),
+  ),
   serverBody: new THREE.MeshStandardMaterial({
     color: "#14181f",
     roughness: 0.38,

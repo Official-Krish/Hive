@@ -27,51 +27,57 @@ function toTexture(el: HTMLCanvasElement): THREE.CanvasTexture {
   return tex;
 }
 
-/** Backlit corridor blade face: accent square + room name on near-black. */
+/** Backlit corridor blade face: accent square + room name on near-black.
+ *  640×128 canvas maps to the 1.7×0.34m blade without stretch. */
 export function bladeTexture(
   label: string,
   accent: string,
 ): THREE.CanvasTexture {
-  const key = `blade:${label}:${accent}`;
+  const key = `blade:v2:${label}:${accent}`;
   const hit = cache.get(key);
   if (hit) return hit;
-  const [el, ctx] = canvas(512, 116);
-  ctx.clearRect(0, 0, 512, 116);
+  const [el, ctx] = canvas(640, 128);
+  ctx.clearRect(0, 0, 640, 128);
+  // solid near-black plate so the sign reads at distance
+  ctx.fillStyle = "#101318";
+  ctx.fillRect(0, 0, 640, 128);
   // accent square
   ctx.fillStyle = accent;
-  ctx.fillRect(28, 30, 56, 56);
+  ctx.fillRect(30, 32, 64, 64);
   // label
-  ctx.fillStyle = "#e8eaf0";
-  ctx.font = "600 44px system-ui, -apple-system, 'Segoe UI', sans-serif";
+  ctx.fillStyle = "#f2f4f8";
+  ctx.font = "700 52px system-ui, -apple-system, 'Segoe UI', sans-serif";
   ctx.textBaseline = "middle";
-  ctx.fillText(label.toUpperCase(), 108, 62, 380);
+  ctx.fillText(label.toUpperCase(), 120, 68, 490);
   const tex = toTexture(el);
   cache.set(key, tex);
   return tex;
 }
 
-/** Pod door plate: dark plate, light name, accent underline. */
+/** Pod door plate: dark plate, light name, accent underline + dot.
+ *  640×160 canvas maps to the 1.1×0.275m plate; min 28px keeps long
+ *  names legible past 6m. */
 export function plateTexture(
   name: string,
   accent: string,
 ): THREE.CanvasTexture {
-  const key = `plate:${name}:${accent}`;
+  const key = `plate:v2:${name}:${accent}`;
   const hit = cache.get(key);
   if (hit) return hit;
-  const [el, ctx] = canvas(512, 112);
-  ctx.clearRect(0, 0, 512, 112);
+  const [el, ctx] = canvas(640, 160);
+  ctx.clearRect(0, 0, 640, 160);
   ctx.fillStyle = "#dfe3ec";
-  ctx.font = "600 40px system-ui, -apple-system, 'Segoe UI', sans-serif";
+  ctx.font = "700 52px system-ui, -apple-system, 'Segoe UI', sans-serif";
   ctx.textBaseline = "middle";
-  // shrink-to-fit for long names
-  let size = 40;
-  while (ctx.measureText(name.toUpperCase()).width > 470 && size > 20) {
+  // shrink-to-fit for long names, floored for distance legibility
+  let size = 52;
+  while (ctx.measureText(name.toUpperCase()).width > 590 && size > 28) {
     size -= 2;
-    ctx.font = `600 ${size}px system-ui, -apple-system, 'Segoe UI', sans-serif`;
+    ctx.font = `700 ${size}px system-ui, -apple-system, 'Segoe UI', sans-serif`;
   }
-  ctx.fillText(name.toUpperCase(), 24, 48, 470);
+  ctx.fillText(name.toUpperCase(), 28, 66, 590);
   ctx.fillStyle = accent;
-  ctx.fillRect(24, 82, 120, 6);
+  ctx.fillRect(28, 116, 150, 8);
   const tex = toTexture(el);
   cache.set(key, tex);
   return tex;
@@ -84,8 +90,11 @@ export interface DirectoryRow {
 }
 
 /** Lobby directory totem face: title + zone rows + you-are-here. */
-export function directoryTexture(rows: DirectoryRow[]): THREE.CanvasTexture {
-  const key = `dir:${rows.map((r) => r.name).join("|")}`;
+export function directoryTexture(
+  rows: DirectoryRow[],
+  footer = "●  YOU ARE HERE — RECEPTION",
+): THREE.CanvasTexture {
+  const key = `dir:v2:${footer}:${rows.map((r) => r.name).join("|")}`;
   const hit = cache.get(key);
   if (hit) return hit;
   const [el, ctx] = canvas(512, 1024);
@@ -127,17 +136,26 @@ export function directoryTexture(rows: DirectoryRow[]): THREE.CanvasTexture {
   ctx.fillRect(48, 930, 416, 2);
   ctx.fillStyle = "#f2f4f8";
   ctx.font = "600 26px system-ui, -apple-system, 'Segoe UI', sans-serif";
-  ctx.fillText("●  YOU ARE HERE — RECEPTION", 48, 972);
+  ctx.fillText(footer, 48, 972);
   const tex = toTexture(el);
   cache.set(key, tex);
   return tex;
 }
 
-/** Faint marker scribbles for whiteboard faces. */
-export function whiteboardTexture(): THREE.CanvasTexture {
-  const key = "whiteboard:scribble-v1";
+/** Faint marker scribbles for whiteboard faces. `variant` shuffles the
+ *  composition so neighbouring boards don't show identical scribbles. */
+export function whiteboardTexture(variant = 0): THREE.CanvasTexture {
+  const key = `whiteboard:scribble-v2:${variant}`;
   const hit = cache.get(key);
   if (hit) return hit;
+  const seed = variant * 101 + 7;
+  const rnd = (() => {
+    let s = seed >>> 0;
+    return () => {
+      s = (s * 1664525 + 1013904223) >>> 0;
+      return s / 4294967296;
+    };
+  })();
   const [el, ctx] = canvas(1024, 640);
   ctx.fillStyle = "#f7f8fa";
   ctx.fillRect(0, 0, 1024, 640);
@@ -146,20 +164,23 @@ export function whiteboardTexture(): THREE.CanvasTexture {
     ctx.strokeStyle = color;
     ctx.lineWidth = width;
   };
-  // headline underline + circle annotation
+  // headline underline + circle annotation (position varies per variant)
+  const hx = 80 + (variant % 2) * 120;
+  const cx0 = 700 - variant * 90;
   ink("#3b4252", 7);
   ctx.beginPath();
-  ctx.moveTo(80, 130);
-  ctx.lineTo(560, 118);
+  ctx.moveTo(hx, 130);
+  ctx.lineTo(hx + 480, 118 + variant * 8);
   ctx.stroke();
-  ink("#2563eb", 6);
+  ink(variant % 2 ? "#7c3aed" : "#2563eb", 6);
   ctx.beginPath();
-  ctx.ellipse(700, 220, 130, 80, -0.15, 0, Math.PI * 2);
+  ctx.ellipse(cx0, 220, 130 - variant * 12, 80, -0.15, 0, Math.PI * 2);
   ctx.stroke();
-  // checkbox list
-  const items: boolean[] = [true, true, false];
-  items.forEach((done, k) => {
-    const y = 250 + k * 90;
+  // checkbox list (count + widths vary)
+  const n = 2 + (variant % 2);
+  for (let k = 0; k < n; k++) {
+    const y = 250 + k * 100;
+    const done = (k + variant) % 3 !== 2;
     ink("#3b4252", 5);
     ctx.strokeRect(80, y - 34, 44, 44);
     if (done) {
@@ -171,28 +192,28 @@ export function whiteboardTexture(): THREE.CanvasTexture {
       ctx.stroke();
     }
     ink("rgba(59,66,82,0.55)", 6);
-    const w = [300, 220, 360][k] ?? 240;
+    const w = 200 + rnd() * 220;
     ctx.beginPath();
     ctx.moveTo(150, y - 12);
     ctx.lineTo(150 + w, y - 12);
     ctx.stroke();
-  });
-  // flow arrows
+  }
+  // flow arrows (direction flips on odd variants)
   ink("#7c3aed", 6);
+  const flip = variant % 2 === 1;
   ctx.beginPath();
-  ctx.moveTo(620, 420);
-  ctx.quadraticCurveTo(720, 380, 820, 440);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(820, 440);
-  ctx.lineTo(792, 436);
-  ctx.moveTo(820, 440);
-  ctx.lineTo(800, 462);
+  if (!flip) {
+    ctx.moveTo(620, 420);
+    ctx.quadraticCurveTo(720, 380, 820, 440);
+  } else {
+    ctx.moveTo(820, 420);
+    ctx.quadraticCurveTo(720, 460, 620, 400);
+  }
   ctx.stroke();
   ink("#d97706", 5);
   ctx.beginPath();
-  ctx.moveTo(120, 520);
-  ctx.lineTo(420, 500);
+  ctx.moveTo(120, 520 - variant * 30);
+  ctx.lineTo(420 + variant * 60, 500);
   ctx.stroke();
   const tex = toTexture(el);
   cache.set(key, tex);
