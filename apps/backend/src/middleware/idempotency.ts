@@ -37,28 +37,38 @@ export function idempotency(): RequestHandler {
       }
 
       const originalJson = res.json.bind(res);
-      res.json = (body) => {
+      res.json = ((body) => {
         const status = res.statusCode;
-        if (status >= 200 && status < 300) {
-          prisma.idempotencyKey
-            .create({
-              data: {
-                key,
-                userId,
-                route,
-                responseStatus: status,
-                responseBody: body as object,
-                expiresAt: new Date(Date.now() + IDEMPOTENCY_TTL_MS),
-              },
-            })
-            .catch((err: unknown) => {
+        if (status < 200 || status >= 300) {
+          return originalJson(body);
+        }
+        // Persist the replay record BEFORE responding. The previous
+        // fire-and-forget write lost the race against immediate retries
+        // (second request re-executed and failed, e.g. 409 on register).
+        prisma.idempotencyKey
+          .create({
+            data: {
+              key,
+              userId,
+              route,
+              responseStatus: status,
+              responseBody: body as object,
+              expiresAt: new Date(Date.now() + IDEMPOTENCY_TTL_MS),
+            },
+          })
+          .then(
+            () => originalJson(body),
+            (err: unknown) => {
+              // True-concurrent duplicate: the other request won the unique
+              // key race and its replay record is already durable.
               if ((err as { code?: string })?.code !== "P2002") {
                 console.error("[hive] failed to persist idempotency key", err);
               }
-            });
-        }
-        return originalJson(body);
-      };
+              originalJson(body);
+            },
+          );
+        return res;
+      }) as typeof res.json;
       next();
     } catch (err) {
       next(err);
