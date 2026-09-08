@@ -33,6 +33,7 @@
     "jsonwebtoken": "^9.0.3",
     "livekit-server-sdk": "^2.18.0",
     "openai": "^7.5.0",
-    "zod": "^4.4.3"
+    "zod": "^4.4.3",
+    "@hive/games": "workspace:*"
   }
 }

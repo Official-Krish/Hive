@@ -13,6 +13,7 @@ import { ACCESS_COOKIE } from "../../lib/cookies";
 import { hashToken } from "../../lib/crypto";
 import { verifyAccessToken } from "../../lib/jwt";
 import { DeviceService } from "../devices/devices.service";
+import { GamesService } from "../games/games.service";
 import { RealtimeService } from "./realtime.service";
 import { deviceBus, presenceBus, realtimeBus } from "./realtime.bus";
 
@@ -47,6 +48,7 @@ export interface RealtimeHubOptions {
 export class RealtimeHub {
   private readonly service = new RealtimeService();
   private readonly devices = new DeviceService();
+  private readonly games = new GamesService();
   private readonly clients = new Map<Socket, RealtimeClientData>();
   private readonly deviceSockets = new Map<Socket, DeviceSocketData>();
   /** Per-board whiteboard stroke history (in-memory relay for late joiners). */
@@ -487,6 +489,39 @@ export class RealtimeHub {
           timestamp,
         };
         this.publishToWorkspace(workspaceId, event);
+        break;
+      }
+      case "game.move": {
+        // Server-authoritative: validate against the engine, persist, then
+        // broadcast. Illegal attempts go back to the sender only.
+        const result = await this.games.applyMoveByUser(
+          workspaceId,
+          parsed.gameId,
+          client.userId,
+          parsed.move,
+        );
+        if ("error" in result) {
+          const rejected: RealtimeEvent = {
+            type: "game.move.rejected",
+            workspaceId,
+            gameId: parsed.gameId,
+            reason: result.error,
+            timestamp,
+          };
+          ws.send(JSON.stringify(rejected));
+        }
+        break;
+      }
+      case "game.state.request": {
+        const session = await this.games.byId(workspaceId, parsed.gameId);
+        if (!session) return;
+        const event: RealtimeEvent = {
+          type: "game.state",
+          workspaceId,
+          session,
+          timestamp,
+        };
+        ws.send(JSON.stringify(event));
         break;
       }
       case "chill.setUrl": {
