@@ -11,6 +11,7 @@ COPY apps/backend/package.json          apps/backend/package.json
 COPY packages/db/package.json           packages/db/package.json
 COPY packages/queue/package.json        packages/queue/package.json
 COPY packages/types/package.json        packages/types/package.json
+COPY packages/games/package.json        packages/games/package.json
 COPY packages/events/package.json       packages/events/package.json
 
 RUN bun install
