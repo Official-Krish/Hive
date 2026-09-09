@@ -59,18 +59,20 @@ class TestSocket {
     return this.opened;
   }
 
-  async waitOpen(ms = 3000): Promise<void> {
+  async waitOpen(ms = 10000): Promise<void> {
     await withTimeout(this.openPromise, ms);
   }
 
-  async waitClose(ms = 3000): Promise<void> {
+  async waitClose(ms = 10000): Promise<void> {
     await withTimeout(this.closePromise, ms);
   }
 
   async waitFor<T extends RealtimeEvent["type"]>(
     type: T,
     predicate?: (msg: Extract<RealtimeEvent, { type: T }>) => boolean,
-    ms = 3000,
+    // Generous: shared CI runners with cold DB/services can take seconds
+    // per round trip; this asserts eventual delivery, not latency.
+    ms = 10000,
   ): Promise<Extract<RealtimeEvent, { type: T }>> {
     const started = Date.now();
     for (;;) {
@@ -96,7 +98,7 @@ class TestSocket {
 
   async waitForControl(
     cmd: string,
-    ms = 3000,
+    ms = 10000,
   ): Promise<{ cmd: string; timestamp: number }> {
     const started = Date.now();
     for (;;) {
