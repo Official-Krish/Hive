@@ -22,7 +22,7 @@ spec:
     spec:
       containers:
         - name: hive-frontend
-          image: krishanand01/hive-frontend:va7880e9c1868889be8001c805718d01ceae209b4
+          image: krishanand01/hive-frontend:v638609e8cc32035f26431bbee766b7f3caa9af24
           ports:
             - containerPort: 80
           livenessProbe:
