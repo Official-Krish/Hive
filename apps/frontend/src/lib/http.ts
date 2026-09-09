@@ -1,6 +1,8 @@
 import type {
   ChatMessageDto,
   ConversationSummary,
+  GameSession,
+  GameSessionCreate,
   GitHubNotificationsResponse,
   PairSession,
   PairSessionCreate,
@@ -1109,6 +1111,54 @@ export const http = {
         `/api/v1/workspaces/${workspaceId}/pair-sessions/${sessionId}/end`,
         { method: "PATCH" },
       ),
+  },
+
+  /* ── games ── */
+  games: {
+    active: (workspaceId: string): Promise<{ session: GameSession | null }> =>
+      request(`/api/v1/workspaces/${workspaceId}/games/active`),
+
+    list: (workspaceId: string): Promise<{ sessions: GameSession[] }> =>
+      request(`/api/v1/workspaces/${workspaceId}/games`),
+
+    byId: (
+      workspaceId: string,
+      gameId: string,
+    ): Promise<{ session: GameSession }> =>
+      request(`/api/v1/workspaces/${workspaceId}/games/${gameId}`),
+
+    create: (
+      workspaceId: string,
+      input: GameSessionCreate,
+    ): Promise<{ session: GameSession }> =>
+      request(`/api/v1/workspaces/${workspaceId}/games`, {
+        method: "POST",
+        body: input,
+      }),
+
+    resign: (
+      workspaceId: string,
+      gameId: string,
+    ): Promise<{ session: GameSession }> =>
+      request(`/api/v1/workspaces/${workspaceId}/games/${gameId}/resign`, {
+        method: "PATCH",
+      }),
+
+    accept: (
+      workspaceId: string,
+      gameId: string,
+    ): Promise<{ session: GameSession }> =>
+      request(`/api/v1/workspaces/${workspaceId}/games/${gameId}/accept`, {
+        method: "PATCH",
+      }),
+
+    decline: (
+      workspaceId: string,
+      gameId: string,
+    ): Promise<{ session: GameSession }> =>
+      request(`/api/v1/workspaces/${workspaceId}/games/${gameId}/decline`, {
+        method: "PATCH",
+      }),
   },
 
   /* ── chat ── */

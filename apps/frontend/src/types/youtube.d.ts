@@ -42,8 +42,15 @@ interface YTPlayerOptions {
   };
 }
 
+interface YTVideoOpts {
+  videoId: string;
+  startSeconds?: number;
+  suggestedQuality?: string;
+}
+
 interface YTPlayer {
-  loadVideoById(opts: { videoId: string; suggestedQuality?: string }): void;
+  loadVideoById(opts: YTVideoOpts): void;
+  cueVideoById(opts: YTVideoOpts): void;
   seekTo(seconds: number, allowSeekAhead: boolean): void;
   playVideo(): void;
   pauseVideo(): void;
@@ -60,7 +67,8 @@ declare namespace YT {
   const PlayerState: YTPlayerState;
   class Player {
     constructor(element: HTMLElement, options: YTPlayerOptions);
-    loadVideoById(opts: { videoId: string; suggestedQuality?: string }): void;
+    loadVideoById(opts: YTVideoOpts): void;
+    cueVideoById(opts: YTVideoOpts): void;
     seekTo(seconds: number, allowSeekAhead: boolean): void;
     playVideo(): void;
     pauseVideo(): void;

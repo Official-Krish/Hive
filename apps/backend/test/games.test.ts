@@ -333,6 +333,49 @@ describe("games HTTP lifecycle", () => {
 });
 
 describe("games over websocket", () => {
+  test("invite broadcasts to the opponent in real time", async () => {
+    const { alice, bob, workspaceId: wid } = await twoPlayers();
+    const b = await connectSocket(bob.cookie, wid);
+    try {
+      // Bob is already listening when Alice challenges him.
+      const createRes = await authed(
+        `/api/v1/workspaces/${wid}/games`,
+        alice.cookie,
+        {
+          method: "POST",
+          body: JSON.stringify({ kind: "chess", opponentId: bob.userId }),
+        },
+      );
+      expect(createRes.status).toBe(201);
+      const invite = await b.waitFor(
+        "game.state",
+        (e) => e.session.status === "pending",
+      );
+      expect(invite.session.members.some((m) => m.userId === bob.userId)).toBe(
+        true,
+      );
+      // Accept goes live for everyone subscribed.
+      const a = await connectSocket(alice.cookie, wid);
+      try {
+        await authed(
+          `/api/v1/workspaces/${wid}/games/${invite.session.id}/accept`,
+          bob.cookie,
+          { method: "PATCH" },
+        );
+        const live = await a.waitFor(
+          "game.state",
+          (e) =>
+            e.session.id === invite.session.id && e.session.status === "active",
+        );
+        expect(live.session.turnUserId).toBe(alice.userId);
+      } finally {
+        a.close();
+      }
+    } finally {
+      b.close();
+    }
+  });
+
   test("connect4 moves broadcast, illegal moves rejected", async () => {
     const { alice, bob, workspaceId: wid } = await twoPlayers();
     const createRes = await authed(

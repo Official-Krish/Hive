@@ -15,7 +15,13 @@ import { Preload } from "@react-three/drei";
 import * as THREE from "three";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { FiArrowLeft, FiMessageSquare, FiUsers } from "react-icons/fi";
+import {
+  FiArrowLeft,
+  FiAward,
+  FiFlag,
+  FiMessageSquare,
+  FiUsers,
+} from "react-icons/fi";
 import { OfficeBuilding } from "./office/OfficeBuilding";
 import { OfficeLighting } from "./lighting/OfficeLighting";
 import { PlayerController } from "./PlayerController";
@@ -36,6 +42,7 @@ import { useNearbyTokens } from "@/hooks/useNearbyTokens";
 import { useInteractions } from "@/hooks/useInteractions";
 import { useFocusRoom } from "@/hooks/useFocusRoom";
 import { usePairSession } from "@/hooks/usePairSession";
+import { useGameSession } from "@/hooks/useGameSession";
 import { http } from "@/lib/http";
 import RemoteAvatars from "./RemoteAvatars";
 import { Markers } from "./Markers";
@@ -44,6 +51,7 @@ import { WorldTour, markTourSeen, shouldShowTour } from "./WorldTour";
 import { MemberDetailPopup } from "./MapHud";
 import { ChatPanel } from "./ChatPanel";
 import { GitHubNotificationBell } from "./GitHubNotificationBell";
+import { GameInviteInbox } from "./GameInviteInbox";
 import { CallStage } from "./CallStage";
 import { CallControls } from "./CallControls";
 import { WorkspaceModal } from "./WorkspaceModal";
@@ -111,6 +119,20 @@ const safePointerEvents: typeof createPointerEvents = (store) => {
   return manager;
 };
 
+/** Friendly end-of-match reason for the celebration card. */
+function endReason(kind: string, reason: string | null, won: boolean): string {
+  const game = kind === "chess" ? "Chess" : "Connect Four";
+  switch (reason) {
+    case "checkmate":
+      return won ? "by checkmate" : `checkmated in ${game}`;
+    case "connect-four":
+      return won ? "four in a row" : "four in a row";
+    case "resign":
+      return won ? "opponent resigned" : `you resigned from ${game}`;
+    default:
+      return reason ?? game;
+  }
+}
 /** Members directory popup — Escape or outside click dismisses. */
 function MembersPopup({
   roster,
@@ -379,6 +401,7 @@ export function WorldCanvas({
     client,
     avatars,
   });
+  const games = useGameSession({ workspaceId, myUserId, client });
   const call = useLiveKitCall(workspaceId, myUserId, nearIds, onlineCount, {
     volumePeers: focus.allowedPeers,
     muteRemote: focus.inFocus,
@@ -518,6 +541,41 @@ export function WorldCanvas({
       colors: ["#f472b6", "#a78bfa", "#34d399", "#fbbf24", "#38bdf8"],
     });
   }, []);
+
+  // Match end celebration — wins get confetti + a title card, losses get a
+  // title card. One-shot per match, both games, any decisive reason.
+  const [endCelebration, setEndCelebration] = useState<{
+    sessionId: string;
+    kind: string;
+    won: boolean;
+    otherName: string;
+    reason: string | null;
+  } | null>(null);
+  const celebratedRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    for (const s of games.sessions) {
+      if (
+        s.status === "finished" &&
+        s.winnerUserId &&
+        !celebratedRef.current.has(s.id)
+      ) {
+        const iWon = s.winnerUserId === myUserId;
+        const iPlayed = s.members.some((m) => m.userId === myUserId);
+        if (!iPlayed) continue;
+        celebratedRef.current.add(s.id);
+        const other =
+          s.members.find((m) => m.userId !== myUserId)?.name ?? "Opponent";
+        setEndCelebration({
+          sessionId: s.id,
+          kind: s.kind,
+          won: iWon,
+          otherName: other,
+          reason: s.resultReason,
+        });
+        if (iWon) fireConfetti();
+      }
+    }
+  }, [games.sessions, myUserId, fireConfetti]);
 
   const pushFeed = useCallback((text: string, tone: FeedItem["tone"]) => {
     setFeed((prev) =>
@@ -882,6 +940,15 @@ export function WorldCanvas({
             onOpenChange={setNotifOpen}
           />
 
+          {/* Game invites inbox — the only place to accept a challenge */}
+          <GameInviteInbox
+            games={games}
+            onJoin={(id) => {
+              void games.accept(id);
+              setGamesOpen(true);
+            }}
+          />
+
           {/* Members directory */}
           <button
             type="button"
@@ -1139,6 +1206,62 @@ export function WorldCanvas({
                 <span className="min-w-0 truncate">{f.text}</span>
               </div>
             ))}
+        </div>
+      )}
+
+      {/* Match-end card — "You won" (+ confetti) or "You lose", both games */}
+      {endCelebration && (
+        <div className="pointer-events-none absolute left-1/2 top-16 z-10 flex -translate-x-1/2 flex-col items-center gap-1.5">
+          <div className="pointer-events-auto flex items-center gap-3 rounded-2xl bg-neutral-950 px-5 py-3.5 text-white shadow-2xl ring-1 ring-amber-300/50">
+            <span
+              className={
+                endCelebration.won
+                  ? "flex size-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-amber-300 to-amber-500 text-neutral-950 shadow-lg"
+                  : "flex size-11 shrink-0 items-center justify-center rounded-full bg-white/10 text-white/60"
+              }
+            >
+              {endCelebration.won ? (
+                <FiAward className="size-5" />
+              ) : (
+                <FiFlag className="size-5" />
+              )}
+            </span>
+            <span className="min-w-0">
+              <span className="block text-[16px] font-bold tracking-tight">
+                {endCelebration.won ? "You won!" : "You lose"}
+              </span>
+              <span className="block max-w-[260px] truncate text-[12px] font-medium text-white/60">
+                {endCelebration.won
+                  ? `${endCelebration.otherName} · ${endReason(endCelebration.kind, endCelebration.reason, true)}`
+                  : `${endCelebration.otherName} won · ${endReason(endCelebration.kind, endCelebration.reason, false)}`}
+              </span>
+            </span>
+            <span className="flex shrink-0 gap-1.5">
+              <button
+                type="button"
+                onClick={() => {
+                  games.open(endCelebration.sessionId);
+                  setGamesOpen(true);
+                  setEndCelebration(null);
+                }}
+                className={
+                  endCelebration.won
+                    ? "rounded-lg bg-emerald-500 px-2.5 py-1.5 text-[11.5px] font-bold text-neutral-950 transition-colors hover:bg-emerald-400"
+                    : "rounded-lg bg-white/10 px-2.5 py-1.5 text-[11.5px] font-semibold text-white/70 transition-colors hover:bg-white/20 hover:text-white"
+                }
+              >
+                View board
+              </button>
+              <button
+                type="button"
+                onClick={() => setEndCelebration(null)}
+                aria-label="Dismiss"
+                className="rounded-lg bg-white/10 px-2.5 py-1.5 text-[11.5px] font-semibold text-white/70 transition-colors hover:bg-white/20 hover:text-white"
+              >
+                ✕
+              </button>
+            </span>
+          </div>
         </div>
       )}
 
@@ -1416,7 +1539,14 @@ export function WorldCanvas({
           onClose={() => setChillScreenOpen(false)}
         />
       )}
-      {gamesOpen && <GamesModal onClose={() => setGamesOpen(false)} />}
+      {gamesOpen && (
+        <GamesModal
+          myUserId={myUserId}
+          members={chat.members}
+          games={games}
+          onClose={() => setGamesOpen(false)}
+        />
+      )}
 
       {/* Proximity voice/video — only when near other members.
           Bottom-center column: video tiles above the mic/camera controls. */}

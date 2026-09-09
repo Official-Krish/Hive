@@ -1,4 +1,5 @@
 import type {
+  GameMove,
   RealtimeClientMessage,
   RealtimeEvent,
   RealtimeMember,
@@ -35,6 +36,8 @@ export type RealtimeEventMap = {
   "pair.session": Extract<RealtimeEvent, { type: "pair.session" }>;
   "pair.cursor": Extract<RealtimeEvent, { type: "pair.cursor" }>;
   "chill.media.state": Extract<RealtimeEvent, { type: "chill.media.state" }>;
+  "game.state": Extract<RealtimeEvent, { type: "game.state" }>;
+  "game.move.rejected": Extract<RealtimeEvent, { type: "game.move.rejected" }>;
 };
 
 type EventHandler<K extends keyof RealtimeEventMap> = (
@@ -217,6 +220,14 @@ export class RealtimeClient {
 
   sendChillSeek(playheadMs: number): boolean {
     return this.send({ type: "chill.media.seek", playheadMs });
+  }
+
+  sendGameMove(gameId: string, move: GameMove): boolean {
+    return this.send({ type: "game.move", gameId, move });
+  }
+
+  requestGameState(gameId: string): boolean {
+    return this.send({ type: "game.state.request", gameId });
   }
 
   private open(): void {
