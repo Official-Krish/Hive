@@ -7,6 +7,8 @@ import type {
   SessionFilter,
   TaskFilter,
   TestRunFilter,
+  UsageBudgetInput,
+  UsageQuery,
 } from "@hive/types";
 import { getAuth } from "../../middleware/authenticate";
 import { ReadsService } from "./reads.service";
@@ -162,6 +164,60 @@ export class ReadsController {
       data: await this.service.getMapOverlay(
         ReadsController.workspaceId(req),
         ReadsController.param(req, "developerId"),
+      ),
+    });
+  };
+
+  getUsageSummary = async (req: Request, res: Response): Promise<void> => {
+    const q = ReadsController.query<UsageQuery>(req);
+    res.json({
+      data: await this.service.getUsageSummary(
+        ReadsController.workspaceId(req),
+        q.from,
+        q.to,
+      ),
+    });
+  };
+
+  getUsageByMember = async (req: Request, res: Response): Promise<void> => {
+    const q = ReadsController.query<UsageQuery>(req);
+    res.json({
+      data: {
+        members: await this.service.getUsageByMember(
+          ReadsController.workspaceId(req),
+          q.from,
+          q.to,
+        ),
+      },
+    });
+  };
+
+  getThroughput = async (req: Request, res: Response): Promise<void> => {
+    const q = ReadsController.query<UsageQuery>(req);
+    res.json({
+      data: {
+        members: await this.service.getThroughput(
+          ReadsController.workspaceId(req),
+          q.from,
+          q.to,
+        ),
+      },
+    });
+  };
+
+  getBudget = async (req: Request, res: Response): Promise<void> => {
+    res.json({
+      data: await this.service.getBudget(ReadsController.workspaceId(req)),
+    });
+  };
+
+  updateBudget = async (req: Request, res: Response): Promise<void> => {
+    const { userId } = getAuth(res);
+    res.json({
+      data: await this.service.updateBudget(
+        ReadsController.workspaceId(req),
+        req.body as UsageBudgetInput,
+        userId,
       ),
     });
   };

@@ -44,6 +44,7 @@ model User {
   resolvedAlerts          Alert[]                 @relation("AlertResolver")
   idempotencyKeys         IdempotencyKey[]
   updatedPrivacySettings  PrivacySetting[]
+  updatedUsageBudgets     UsageBudget[]
   githubAccounts          GitHubAccount[]
   conversationParticipants ConversationParticipant[]
   sentMessages            Message[]
@@ -94,6 +95,7 @@ model Workspace {
   gameSessions      GameSession[]
   chillMedia        ChillMedia?
   privacySetting    PrivacySetting?
+  usageBudget       UsageBudget?
   invites           Invite[]
   githubInstallations GitHubInstallation[]
   githubNotifications GitHubNotification[]
@@ -812,6 +814,18 @@ model PrivacySetting {
   allowPromptMetadata    Boolean  @default(false)
   updatedById            String?
   updatedAt              DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  updatedBy User?     @relation(fields: [updatedById], references: [id], onDelete: SetNull)
+}
+
+model UsageBudget {
+  id               String   @id @default(cuid())
+  workspaceId      String   @unique
+  monthlyCapCents  Int?
+  alertAtPct       Int      @default(80)
+  updatedById      String?
+  updatedAt        DateTime @updatedAt
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   updatedBy User?     @relation(fields: [updatedById], references: [id], onDelete: SetNull)

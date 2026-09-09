@@ -185,7 +185,12 @@ function FeaturedWorkspace({ workspace: ws }: { workspace: Ws }) {
           </p>
           <div className="mt-2 flex flex-wrap items-center gap-2.5">
             <h2 className="text-[20px] font-semibold tracking-[-0.02em] text-neutral-900">
-              {ws.name}
+              <Link
+                to={`/dashboard/w/${ws.id}`}
+                className="transition-colors hover:text-neutral-600"
+              >
+                {ws.name}
+              </Link>
             </h2>
             <RoleBadge role={ws.role} />
           </div>
@@ -209,6 +214,10 @@ function FeaturedWorkspace({ workspace: ws }: { workspace: Ws }) {
               className={btnGhostClass}
             >
               Invite people
+            </Link>
+            <Link to={`/dashboard/w/${ws.id}`} className={btnGhostClass}>
+              <FiArrowUpRight className="size-4" aria-hidden />
+              Open details
             </Link>
             {(ws.role === "owner" || ws.role === "admin") && (
               <Link

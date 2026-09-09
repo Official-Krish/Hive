@@ -4,7 +4,13 @@
    ───────────────────────────────────────────────────────────── */
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { FiArrowUpRight, FiMap, FiSettings, FiUserPlus } from "react-icons/fi";
+import {
+  FiActivity,
+  FiArrowUpRight,
+  FiMap,
+  FiSettings,
+  FiUserPlus,
+} from "react-icons/fi";
 import { ApiError, http } from "@/lib/http";
 import {
   Avatar,
@@ -138,6 +144,15 @@ export function WorkspaceDetail() {
               >
                 <FiSettings className="size-4" aria-hidden />
                 Settings
+              </Link>
+            )}
+            {(ws.role === "owner" || ws.role === "admin") && (
+              <Link
+                to={`/dashboard/w/${workspaceId}/usage`}
+                className={btnGhostClass}
+              >
+                <FiActivity className="size-4" aria-hidden />
+                Usage & throughput
               </Link>
             )}
           </div>

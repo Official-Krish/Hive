@@ -4,8 +4,13 @@ import type {
   GameSession,
   GameSessionCreate,
   GitHubNotificationsResponse,
+  MemberThroughput,
+  MemberUsage,
   PairSession,
   PairSessionCreate,
+  UsageBudget,
+  UsageBudgetInput,
+  UsageSummary,
 } from "@hive/types";
 import { API_BASE_URL } from "./config";
 
@@ -1077,6 +1082,42 @@ export const http = {
       developerId: string,
     ): Promise<MapOverlay> =>
       request(`/api/v1/workspaces/${workspaceId}/map/overlay/${developerId}`),
+
+    usageSummary: (
+      workspaceId: string,
+      params?: { from?: string; to?: string },
+    ): Promise<UsageSummary> =>
+      request(`/api/v1/workspaces/${workspaceId}/usage/summary`, {
+        query: params,
+      }),
+
+    usageByMember: (
+      workspaceId: string,
+      params?: { from?: string; to?: string },
+    ): Promise<{ members: MemberUsage[] }> =>
+      request(`/api/v1/workspaces/${workspaceId}/usage/by-member`, {
+        query: params,
+      }),
+
+    throughput: (
+      workspaceId: string,
+      params?: { from?: string; to?: string },
+    ): Promise<{ members: MemberThroughput[] }> =>
+      request(`/api/v1/workspaces/${workspaceId}/usage/throughput`, {
+        query: params,
+      }),
+
+    usageBudget: (workspaceId: string): Promise<UsageBudget> =>
+      request(`/api/v1/workspaces/${workspaceId}/usage/budget`),
+
+    updateUsageBudget: (
+      workspaceId: string,
+      input: UsageBudgetInput,
+    ): Promise<UsageBudget> =>
+      request(`/api/v1/workspaces/${workspaceId}/usage/budget`, {
+        method: "PATCH",
+        body: input,
+      }),
   },
 
   models: {

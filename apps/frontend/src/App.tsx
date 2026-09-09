@@ -26,6 +26,7 @@ import { InviteUser } from "./pages/dashboard/InviteUser";
 import { WorkspaceInvites } from "./pages/dashboard/WorkspaceInvites";
 import { WorkspaceDetail } from "./pages/dashboard/WorkspaceDetail";
 import { WorkspaceSettings } from "./pages/dashboard/WorkspaceSettings";
+import { WorkspaceUsage } from "./pages/dashboard/WorkspaceUsage";
 import { OrgDetail } from "./pages/dashboard/OrgDetail";
 import { OrgMembers } from "./pages/dashboard/OrgMembers";
 import { OrgWorkspaces } from "./pages/dashboard/OrgWorkspaces";
@@ -109,6 +110,7 @@ const router = createBrowserRouter([
       { path: "profile", element: <ProfilePage /> },
       { path: "w/:workspaceId", element: <WorkspaceDetail /> },
       { path: "w/:workspaceId/settings", element: <WorkspaceSettings /> },
+      { path: "w/:workspaceId/usage", element: <WorkspaceUsage /> },
       {
         path: "o/:orgId",
         element: <OrgDetail />,

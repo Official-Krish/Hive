@@ -24,6 +24,8 @@ import type {
   DeveloperStats,
   MapRead,
   MapOverlay,
+  MemberThroughput,
+  MemberUsage,
   MetricFilter,
   MetricSummary,
   ModelRead,
@@ -40,6 +42,9 @@ import type {
   TestRunFilter,
   TestRunSummary,
   PrivacySetting,
+  UsageBudget,
+  UsageBudgetInput,
+  UsageSummary,
 } from "@hive/types";
 import { DEFAULT_PRIVACY_SETTING } from "@hive/types";
 import { NotFoundError } from "../../core/errors";
@@ -1011,6 +1016,339 @@ export class ReadsService {
       inputTokens,
       outputTokens,
       costCents,
+    };
+  }
+
+  // ── Admin usage dashboard (admin/owner only at the route layer) ──────────
+
+  private usageRange(from?: Date, to?: Date): { gte: Date; lte: Date } {
+    const lte = to ?? new Date();
+    const gte = from ?? new Date(lte.getTime() - 30 * 24 * 60 * 60 * 1000);
+    return { gte, lte };
+  }
+
+  private async budgetOf(workspaceId: string): Promise<UsageBudget> {
+    const row = await prisma.usageBudget.findUnique({
+      where: { workspaceId },
+    });
+    return {
+      monthlyCapCents: row?.monthlyCapCents ?? null,
+      alertAtPct: row?.alertAtPct ?? 80,
+      updatedAt: row?.updatedAt.toISOString() ?? null,
+    };
+  }
+
+  async getUsageSummary(
+    workspaceId: string,
+    from?: Date,
+    to?: Date,
+  ): Promise<UsageSummary> {
+    const privacy = await this.privacyOf(workspaceId);
+    const budget = await this.budgetOf(workspaceId);
+    const monthStart = new Date();
+    monthStart.setDate(1);
+    monthStart.setHours(0, 0, 0, 0);
+    const month = await prisma.tokenUsage.aggregate({
+      where: {
+        session: { workspaceId },
+        measuredAt: { gte: monthStart },
+      },
+      _sum: { costCents: true },
+    });
+    if (!privacy.allowTokenUsage) {
+      return {
+        hiddenByPrivacy: true,
+        inputTokens: 0,
+        outputTokens: 0,
+        cachedInputTokens: 0,
+        costCents: null,
+        sessions: 0,
+        byDay: [],
+        byModel: [],
+        budget,
+        monthSpendCents: null,
+      };
+    }
+    const { gte, lte } = this.usageRange(from, to);
+    const [rows, sessions] = await Promise.all([
+      prisma.tokenUsage.findMany({
+        where: {
+          session: { workspaceId },
+          measuredAt: { gte, lte },
+        },
+        select: {
+          inputTokens: true,
+          outputTokens: true,
+          cachedInputTokens: true,
+          costCents: true,
+          measuredAt: true,
+          model: { select: { name: true } },
+        },
+      }),
+      prisma.agentSession.count({
+        where: { workspaceId, startedAt: { gte, lte } },
+      }),
+    ]);
+    let inputTokens = 0;
+    let outputTokens = 0;
+    let cachedInputTokens = 0;
+    let costCents: number | null = null;
+    const day = new Map<
+      string,
+      { in: number; out: number; cached: number; cost: number | null }
+    >();
+    const model = new Map<
+      string,
+      { in: number; out: number; cost: number | null }
+    >();
+    for (const r of rows) {
+      inputTokens += r.inputTokens;
+      outputTokens += r.outputTokens;
+      cachedInputTokens += r.cachedInputTokens ?? 0;
+      if (r.costCents !== null) costCents = (costCents ?? 0) + r.costCents;
+      const key = r.measuredAt.toISOString().slice(0, 10);
+      const d = day.get(key) ?? { in: 0, out: 0, cached: 0, cost: null };
+      d.in += r.inputTokens;
+      d.out += r.outputTokens;
+      d.cached += r.cachedInputTokens ?? 0;
+      if (r.costCents !== null) d.cost = (d.cost ?? 0) + r.costCents;
+      day.set(key, d);
+      const name = r.model?.name ?? "unknown";
+      const m = model.get(name) ?? { in: 0, out: 0, cost: null };
+      m.in += r.inputTokens;
+      m.out += r.outputTokens;
+      if (r.costCents !== null) m.cost = (m.cost ?? 0) + r.costCents;
+      model.set(name, m);
+    }
+    return {
+      hiddenByPrivacy: false,
+      inputTokens,
+      outputTokens,
+      cachedInputTokens,
+      costCents,
+      sessions,
+      byDay: [...day.entries()]
+        .sort(([a], [b]) => (a < b ? -1 : 1))
+        .map(([date, d]) => ({
+          date,
+          inputTokens: d.in,
+          outputTokens: d.out,
+          cachedInputTokens: d.cached,
+          costCents: d.cost,
+        })),
+      byModel: [...model.entries()].map(([m, v]) => ({
+        model: m,
+        inputTokens: v.in,
+        outputTokens: v.out,
+        costCents: v.cost,
+      })),
+      budget,
+      monthSpendCents: month._sum.costCents ?? null,
+    };
+  }
+
+  async getUsageByMember(
+    workspaceId: string,
+    from?: Date,
+    to?: Date,
+  ): Promise<MemberUsage[]> {
+    const privacy = await this.privacyOf(workspaceId);
+    const memberships = await prisma.workspaceMember.findMany({
+      where: { workspaceId },
+      select: { userId: true },
+    });
+    const users = await prisma.user.findMany({
+      where: { id: { in: memberships.map((m) => m.userId) } },
+      select: { id: true, name: true, email: true, avatarUrl: true },
+    });
+    const { gte, lte } = this.usageRange(from, to);
+    return Promise.all(
+      users.map(async (u) => {
+        const [totals, sessions, mix] = await Promise.all([
+          prisma.tokenUsage.aggregate({
+            where: {
+              session: { developerId: u.id, workspaceId },
+              measuredAt: { gte, lte },
+            },
+            _sum: {
+              inputTokens: true,
+              outputTokens: true,
+              cachedInputTokens: true,
+              costCents: true,
+            },
+          }),
+          prisma.agentSession.count({
+            where: { developerId: u.id, workspaceId, startedAt: { gte, lte } },
+          }),
+          prisma.tokenUsage.groupBy({
+            by: ["modelId"],
+            where: {
+              session: { developerId: u.id, workspaceId },
+              measuredAt: { gte, lte },
+            },
+            _sum: { inputTokens: true, outputTokens: true },
+          }),
+        ]);
+        let topModelId: string | null = null;
+        let topTokens = -1;
+        for (const g of mix) {
+          const t = (g._sum.inputTokens ?? 0) + (g._sum.outputTokens ?? 0);
+          if (t > topTokens) {
+            topTokens = t;
+            topModelId = g.modelId;
+          }
+        }
+        const topModel = topModelId
+          ? ((
+              await prisma.model.findUnique({
+                where: { id: topModelId },
+                select: { name: true },
+              })
+            )?.name ?? null)
+          : null;
+        if (!privacy.allowTokenUsage) {
+          return {
+            userId: u.id,
+            name: u.name,
+            email: u.email,
+            avatarUrl: u.avatarUrl,
+            sessions,
+            inputTokens: 0,
+            outputTokens: 0,
+            cachedInputTokens: 0,
+            costCents: null,
+            topModel: null,
+            hiddenByPrivacy: true,
+          };
+        }
+        return {
+          userId: u.id,
+          name: u.name,
+          email: u.email,
+          avatarUrl: u.avatarUrl,
+          sessions,
+          inputTokens: totals._sum.inputTokens ?? 0,
+          outputTokens: totals._sum.outputTokens ?? 0,
+          cachedInputTokens: totals._sum.cachedInputTokens ?? 0,
+          costCents: totals._sum.costCents ?? null,
+          topModel,
+          hiddenByPrivacy: false,
+        };
+      }),
+    );
+  }
+
+  async getThroughput(
+    workspaceId: string,
+    from?: Date,
+    to?: Date,
+  ): Promise<MemberThroughput[]> {
+    const privacy = await this.privacyOf(workspaceId);
+    const memberships = await prisma.workspaceMember.findMany({
+      where: { workspaceId },
+      select: { userId: true },
+    });
+    const users = await prisma.user.findMany({
+      where: { id: { in: memberships.map((m) => m.userId) } },
+      select: { id: true, name: true, avatarUrl: true },
+    });
+    const { gte, lte } = this.usageRange(from, to);
+    return Promise.all(
+      users.map(async (u) => {
+        const [sessions, tasks, prs, tests, cost] = await Promise.all([
+          prisma.agentSession.count({
+            where: { developerId: u.id, workspaceId, startedAt: { gte, lte } },
+          }),
+          prisma.task.count({
+            where: {
+              developerId: u.id,
+              workspaceId,
+              status: "COMPLETED",
+              updatedAt: { gte, lte },
+            },
+          }),
+          prisma.pullRequest.count({
+            where: {
+              authorId: u.id,
+              status: "MERGED",
+              repository: { workspaceId },
+              updatedAt: { gte, lte },
+            },
+          }),
+          prisma.testRun.groupBy({
+            by: ["status"],
+            where: {
+              developerId: u.id,
+              endedAt: { gte, lte },
+              // TestRun has no workspaceId — scope via repo/activity link.
+              OR: [
+                { repository: { workspaceId } },
+                { activity: { workspaceId } },
+              ],
+            },
+            _count: true,
+          }),
+          prisma.tokenUsage.aggregate({
+            where: {
+              session: { developerId: u.id, workspaceId },
+              measuredAt: { gte, lte },
+            },
+            _sum: { costCents: true },
+          }),
+        ]);
+        const passed =
+          tests.find((t) => t.status === TestStatus.PASSED)?._count ?? 0;
+        const failed =
+          tests.find((t) => t.status === TestStatus.FAILED)?._count ?? 0;
+        const costCents = privacy.allowTokenUsage
+          ? (cost._sum.costCents ?? null)
+          : null;
+        return {
+          userId: u.id,
+          name: u.name,
+          avatarUrl: u.avatarUrl,
+          sessions,
+          tasksCompleted: tasks,
+          prsMerged: prs,
+          testsPassed: passed,
+          testsFailed: failed,
+          costCents,
+          costPerTaskCents:
+            costCents !== null && tasks > 0
+              ? Math.round(costCents / tasks)
+              : null,
+        };
+      }),
+    );
+  }
+
+  async getBudget(workspaceId: string): Promise<UsageBudget> {
+    return this.budgetOf(workspaceId);
+  }
+
+  async updateBudget(
+    workspaceId: string,
+    input: UsageBudgetInput,
+    userId: string,
+  ): Promise<UsageBudget> {
+    const row = await prisma.usageBudget.upsert({
+      where: { workspaceId },
+      create: {
+        workspaceId,
+        monthlyCapCents: input.monthlyCapCents,
+        alertAtPct: input.alertAtPct,
+        updatedById: userId,
+      },
+      update: {
+        monthlyCapCents: input.monthlyCapCents,
+        alertAtPct: input.alertAtPct,
+        updatedById: userId,
+      },
+    });
+    return {
+      monthlyCapCents: row.monthlyCapCents,
+      alertAtPct: row.alertAtPct,
+      updatedAt: row.updatedAt.toISOString(),
     };
   }
 }
