@@ -24,6 +24,13 @@ import { monumentTexture, marqueeTexture } from "./signage";
 // shadow direction agree.
 const SUN: [number, number, number] = [60, 80, -40];
 
+/** Real courtyard point lights only on capable desktops — the emissive lamp
+ *  heads carry the look everywhere else. */
+const LAMP_LIGHTS =
+  typeof window !== "undefined" &&
+  !window.matchMedia("(pointer: coarse)").matches &&
+  Math.min(window.innerWidth, window.innerHeight) >= 700;
+
 // The paved plaza sits inside a trimmed planting band, then the streets and the
 // neighbouring city block, so the world reads as a real block, not a platform.
 const GRASS_PAD = 9; // planting band hugging the plaza edge
@@ -317,6 +324,8 @@ function Planter({
       lean: (((seed + k) % 9) - 4) * 0.05,
     }));
   }, [w, d, seed]);
+  const darkShrubs = shrubs.filter((s) => s.dark);
+  const lightShrubs = shrubs.filter((s) => !s.dark);
   return (
     <group position={[x, 0, z]}>
       <mesh position={[0, 0.22, 0]} castShadow receiveShadow>
@@ -327,28 +336,40 @@ function Planter({
         <boxGeometry args={[w - 0.24, 0.1, d - 0.24]} />
         <primitive object={M.mulch} attach="material" />
       </mesh>
-      {shrubs.map((s, k) => (
-        <mesh key={`s${k}`} position={[s.x, s.y, s.z]}>
-          <icosahedronGeometry args={[s.r, 1]} />
-          <primitive object={s.dark ? M.leafDark : M.leaf} attach="material" />
-        </mesh>
-      ))}
-      {tufts.map((t, k) => (
-        <mesh
-          key={`t${k}`}
-          position={[t.x, 0.47 + t.h / 2, t.z]}
-          rotation={[t.lean, 0, -t.lean]}
-        >
-          <coneGeometry args={[0.09, t.h, 6]} />
-          <primitive object={M.leaf} attach="material" />
-        </mesh>
-      ))}
-      {flowers.map((f, k) => (
-        <mesh key={`f${k}`} position={[f.x, 0.62, f.z]}>
-          <sphereGeometry args={[0.05, 8, 8]} />
-          <meshBasicMaterial color={f.c} toneMapped={false} />
-        </mesh>
-      ))}
+      {/* shrubs / tufts / flowers batched per bed: 4 draws, not 21 */}
+      <Instances range={darkShrubs.length} limit={darkShrubs.length}>
+        <icosahedronGeometry args={[1, 1]} />
+        <primitive object={M.leafDark} attach="material" />
+        {darkShrubs.map((s, k) => (
+          <Instance key={k} position={[s.x, s.y, s.z]} scale={s.r} />
+        ))}
+      </Instances>
+      <Instances range={lightShrubs.length} limit={lightShrubs.length}>
+        <icosahedronGeometry args={[1, 1]} />
+        <primitive object={M.leaf} attach="material" />
+        {lightShrubs.map((s, k) => (
+          <Instance key={k} position={[s.x, s.y, s.z]} scale={s.r} />
+        ))}
+      </Instances>
+      <Instances range={tufts.length} limit={tufts.length}>
+        <coneGeometry args={[0.09, 1, 6]} />
+        <primitive object={M.leaf} attach="material" />
+        {tufts.map((t, k) => (
+          <Instance
+            key={k}
+            position={[t.x, 0.47 + t.h / 2, t.z]}
+            rotation={[t.lean, 0, -t.lean]}
+            scale={[1, t.h, 1]}
+          />
+        ))}
+      </Instances>
+      <Instances range={flowers.length} limit={flowers.length}>
+        <sphereGeometry args={[0.05, 8, 8]} />
+        <meshBasicMaterial toneMapped={false} />
+        {flowers.map((f, k) => (
+          <Instance key={k} position={[f.x, 0.62, f.z]} color={f.c} />
+        ))}
+      </Instances>
     </group>
   );
 }
@@ -359,6 +380,12 @@ let swayPatched = false;
 /** Cheap foliage sway: one shared time uniform patched into the leaf
  *  materials (crowns, shrubs, tufts). No extra draws, no shadow cost. */
 function FoliageSway() {
+  const reduced = useMemo(
+    () =>
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+    [],
+  );
   useMemo(() => {
     if (swayPatched) return;
     swayPatched = true;
@@ -378,6 +405,7 @@ function FoliageSway() {
     }
   }, []);
   useFrame(({ clock }) => {
+    if (reduced) return;
     windUniform.value = clock.elapsedTime;
   });
   return null;
@@ -388,19 +416,21 @@ const WALKWAY_Z = 52.9;
 function StreetProps() {
   return (
     <group name="street-props">
-      {/* litter bins along the walkway */}
-      {[-30, -5, 20, 45].map((x) => (
-        <group key={`bin${x}`} position={[x, 0, WALKWAY_Z + 1.6]}>
-          <mesh position={[0, 0.45, 0]}>
-            <cylinderGeometry args={[0.32, 0.28, 0.9, 12]} />
-            <primitive object={M.metalDark} attach="material" />
-          </mesh>
-          <mesh position={[0, 0.93, 0]}>
-            <cylinderGeometry args={[0.34, 0.34, 0.06, 12]} />
-            <primitive object={M.blackAnodized} attach="material" />
-          </mesh>
-        </group>
-      ))}
+      {/* litter bins along the walkway (instanced) */}
+      <Instances range={4} limit={4}>
+        <cylinderGeometry args={[0.32, 0.28, 0.9, 12]} />
+        <primitive object={M.metalDark} attach="material" />
+        {[-30, -5, 20, 45].map((x) => (
+          <Instance key={x} position={[x, 0.45, WALKWAY_Z + 1.6]} />
+        ))}
+      </Instances>
+      <Instances range={4} limit={4}>
+        <cylinderGeometry args={[0.34, 0.34, 0.06, 12]} />
+        <primitive object={M.blackAnodized} attach="material" />
+        {[-30, -5, 20, 45].map((x) => (
+          <Instance key={x} position={[x, 0.93, WALKWAY_Z + 1.6]} />
+        ))}
+      </Instances>
       {/* bike rack + two parked bikes */}
       <group position={[-15, 0, WALKWAY_Z + 1.2]}>
         {[-0.9, 0, 0.9].map((dx) => (
@@ -432,19 +462,21 @@ function StreetProps() {
           </group>
         ))}
       </group>
-      {/* wayfinding poles */}
-      {[-2.5, 30].map((x) => (
-        <group key={`pole${x}`} position={[x, 0, WALKWAY_Z - 1.8]}>
-          <mesh position={[0, 1.4, 0]}>
-            <cylinderGeometry args={[0.06, 0.06, 2.8, 8]} />
-            <primitive object={M.lampPost} attach="material" />
-          </mesh>
-          <mesh position={[0, 2.4, 0]}>
-            <boxGeometry args={[1.1, 0.4, 0.06]} />
-            <primitive object={M.signBox} attach="material" />
-          </mesh>
-        </group>
-      ))}
+      {/* wayfinding poles (instanced) */}
+      <Instances range={2} limit={2}>
+        <cylinderGeometry args={[0.06, 0.06, 2.8, 8]} />
+        <primitive object={M.lampPost} attach="material" />
+        {[-2.5, 30].map((x) => (
+          <Instance key={x} position={[x, 1.4, WALKWAY_Z - 1.8]} />
+        ))}
+      </Instances>
+      <Instances range={2} limit={2}>
+        <boxGeometry args={[1.1, 0.4, 0.06]} />
+        <primitive object={M.signBox} attach="material" />
+        {[-2.5, 30].map((x) => (
+          <Instance key={x} position={[x, 2.4, WALKWAY_Z - 1.8]} />
+        ))}
+      </Instances>
       {/* hydrant near the entrance axis */}
       <group position={[8, 0, WALKWAY_Z + 1.4]}>
         <mesh position={[0, 0.3, 0]}>
@@ -483,7 +515,14 @@ function StreetProps() {
               />
             </mesh>
           )}
-          {(
+        </group>
+      ))}
+      {/* all 12 wheels in one instanced draw */}
+      <Instances range={12} limit={12}>
+        <cylinderGeometry args={[0.32, 0.32, 0.22, 12]} />
+        <primitive object={M.metalDark} attach="material" />
+        {[-60, -20, 55].flatMap((x) =>
+          (
             [
               [-1.4, -0.95],
               [1.4, -0.95],
@@ -491,17 +530,14 @@ function StreetProps() {
               [1.4, 0.95],
             ] as [number, number][]
           ).map(([dx, dz]) => (
-            <mesh
-              key={`${dx}${dz}`}
-              position={[dx, 0.32, dz]}
+            <Instance
+              key={`${x}${dx}${dz}`}
+              position={[x + dx, 0.32, 60 + dz]}
               rotation={[Math.PI / 2, 0, 0]}
-            >
-              <cylinderGeometry args={[0.32, 0.32, 0.22, 12]} />
-              <primitive object={M.metalDark} attach="material" />
-            </mesh>
-          ))}
-        </group>
-      ))}
+            />
+          )),
+        )}
+      </Instances>
       {/* bench side tables */}
       {[30, 38].map((z) => (
         <group key={`tbl${z}`} position={[0, 0, z]}>
@@ -699,6 +735,11 @@ export function Courtyard() {
   }, []);
 
   const towers = [M.towerA, M.towerB, M.towerC];
+  const towerBands = useMemo(
+    () => [0, 1, 2].map((m) => skyline.filter((b) => b.mat === m)),
+    [skyline],
+  );
+  const tallTowers = useMemo(() => skyline.filter((b) => b.h > 55), [skyline]);
 
   return (
     <group name="courtyard">
@@ -993,7 +1034,7 @@ export function Courtyard() {
         </mesh>
       </group>
 
-      {/* Lamp posts (emissive heads + a small pool of light each) */}
+      {/* Lamp posts (emissive heads; real lights only on capable desktops) */}
       {COURT_LAMPS.map(([x, z], i) => (
         <group key={i} position={[x, 0, z]}>
           <mesh position={[0, 0.1, 0]} receiveShadow>
@@ -1012,13 +1053,15 @@ export function Courtyard() {
             <boxGeometry args={[0.58, 0.06, 0.26]} />
             <primitive object={M.lampGlow} attach="material" />
           </mesh>
-          <pointLight
-            position={[0, 4.2, 0]}
-            color="#ffe8bb"
-            intensity={12}
-            distance={11}
-            decay={2}
-          />
+          {LAMP_LIGHTS && (
+            <pointLight
+              position={[0, 4.2, 0]}
+              color="#ffe8bb"
+              intensity={12}
+              distance={11}
+              decay={2}
+            />
+          )}
         </group>
       ))}
 
@@ -1134,7 +1177,7 @@ export function Courtyard() {
       {/* Distant skyline — three facade densities, two depth bands.
           Jittered footprints + antenna toppers so towers don't read as clones. */}
       {towers.map((mat, m) => {
-        const band = skyline.filter((b) => b.mat === m);
+        const band = towerBands[m] ?? [];
         if (band.length === 0) return null;
         return (
           <Instances key={m} range={band.length} limit={band.length}>
@@ -1152,21 +1195,12 @@ export function Courtyard() {
         );
       })}
       {/* Antenna toppers on the tallest towers */}
-      <Instances
-        range={skyline.filter((b) => b.h > 55).length}
-        limit={skyline.filter((b) => b.h > 55).length}
-      >
+      <Instances range={tallTowers.length} limit={tallTowers.length}>
         <boxGeometry args={[1.2, 1, 1.2]} />
         <primitive object={M.metalDark} attach="material" />
-        {skyline
-          .filter((b) => b.h > 55)
-          .map((b, i) => (
-            <Instance
-              key={i}
-              position={[b.x, b.h + 4, b.z]}
-              scale={[1, 8, 1]}
-            />
-          ))}
+        {tallTowers.map((b, i) => (
+          <Instance key={i} position={[b.x, b.h + 4, b.z]} scale={[1, 8, 1]} />
+        ))}
       </Instances>
     </group>
   );

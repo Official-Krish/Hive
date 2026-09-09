@@ -8,12 +8,14 @@ WORKDIR /app
 COPY package.json bun.lock ./
 COPY apps/frontend/package.json         apps/frontend/package.json
 COPY packages/types/package.json        packages/types/package.json
+COPY packages/games/package.json        packages/games/package.json
 
 RUN bun install 
 
-# Copy the frontend source plus @hive/types, which it imports directly.
+# Copy the frontend source plus @hive/types and @hive/games, which it imports directly.
 COPY apps/frontend/    apps/frontend/
 COPY packages/types/   packages/types/
+COPY packages/games/   packages/games/
 
 WORKDIR /app/apps/frontend
 RUN bun run build

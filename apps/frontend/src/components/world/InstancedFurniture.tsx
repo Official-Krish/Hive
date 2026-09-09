@@ -14,7 +14,6 @@ interface InstancedFurnitureProps {
   plants?: TransformData[];
   sofas?: TransformData[];
   coffeeTables?: TransformData[];
-  lightFixtures?: TransformData[];
 }
 
 /**
@@ -28,7 +27,6 @@ export function InstancedFurniture({
   plants = [],
   sofas = [],
   coffeeTables = [],
-  lightFixtures = [],
 }: InstancedFurnitureProps) {
   // Matrix composer helper
   const createMatrix = (t: TransformData): THREE.Matrix4 => {
@@ -113,24 +111,6 @@ export function InstancedFurniture({
     () => new THREE.MeshStandardMaterial({ color: "#1e293b", roughness: 0.85 }),
     [],
   );
-  const lightBarMaterial = useMemo(
-    () =>
-      new THREE.MeshStandardMaterial({
-        color: "#0f172a",
-        roughness: 0.3,
-        metalness: 0.7,
-      }),
-    [],
-  );
-  const lightEmitterMaterial = useMemo(
-    () =>
-      new THREE.MeshStandardMaterial({
-        color: "#f8fafc",
-        emissive: "#f8fafc",
-        emissiveIntensity: 1.2,
-      }),
-    [],
-  );
 
   // Mesh Refs
   const deskTopRef = useRef<THREE.InstancedMesh>(null);
@@ -152,8 +132,6 @@ export function InstancedFurniture({
   const sofaBackRef = useRef<THREE.InstancedMesh>(null);
 
   const coffeeTableRef = useRef<THREE.InstancedMesh>(null);
-  const lightBarRef = useRef<THREE.InstancedMesh>(null);
-  const lightStripRef = useRef<THREE.InstancedMesh>(null);
 
   // Deterministic per-index jitter (lived-in chairs, zero new meshes).
   // Same hash feeds seat/back/base so each chair stays coherent.
@@ -367,29 +345,6 @@ export function InstancedFurniture({
       coffeeTableRef.current.instanceMatrix.needsUpdate = true;
     }
 
-    // LIGHT FIXTURES
-    if (lightBarRef.current && lightFixtures.length > 0) {
-      lightFixtures.forEach((lf, i) => {
-        const m = createMatrix({
-          ...lf,
-          position: [lf.position[0], lf.position[1] + 2.8, lf.position[2]],
-        });
-        lightBarRef.current!.setMatrixAt(i, m);
-      });
-      lightBarRef.current.instanceMatrix.needsUpdate = true;
-    }
-
-    if (lightStripRef.current && lightFixtures.length > 0) {
-      lightFixtures.forEach((lf, i) => {
-        const m = createMatrix({
-          ...lf,
-          position: [lf.position[0], lf.position[1] + 2.76, lf.position[2]],
-        });
-        lightStripRef.current!.setMatrixAt(i, m);
-      });
-      lightStripRef.current.instanceMatrix.needsUpdate = true;
-    }
-
     // Instance transforms span the office, but Three starts with bounds around
     // each source geometry at the origin. Rebuild the aggregate bounds after
     // writing the matrices so visible furniture is not culled, while genuinely
@@ -409,13 +364,11 @@ export function InstancedFurniture({
       sofaSeatRef,
       sofaBackRef,
       coffeeTableRef,
-      lightBarRef,
-      lightStripRef,
     ].forEach((ref) => {
       ref.current?.computeBoundingBox();
       ref.current?.computeBoundingSphere();
     });
-  }, [desks, chairs, monitors, plants, sofas, coffeeTables, lightFixtures]);
+  }, [desks, chairs, monitors, plants, sofas, coffeeTables]);
 
   return (
     <group name="instanced-furniture">
@@ -587,29 +540,6 @@ export function InstancedFurniture({
           >
             <boxGeometry args={[1.2, 0.35, 0.6]} />
             <primitive object={woodMaterial} attach="material" />
-          </instancedMesh>
-        </group>
-      )}
-
-      {/* LIGHT FIXTURES */}
-      {lightFixtures.length > 0 && (
-        <group name="light-fixtures-group">
-          <instancedMesh
-            ref={lightBarRef}
-            args={[undefined, undefined, lightFixtures.length]}
-            frustumCulled={false}
-          >
-            <boxGeometry args={[2.5, 0.08, 0.15]} />
-            <primitive object={lightBarMaterial} attach="material" />
-          </instancedMesh>
-
-          <instancedMesh
-            ref={lightStripRef}
-            args={[undefined, undefined, lightFixtures.length]}
-            frustumCulled={false}
-          >
-            <boxGeometry args={[2.4, 0.01, 0.1]} />
-            <primitive object={lightEmitterMaterial} attach="material" />
           </instancedMesh>
         </group>
       )}

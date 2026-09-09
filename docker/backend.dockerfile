@@ -22,6 +22,7 @@ COPY packages/db/       packages/db/
 COPY packages/queue/    packages/queue/
 COPY packages/types/    packages/types/
 COPY packages/events/   packages/events/
+COPY packages/games/    packages/games/
 
 RUN cd packages/db && DATABASE_URL="postgresql://placeholder:placeholder@localhost:5432/placeholder" bun --bun run prisma generate
 

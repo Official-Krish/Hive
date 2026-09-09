@@ -28,6 +28,7 @@ import { teamsRouter } from "./modules/teams/teams.routes";
 import { issuesRouter } from "./modules/issues/issues.routes";
 import { conversationsRouter } from "./modules/messages/messages.routes";
 import { sessionsRouter } from "./modules/sessions/sessions.routes";
+import { gamesRouter } from "./modules/games/games.routes";
 
 export function createApp() {
   const app = express();
@@ -70,6 +71,7 @@ export function createApp() {
   app.use("/api/v1/workspaces", privacyRouter);
   app.use("/api/v1/workspaces", issuesRouter);
   app.use("/api/v1/workspaces", sessionsRouter);
+  app.use("/api/v1/workspaces", gamesRouter);
   app.use("/api/v1/models", modelsRouter);
   app.use("/api/v1/invites", invitesRouter);
   app.use("/api/v1/orgs", orgsRouter);

@@ -297,10 +297,10 @@ export function Shell() {
             color="#ded9ce"
             roughness={0.32}
             metalness={0.15}
-            blur={[280, 60]}
+            blur={[120, 30]}
             mixBlur={0.9}
             mixStrength={6}
-            resolution={512}
+            resolution={256}
             mirror={0.45}
             depthScale={1.1}
             minDepthThreshold={0.4}

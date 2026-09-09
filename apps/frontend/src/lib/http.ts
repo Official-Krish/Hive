@@ -1,9 +1,16 @@
 import type {
   ChatMessageDto,
   ConversationSummary,
+  GameSession,
+  GameSessionCreate,
   GitHubNotificationsResponse,
+  MemberThroughput,
+  MemberUsage,
   PairSession,
   PairSessionCreate,
+  UsageBudget,
+  UsageBudgetInput,
+  UsageSummary,
 } from "@hive/types";
 import { API_BASE_URL } from "./config";
 
@@ -1075,6 +1082,42 @@ export const http = {
       developerId: string,
     ): Promise<MapOverlay> =>
       request(`/api/v1/workspaces/${workspaceId}/map/overlay/${developerId}`),
+
+    usageSummary: (
+      workspaceId: string,
+      params?: { from?: string; to?: string },
+    ): Promise<UsageSummary> =>
+      request(`/api/v1/workspaces/${workspaceId}/usage/summary`, {
+        query: params,
+      }),
+
+    usageByMember: (
+      workspaceId: string,
+      params?: { from?: string; to?: string },
+    ): Promise<{ members: MemberUsage[] }> =>
+      request(`/api/v1/workspaces/${workspaceId}/usage/by-member`, {
+        query: params,
+      }),
+
+    throughput: (
+      workspaceId: string,
+      params?: { from?: string; to?: string },
+    ): Promise<{ members: MemberThroughput[] }> =>
+      request(`/api/v1/workspaces/${workspaceId}/usage/throughput`, {
+        query: params,
+      }),
+
+    usageBudget: (workspaceId: string): Promise<UsageBudget> =>
+      request(`/api/v1/workspaces/${workspaceId}/usage/budget`),
+
+    updateUsageBudget: (
+      workspaceId: string,
+      input: UsageBudgetInput,
+    ): Promise<UsageBudget> =>
+      request(`/api/v1/workspaces/${workspaceId}/usage/budget`, {
+        method: "PATCH",
+        body: input,
+      }),
   },
 
   models: {
@@ -1109,6 +1152,62 @@ export const http = {
         `/api/v1/workspaces/${workspaceId}/pair-sessions/${sessionId}/end`,
         { method: "PATCH" },
       ),
+  },
+
+  /* ── games ── */
+  games: {
+    active: (workspaceId: string): Promise<{ session: GameSession | null }> =>
+      request(`/api/v1/workspaces/${workspaceId}/games/active`),
+
+    list: (workspaceId: string): Promise<{ sessions: GameSession[] }> =>
+      request(`/api/v1/workspaces/${workspaceId}/games`),
+
+    byId: (
+      workspaceId: string,
+      gameId: string,
+    ): Promise<{ session: GameSession }> =>
+      request(`/api/v1/workspaces/${workspaceId}/games/${gameId}`),
+
+    create: (
+      workspaceId: string,
+      input: GameSessionCreate,
+    ): Promise<{ session: GameSession }> =>
+      request(`/api/v1/workspaces/${workspaceId}/games`, {
+        method: "POST",
+        body: input,
+      }),
+
+    resign: (
+      workspaceId: string,
+      gameId: string,
+    ): Promise<{ session: GameSession }> =>
+      request(`/api/v1/workspaces/${workspaceId}/games/${gameId}/resign`, {
+        method: "PATCH",
+      }),
+
+    accept: (
+      workspaceId: string,
+      gameId: string,
+    ): Promise<{ session: GameSession }> =>
+      request(`/api/v1/workspaces/${workspaceId}/games/${gameId}/accept`, {
+        method: "PATCH",
+      }),
+
+    decline: (
+      workspaceId: string,
+      gameId: string,
+    ): Promise<{ session: GameSession }> =>
+      request(`/api/v1/workspaces/${workspaceId}/games/${gameId}/decline`, {
+        method: "PATCH",
+      }),
+
+    start: (
+      workspaceId: string,
+      gameId: string,
+    ): Promise<{ session: GameSession }> =>
+      request(`/api/v1/workspaces/${workspaceId}/games/${gameId}/start`, {
+        method: "PATCH",
+      }),
   },
 
   /* ── chat ── */

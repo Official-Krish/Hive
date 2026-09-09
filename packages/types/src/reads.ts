@@ -382,3 +382,85 @@ export interface MapOverlay {
   outputTokens: number;
   costCents: number | null;
 }
+
+// ---------------------------------------------------------------------------
+// Admin usage dashboard — per-workspace token spend + team throughput.
+// All endpoints are admin/owner-only. When the workspace disables token
+// visibility (allowTokenUsage=false), token fields come back masked and
+// `hiddenByPrivacy` is true; throughput counts are never private.
+// ---------------------------------------------------------------------------
+
+export const usageQuerySchema = z.object({
+  from: z.coerce.date().optional(),
+  to: z.coerce.date().optional(),
+});
+export type UsageQuery = z.infer<typeof usageQuerySchema>;
+
+export interface UsageDayPoint {
+  date: string;
+  inputTokens: number;
+  outputTokens: number;
+  cachedInputTokens: number;
+  costCents: number | null;
+}
+
+export interface UsageModelSlice {
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  costCents: number | null;
+}
+
+export interface UsageSummary {
+  hiddenByPrivacy: boolean;
+  inputTokens: number;
+  outputTokens: number;
+  cachedInputTokens: number;
+  costCents: number | null;
+  sessions: number;
+  byDay: UsageDayPoint[];
+  byModel: UsageModelSlice[];
+  budget: UsageBudget;
+  /** Spend MTD vs monthly cap (null when no cap or privacy-masked). */
+  monthSpendCents: number | null;
+}
+
+export interface MemberUsage {
+  userId: string;
+  name: string;
+  email: string;
+  avatarUrl: string | null;
+  sessions: number;
+  inputTokens: number;
+  outputTokens: number;
+  cachedInputTokens: number;
+  costCents: number | null;
+  topModel: string | null;
+  hiddenByPrivacy: boolean;
+}
+
+export interface MemberThroughput {
+  userId: string;
+  name: string;
+  avatarUrl: string | null;
+  sessions: number;
+  tasksCompleted: number;
+  prsMerged: number;
+  testsPassed: number;
+  testsFailed: number;
+  costCents: number | null;
+  /** Cost per completed task (null when nothing completed or masked). */
+  costPerTaskCents: number | null;
+}
+
+export interface UsageBudget {
+  monthlyCapCents: number | null;
+  alertAtPct: number;
+  updatedAt: string | null;
+}
+
+export const usageBudgetSchema = z.object({
+  monthlyCapCents: z.number().int().min(0).max(100_000_000).nullable(),
+  alertAtPct: z.number().int().min(1).max(100).default(80),
+});
+export type UsageBudgetInput = z.infer<typeof usageBudgetSchema>;

@@ -200,10 +200,20 @@ function DeskDots({
     () => INTERACTABLES.filter((s) => s.kind === "monitor"),
     [],
   );
+  // playerPos ticks ~12Hz upstream; skip the sort when nobody moved.
+  const lastPos = useRef<[number, number, number]>(playerPos);
 
   useFrame(() => {
     const g = group.current;
     if (!g) return;
+    const moved =
+      lastPos.current[0] !== playerPos[0] ||
+      lastPos.current[1] !== playerPos[1] ||
+      lastPos.current[2] !== playerPos[2] ||
+      (g.userData.nearId as string | null) !== nearId;
+    if (!moved) return;
+    lastPos.current = playerPos;
+    g.userData.nearId = nearId;
     // pick the nearest few on the player's level
     const ranked = dots
       .map((s) => {
@@ -217,13 +227,15 @@ function DeskDots({
       .slice(0, DESK_DOT_MAX);
     const ids = new Set(ranked.map((r) => r.s.id));
     if (nearId) ids.add(nearId);
+    const dist = new Map(ranked.map((r) => [r.s.id, r.d2]));
     g.children.forEach((child) => {
       const id = child.userData.spotId as string | undefined;
-      const hit = ranked.find((r) => r.s.id === id);
       child.visible = !!id && ids.has(id);
-      if (!hit || !id) return;
+      if (!id) return;
+      const d2 = dist.get(id);
+      if (d2 === undefined) return;
       const targeted = nearId === id;
-      const closeness = 1 - Math.sqrt(hit.d2) / DESK_DOT_RANGE;
+      const closeness = 1 - Math.sqrt(d2) / DESK_DOT_RANGE;
       child.scale.setScalar(targeted ? 1.5 : 0.8 + closeness * 0.5);
     });
   });

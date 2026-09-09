@@ -1,4 +1,4 @@
-import { DESKS, L2_DESKS, POD_DESKS, type Vec2 } from "./office/layout";
+import { DESKS, L2_DESKS, POD_DESKS, WATER_COOLER } from "./office/layout";
 
 export type InteractableKind =
   | "coffee"
@@ -24,9 +24,6 @@ export interface Interactable {
   prompt: string;
   icon: InteractableIcon;
 }
-
-/** Water dispenser against the cafeteria east wall. */
-export const WATER_COOLER: Vec2 = [32.9, 7.0];
 
 /** Level 1 standing in front of the coffee-bar island (cafeteria). */
 const COFFEE: Interactable = {

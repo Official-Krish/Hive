@@ -7,9 +7,11 @@ import {
   sessionFilterSchema,
   taskFilterSchema,
   testRunFilterSchema,
+  usageBudgetSchema,
+  usageQuerySchema,
 } from "@hive/types";
 import { requireAuth } from "../../middleware/authenticate";
-import { validateQuery } from "../../middleware/validate";
+import { validateBody, validateQuery } from "../../middleware/validate";
 import {
   readsLimiter,
   readsWorkspaceLimiter,
@@ -113,6 +115,44 @@ readsRouter.get(
   "/:workspaceId/developers/:developerId/stats",
   member,
   controller.getDeveloperStats,
+);
+
+// Admin usage dashboard — token spend, throughput, budgets. Admin/owner only;
+// token fields come back masked when the workspace disables token visibility.
+const admin = requireWorkspaceRole("admin", "owner");
+readsRouter.get(
+  "/:workspaceId/usage/summary",
+  member,
+  admin,
+  validateQuery(usageQuerySchema),
+  controller.getUsageSummary,
+);
+readsRouter.get(
+  "/:workspaceId/usage/by-member",
+  member,
+  admin,
+  validateQuery(usageQuerySchema),
+  controller.getUsageByMember,
+);
+readsRouter.get(
+  "/:workspaceId/usage/throughput",
+  member,
+  admin,
+  validateQuery(usageQuerySchema),
+  controller.getThroughput,
+);
+readsRouter.get(
+  "/:workspaceId/usage/budget",
+  member,
+  admin,
+  controller.getBudget,
+);
+readsRouter.patch(
+  "/:workspaceId/usage/budget",
+  member,
+  admin,
+  validateBody(usageBudgetSchema),
+  controller.updateBudget,
 );
 
 // Workspace-agnostic reads (still require a valid session).

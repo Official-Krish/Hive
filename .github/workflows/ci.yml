@@ -146,6 +146,35 @@ jobs:
       - name: Run Backend Tests
         run: cd apps/backend && bun run test
 
+  test-games:
+    name: Games Engine Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Cache Bun Dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.bun/install/cache
+            node_modules
+            .turbo
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+
+      - name: Install Dependencies
+        run: bun install
+
+      - name: Run Games Engine Tests
+        run: cd packages/games && bun run test
+
   detect-changes:
     name: Detect Changed Services
     runs-on: ubuntu-latest

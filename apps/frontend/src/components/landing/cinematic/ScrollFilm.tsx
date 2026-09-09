@@ -30,6 +30,8 @@ export function ScrollFilm() {
   // durations live in a ref for the rAF loop (state mirrors for devtools)
   const durationsRef = useRef<number[]>(Array(LEG_COUNT).fill(FALLBACK_LEG));
   const [, setDurations] = useState<number[]>(durationsRef.current);
+  // Only the current leg ±1 keeps a mounted video element (3 decoders, not 8).
+  const [legIdx, setLegIdx] = useState(0);
 
   const [loaded, setLoaded] = useState(0);
   const [ready, setReady] = useState(false);
@@ -76,6 +78,39 @@ export function ScrollFilm() {
     measure();
     window.addEventListener("scroll", measure, { passive: true });
     window.addEventListener("resize", onResize);
+    // Pause the whole engine when the film scrolls out of view or the tab
+    // hides — the FAQ/CTA below should scroll on a quiet main thread.
+    let inView = true;
+    const io = new IntersectionObserver(
+      ([entry]) => {
+        const vis =
+          !!entry?.isIntersecting && document.visibilityState === "visible";
+        if (vis && !inView) {
+          inView = true;
+          last = performance.now();
+          raf = requestAnimationFrame(tick);
+        } else if (!vis && inView) {
+          inView = false;
+          cancelAnimationFrame(raf);
+        }
+      },
+      { threshold: 0 },
+    );
+    io.observe(section);
+    const onVis = () => {
+      if (document.hidden && inView) {
+        inView = false;
+        cancelAnimationFrame(raf);
+      } else if (!document.hidden && !inView) {
+        const r = section.getBoundingClientRect();
+        if (r.bottom > 0 && r.top < window.innerHeight) {
+          inView = true;
+          last = performance.now();
+          raf = requestAnimationFrame(tick);
+        }
+      }
+    };
+    document.addEventListener("visibilitychange", onVis);
 
     const legStartOf = (leg: number) => {
       let s = 0;
@@ -108,7 +143,7 @@ export function ScrollFilm() {
       const local = Math.min(Math.max(0, t - legStart), legDur);
 
       // match-cut: show exactly one wrapper. Only the current leg ±1 keeps
-      // a decoder — distant legs get their src torn down to truly free it.
+      // a mounted video element (the rest render poster-only, no decoder).
       if (leg !== currentLeg) {
         wrapRefs.current.forEach((w, i) => {
           if (!w) return;
@@ -117,41 +152,38 @@ export function ScrollFilm() {
         });
         videoRefs.current.forEach((vv, i) => {
           if (!vv) return;
-          if (Math.abs(i - leg) <= 1) {
-            if (!vv.getAttribute("src")) {
-              vv.src = CHAPTERS[i]!.video;
-              vv.load();
-              const img = vv.parentElement?.querySelector("img");
-              if (img) (img as HTMLElement).style.display = "";
-            } else if (vv.preload !== "auto") {
-              vv.preload = "auto";
-              vv.load();
-            }
-          } else {
+          if (Math.abs(i - leg) > 1) {
             vv.pause();
             if (vv.getAttribute("src")) {
               vv.removeAttribute("src");
               vv.load();
             }
+          } else if (vv.preload !== "auto") {
+            vv.preload = "auto";
+            vv.load();
           }
         });
         currentLeg = leg;
+        setLegIdx(leg);
       }
 
       // scrub the visible frame (video stays paused — seek only).
-      // Disciplined: every 2nd frame max, never while a seek is in flight,
-      // and only past a frame-interval of drift — seek pileups are judder.
+      // Disciplined: every 4th frame max, never while a seek is in flight,
+      // never hidden, and only past a quarter-second of drift — seek pileups
+      // are judder (each seek is a synchronous keyframe decode).
       frame++;
       const v = videoRefs.current[leg];
       if (
-        frame % 2 === 0 &&
+        frame % 4 === 0 &&
         v &&
         v.readyState >= 2 &&
         !v.seeking &&
-        Math.abs(v.currentTime - local) > 0.05
+        !document.hidden &&
+        Math.abs(v.currentTime - local) > 0.25
       ) {
         try {
-          v.currentTime = local;
+          if (typeof v.fastSeek === "function") v.fastSeek(local);
+          else v.currentTime = local;
         } catch {
           /* busy — retry next slot */
         }
@@ -200,6 +232,8 @@ export function ScrollFilm() {
 
     return () => {
       cancelAnimationFrame(raf);
+      io.disconnect();
+      document.removeEventListener("visibilitychange", onVis);
       window.removeEventListener("scroll", measure);
       window.removeEventListener("resize", onResize);
     };
@@ -272,32 +306,38 @@ export function ScrollFilm() {
                   src={c.poster}
                   alt=""
                   aria-hidden
+                  loading={i < 2 ? "eager" : "lazy"}
+                  decoding="async"
                   className="absolute inset-0 h-full w-full object-cover"
                 />
-                <video
-                  ref={(el) => {
-                    videoRefs.current[i] = el;
-                  }}
-                  className="absolute inset-0 h-full w-full object-cover"
-                  style={{ opacity: 0 }}
-                  src={c.video}
-                  muted
-                  playsInline
-                  preload={i < 2 ? "auto" : "metadata"}
-                  disablePictureInPicture
-                  onLoadedMetadata={(e) => onMeta(i, e.currentTarget.duration)}
-                  onSeeked={(e) => {
-                    // First decoded frame: video takes over, still retires.
-                    const vid = e.currentTarget;
-                    vid.style.opacity = "1";
-                    const img = vid.parentElement?.querySelector("img");
-                    if (img) (img as HTMLElement).style.display = "none";
-                  }}
-                  onCanPlayThrough={() => {
-                    setLoaded((n) => Math.min(LEG_COUNT, n + 1));
-                    if (i === 0) setReady(true);
-                  }}
-                />
+                {Math.abs(i - legIdx) <= 1 && (
+                  <video
+                    ref={(el) => {
+                      videoRefs.current[i] = el;
+                    }}
+                    className="absolute inset-0 h-full w-full object-cover"
+                    style={{ opacity: 0 }}
+                    src={c.video}
+                    muted
+                    playsInline
+                    preload={i < 2 ? "auto" : "metadata"}
+                    disablePictureInPicture
+                    onLoadedMetadata={(e) =>
+                      onMeta(i, e.currentTarget.duration)
+                    }
+                    onSeeked={(e) => {
+                      // First decoded frame: video takes over, still retires.
+                      const vid = e.currentTarget;
+                      vid.style.opacity = "1";
+                      const img = vid.parentElement?.querySelector("img");
+                      if (img) (img as HTMLElement).style.display = "none";
+                    }}
+                    onCanPlayThrough={() => {
+                      setLoaded((n) => Math.min(LEG_COUNT, n + 1));
+                      if (i === 0) setReady(true);
+                    }}
+                  />
+                )}
               </div>
             </div>
           ))}

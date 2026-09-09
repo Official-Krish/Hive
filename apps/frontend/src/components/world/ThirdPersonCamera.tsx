@@ -25,6 +25,12 @@ const EYE_PROBE = 0.5; // nose-against-wall clamp distance in first-person
 // First-person pitch range (look up/down); third-person stays top-down only.
 const FPP_PITCH_MIN = -1.2;
 const FPP_PITCH_MAX = 1.35;
+// Module-scope scratch temps — the follow loop runs every frame.
+const _desired = new THREE.Vector3();
+const _dir = new THREE.Vector3();
+const _eye = new THREE.Vector3();
+const _view = new THREE.Vector3();
+const _camPos = new THREE.Vector3();
 
 /**
  * Smooth third-person follow camera.
@@ -77,7 +83,6 @@ export function ThirdPersonCamera({
     new THREE.Vector3(...(targetPosition ?? [0, 0, 0])),
   );
   const smoothDist = useRef(DEFAULT_DIST);
-
   useEffect(() => {
     const el = gl.domElement;
     const onDown = (e: MouseEvent) => {
@@ -186,24 +191,26 @@ export function ThirdPersonCamera({
       ty = targetPosition[1];
       tz = targetPosition[2];
     }
-    const desiredTarget = new THREE.Vector3(tx, ty + TARGET_HEIGHT, tz);
+    const desiredTarget = _desired.set(tx, ty + TARGET_HEIGHT, tz);
     currentTarget.current.lerp(desiredTarget, Math.min(1, delta * 10));
     const target = currentTarget.current;
 
     const yaw = yawRef.current;
     const pitch = pitchRef.current;
-    const dir = new THREE.Vector3(
-      Math.sin(yaw) * Math.cos(pitch),
-      Math.sin(pitch),
-      Math.cos(yaw) * Math.cos(pitch),
-    ).normalize();
+    const dir = _dir
+      .set(
+        Math.sin(yaw) * Math.cos(pitch),
+        Math.sin(pitch),
+        Math.cos(yaw) * Math.cos(pitch),
+      )
+      .normalize();
 
     // First-person: lens at the eye, looking along yaw/pitch. Movement stays
     // yaw-only (PlayerController never reads pitch), so nothing else changes.
     if (modeRef.current === "first") {
-      const eye = new THREE.Vector3(tx, ty + eyeHeight, tz);
+      const eye = _eye.set(tx, ty + eyeHeight, tz);
       // viewDir points from behind-camera to in-front; negate orbit dir.
-      const view = new THREE.Vector3(-dir.x, -dir.y, -dir.z);
+      const view = _view.set(-dir.x, -dir.y, -dir.z);
       // Keep the near plane out of the wall when nose-against it.
       const clear = rayHit(eye, view, EYE_PROBE);
       const back = clear < EYE_PROBE ? EYE_PROBE - clear : 0;
@@ -224,7 +231,7 @@ export function ThirdPersonCamera({
         ? allowed
         : THREE.MathUtils.damp(smoothDist.current, allowed, 6, delta);
 
-    const camPos = new THREE.Vector3(
+    const camPos = _camPos.set(
       target.x + dir.x * smoothDist.current,
       Math.max(0.5, target.y + dir.y * smoothDist.current),
       target.z + dir.z * smoothDist.current,

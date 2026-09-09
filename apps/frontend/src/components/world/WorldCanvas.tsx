@@ -15,7 +15,13 @@ import { Preload } from "@react-three/drei";
 import * as THREE from "three";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { FiArrowLeft, FiMessageSquare, FiUsers } from "react-icons/fi";
+import {
+  FiArrowLeft,
+  FiAward,
+  FiFlag,
+  FiMessageSquare,
+  FiUsers,
+} from "react-icons/fi";
 import { OfficeBuilding } from "./office/OfficeBuilding";
 import { OfficeLighting } from "./lighting/OfficeLighting";
 import { PlayerController } from "./PlayerController";
@@ -36,6 +42,7 @@ import { useNearbyTokens } from "@/hooks/useNearbyTokens";
 import { useInteractions } from "@/hooks/useInteractions";
 import { useFocusRoom } from "@/hooks/useFocusRoom";
 import { usePairSession } from "@/hooks/usePairSession";
+import { useGameSession } from "@/hooks/useGameSession";
 import { http } from "@/lib/http";
 import RemoteAvatars from "./RemoteAvatars";
 import { Markers } from "./Markers";
@@ -44,6 +51,7 @@ import { WorldTour, markTourSeen, shouldShowTour } from "./WorldTour";
 import { MemberDetailPopup } from "./MapHud";
 import { ChatPanel } from "./ChatPanel";
 import { GitHubNotificationBell } from "./GitHubNotificationBell";
+import { GameInviteInbox } from "./GameInviteInbox";
 import { CallStage } from "./CallStage";
 import { CallControls } from "./CallControls";
 import { WorkspaceModal } from "./WorkspaceModal";
@@ -54,7 +62,7 @@ import { PairModeBar } from "./PairModeBar";
 import { PeerCursorOverlay } from "./PeerCursorOverlay";
 import { Confetti, type ConfettiRef } from "@/components/ui/confetti";
 import { cn } from "@/lib/utils";
-import { statusLabel, useDismiss } from "./chrome";
+import { STATUS_DOT, statusLabel, useDismiss } from "./chrome";
 import { useChillMedia } from "@/hooks/useChillMedia";
 import { ChillScreenProjection } from "./ChillScreenProjection";
 import { ChillScreenModal } from "./ChillScreenModal";
@@ -111,24 +119,20 @@ const safePointerEvents: typeof createPointerEvents = (store) => {
   return manager;
 };
 
-const STATUS_DOT: Record<string, string> = {
-  online: "bg-emerald-500",
-  away: "bg-amber-500",
-  on_call: "bg-sky-500",
-  busy: "bg-rose-500",
-  focusing: "bg-purple-500",
-  offline: "bg-neutral-300",
-};
-
-const STATUS_LABEL: Record<string, string> = {
-  online: "Online",
-  away: "Away",
-  on_call: "On call",
-  busy: "Busy",
-  focusing: "Focusing",
-  offline: "Offline",
-};
-
+/** Friendly end-of-match reason for the celebration card. */
+function endReason(kind: string, reason: string | null, won: boolean): string {
+  const game = kind === "chess" ? "Chess" : "Connect Four";
+  switch (reason) {
+    case "checkmate":
+      return won ? "by checkmate" : `checkmated in ${game}`;
+    case "connect-four":
+      return won ? "four in a row" : "four in a row";
+    case "resign":
+      return won ? "opponent resigned" : `you resigned from ${game}`;
+    default:
+      return reason ?? game;
+  }
+}
 /** Members directory popup — Escape or outside click dismisses. */
 function MembersPopup({
   roster,
@@ -336,11 +340,14 @@ function InlineTextRow({
 /** TEMP dev probe: exposes the renderer + scene for perf measurement. */
 function PerfProbe() {
   const { gl, scene, camera } = useThree();
-  (window as unknown as Record<string, unknown>).__three = {
-    gl,
-    scene,
-    camera,
-  };
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    (window as unknown as Record<string, unknown>).__three = {
+      gl,
+      scene,
+      camera,
+    };
+  }, [gl, scene, camera]);
   return null;
 }
 
@@ -394,6 +401,7 @@ export function WorldCanvas({
     client,
     avatars,
   });
+  const games = useGameSession({ workspaceId, myUserId, client });
   const call = useLiveKitCall(workspaceId, myUserId, nearIds, onlineCount, {
     volumePeers: focus.allowedPeers,
     muteRemote: focus.inFocus,
@@ -406,7 +414,9 @@ export function WorldCanvas({
 
   // Pair-session collaborative cursor: forward my pointer to the active
   // session as normalised window coordinates (throttled inside the hook).
+  // Listener only exists while a session is active.
   useEffect(() => {
+    if (!pair.active) return;
     const onMove = (e: MouseEvent) => {
       pair.sendCursor(
         e.clientX / window.innerWidth,
@@ -415,7 +425,7 @@ export function WorldCanvas({
     };
     window.addEventListener("mousemove", onMove);
     return () => window.removeEventListener("mousemove", onMove);
-  }, [pair.sendCursor]);
+  }, [pair.sendCursor, pair.active]);
 
   const CURSOR_COLORS = ["#6366f1", "#0ea5e9", "#10b981", "#f59e0b"];
   const cursorColorOf = (id: string): string =>
@@ -464,8 +474,7 @@ export function WorldCanvas({
   const myPresence = avatars.get(myUserId);
   const myStatusLabel =
     (myPresence?.label as string | undefined) ??
-    STATUS_LABEL[myPresence?.status ?? "online"] ??
-    "Online";
+    statusLabel(myPresence?.status ?? "online");
 
   // Members directory: full workspace roster stamped with live presence.
   const roster = useMemo(() => {
@@ -516,6 +525,11 @@ export function WorldCanvas({
   const confettiRef = useRef<ConfettiRef>(null);
 
   const fireConfetti = useCallback(() => {
+    if (
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    )
+      return;
     void confettiRef.current?.fire({
       particleCount: 140,
       spread: 75,
@@ -527,6 +541,41 @@ export function WorldCanvas({
       colors: ["#f472b6", "#a78bfa", "#34d399", "#fbbf24", "#38bdf8"],
     });
   }, []);
+
+  // Match end celebration — wins get confetti + a title card, losses get a
+  // title card. One-shot per match, both games, any decisive reason.
+  const [endCelebration, setEndCelebration] = useState<{
+    sessionId: string;
+    kind: string;
+    won: boolean;
+    otherName: string;
+    reason: string | null;
+  } | null>(null);
+  const celebratedRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    for (const s of games.sessions) {
+      if (
+        s.status === "finished" &&
+        s.winnerUserId &&
+        !celebratedRef.current.has(s.id)
+      ) {
+        const iWon = s.winnerUserId === myUserId;
+        const iPlayed = s.members.some((m) => m.userId === myUserId);
+        if (!iPlayed) continue;
+        celebratedRef.current.add(s.id);
+        const other =
+          s.members.find((m) => m.userId !== myUserId)?.name ?? "Opponent";
+        setEndCelebration({
+          sessionId: s.id,
+          kind: s.kind,
+          won: iWon,
+          otherName: other,
+          reason: s.resultReason,
+        });
+        if (iWon) fireConfetti();
+      }
+    }
+  }, [games.sessions, myUserId, fireConfetti]);
 
   const pushFeed = useCallback((text: string, tone: FeedItem["tone"]) => {
     setFeed((prev) =>
@@ -685,6 +734,8 @@ export function WorldCanvas({
   const interaction = useInteractions({
     pos: playerPos,
     blocked:
+      !worldReady ||
+      tourOpen ||
       chatOpen ||
       statusInputFocused ||
       membersOpen ||
@@ -694,7 +745,8 @@ export function WorldCanvas({
       ciOpen ||
       chillScreenOpen ||
       gamesOpen ||
-      whiteboardId !== null,
+      whiteboardId !== null ||
+      pair.open,
     onPress: handleInteract,
   });
 
@@ -886,6 +938,15 @@ export function WorldCanvas({
             workspaceId={workspaceId}
             client={client}
             onOpenChange={setNotifOpen}
+          />
+
+          {/* Game invites inbox — the only place to accept a challenge */}
+          <GameInviteInbox
+            games={games}
+            onJoin={(id) => {
+              void games.accept(id);
+              setGamesOpen(true);
+            }}
           />
 
           {/* Members directory */}
@@ -1148,6 +1209,62 @@ export function WorldCanvas({
         </div>
       )}
 
+      {/* Match-end card — "You won" (+ confetti) or "You lose", both games */}
+      {endCelebration && (
+        <div className="pointer-events-none absolute left-1/2 top-16 z-10 flex -translate-x-1/2 flex-col items-center gap-1.5">
+          <div className="pointer-events-auto flex items-center gap-3 rounded-2xl bg-neutral-950 px-5 py-3.5 text-white shadow-2xl ring-1 ring-amber-300/50">
+            <span
+              className={
+                endCelebration.won
+                  ? "flex size-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-amber-300 to-amber-500 text-neutral-950 shadow-lg"
+                  : "flex size-11 shrink-0 items-center justify-center rounded-full bg-white/10 text-white/60"
+              }
+            >
+              {endCelebration.won ? (
+                <FiAward className="size-5" />
+              ) : (
+                <FiFlag className="size-5" />
+              )}
+            </span>
+            <span className="min-w-0">
+              <span className="block text-[16px] font-bold tracking-tight">
+                {endCelebration.won ? "You won!" : "You lose"}
+              </span>
+              <span className="block max-w-[260px] truncate text-[12px] font-medium text-white/60">
+                {endCelebration.won
+                  ? `${endCelebration.otherName} · ${endReason(endCelebration.kind, endCelebration.reason, true)}`
+                  : `${endCelebration.otherName} won · ${endReason(endCelebration.kind, endCelebration.reason, false)}`}
+              </span>
+            </span>
+            <span className="flex shrink-0 gap-1.5">
+              <button
+                type="button"
+                onClick={() => {
+                  games.open(endCelebration.sessionId);
+                  setGamesOpen(true);
+                  setEndCelebration(null);
+                }}
+                className={
+                  endCelebration.won
+                    ? "rounded-lg bg-emerald-500 px-2.5 py-1.5 text-[11.5px] font-bold text-neutral-950 transition-colors hover:bg-emerald-400"
+                    : "rounded-lg bg-white/10 px-2.5 py-1.5 text-[11.5px] font-semibold text-white/70 transition-colors hover:bg-white/20 hover:text-white"
+                }
+              >
+                View board
+              </button>
+              <button
+                type="button"
+                onClick={() => setEndCelebration(null)}
+                aria-label="Dismiss"
+                className="rounded-lg bg-white/10 px-2.5 py-1.5 text-[11.5px] font-semibold text-white/70 transition-colors hover:bg-white/20 hover:text-white"
+              >
+                ✕
+              </button>
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Focus pod widget — presence, mute state and pairing (only inside a focus room) */}
       {focus.inFocus && (
         <div className="pointer-events-none absolute left-1/2 top-[4.5rem] z-10 flex -translate-x-1/2 flex-col items-center gap-1.5">
@@ -1292,7 +1409,7 @@ export function WorldCanvas({
         <color attach="background" args={["#cdd8e3"]} />
 
         <Suspense fallback={null}>
-          <OfficeLighting />
+          <OfficeLighting level={playerPos[1] > 3.1 ? 2 : 1} />
           <OfficeBuilding />
         </Suspense>
         {/* The YouTube player is a DOM surface, so it cannot participate in
@@ -1300,6 +1417,7 @@ export function WorldCanvas({
             is in the Chill Space; elsewhere the real TV wall stays untouched. */}
         <ChillScreenProjection
           active={!!chill.state.videoId && currentRoom === "Chill Space"}
+          mounted={!!chill.state.videoId}
         />
 
         <PlayerController
@@ -1421,7 +1539,14 @@ export function WorldCanvas({
           onClose={() => setChillScreenOpen(false)}
         />
       )}
-      {gamesOpen && <GamesModal onClose={() => setGamesOpen(false)} />}
+      {gamesOpen && (
+        <GamesModal
+          myUserId={myUserId}
+          members={chat.members}
+          games={games}
+          onClose={() => setGamesOpen(false)}
+        />
+      )}
 
       {/* Proximity voice/video — only when near other members.
           Bottom-center column: video tiles above the mic/camera controls. */}

@@ -29,6 +29,8 @@ export type {
   WebhookDelivery,
   PairSession,
   PairSessionMember,
+  GameSession,
+  GameMove,
   Prisma,
 } from "./src/generated/prisma/client";
 
