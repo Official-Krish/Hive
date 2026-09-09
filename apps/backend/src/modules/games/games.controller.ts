@@ -21,23 +21,25 @@ export class GamesController {
     const { userId } = getAuth(res);
     const workspaceId = GamesController.workspaceId(req);
     const input = req.body as GameSessionCreate;
-    if (input.opponentId === userId) {
+    const party = input.kind === "ludo" || input.kind === "uno";
+    const opponents = party ? (input.opponentIds ?? []) : [input.opponentId!];
+    if (opponents.includes(userId)) {
       throw new BadRequestError("You cannot play yourself");
     }
-    // Both seats must be real workspace members.
+    // Every seat must be a real workspace member.
     const members = await prisma.workspaceMember.findMany({
-      where: { workspaceId, userId: { in: [userId, input.opponentId] } },
+      where: { workspaceId, userId: { in: [userId, ...opponents] } },
       select: { userId: true },
     });
-    if (members.length !== 2) {
-      throw new NotFoundError("Opponent is not a member of this workspace");
+    if (members.length !== opponents.length + 1) {
+      throw new NotFoundError("An opponent is not a member of this workspace");
     }
     const users = await prisma.user.findMany({
-      where: { id: { in: [userId, input.opponentId] } },
+      where: { id: { in: [userId, ...opponents] } },
       select: { id: true, name: true },
     });
-    if (users.length !== 2) {
-      throw new NotFoundError("Opponent user does not exist");
+    if (users.length !== opponents.length + 1) {
+      throw new NotFoundError("An opponent user does not exist");
     }
     if (await this.service.hasOpenMatch(workspaceId, userId)) {
       throw new ConflictError("Finish your open match first");
@@ -108,6 +110,17 @@ export class GamesController {
     const session = await this.service.decline(workspaceId, gameId, userId);
     if (!session) {
       throw new NotFoundError("No pending invite with that id for you");
+    }
+    res.json({ data: { session } });
+  };
+
+  start = async (req: Request, res: Response): Promise<void> => {
+    const { userId } = getAuth(res);
+    const workspaceId = GamesController.workspaceId(req);
+    const gameId = typeof req.params.id === "string" ? req.params.id : "";
+    const session = await this.service.start(workspaceId, gameId, userId);
+    if (!session) {
+      throw new NotFoundError("No pending party match with that id");
     }
     res.json({ data: { session } });
   };

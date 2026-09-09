@@ -79,12 +79,15 @@ export const whiteboardStrokeSchema = z.object({
 export type WhiteboardStroke = z.infer<typeof whiteboardStrokeSchema>;
 
 // ---------------------------------------------------------------------------
-// Mini-games — server-authoritative Chess + Connect 4.
-// HTTP owns match lifecycle (create/list/resign); WS carries moves + state.
-// Board payloads are engine strings: FEN for chess, 42-char grid for C4.
+// Mini-games — server-authoritative Chess + Connect 4 (2 seats) and Ludo-lite
+// + Uno-lite (2–4 seats). HTTP owns match lifecycle (create/list/start/
+// resign); WS carries moves + state. Board payloads are engine strings: FEN
+// for chess, 42-char grid for C4, `seats:turn:roll:tokens` for ludo, and the
+// redacted public form for uno (hands travel per-viewer in `hand`, never on
+// the broadcast topic).
 // ---------------------------------------------------------------------------
 
-export const gameKindSchema = z.enum(["chess", "connect4"]);
+export const gameKindSchema = z.enum(["chess", "connect4", "ludo", "uno"]);
 export type GameKind = z.infer<typeof gameKindSchema>;
 
 export const gameStatusSchema = z.enum(["pending", "active", "finished"]);
@@ -93,8 +96,8 @@ export type GameStatus = z.infer<typeof gameStatusSchema>;
 export const gameSessionMemberSchema = z.object({
   userId: z.string(),
   name: z.string(),
-  /** First seat moves first (White in chess, Red in Connect 4). */
-  seat: z.enum(["first", "second"]),
+  /** Seat in turn order — index 0 moves first. */
+  seat: z.enum(["first", "second", "third", "fourth"]),
 });
 
 export const gameSessionSchema = z.object({
@@ -102,12 +105,16 @@ export const gameSessionSchema = z.object({
   workspaceId: z.string(),
   kind: gameKindSchema,
   status: gameStatusSchema,
-  members: z.array(gameSessionMemberSchema).min(2).max(2),
+  members: z.array(gameSessionMemberSchema).min(2).max(4),
   turnUserId: z.string().nullable(),
   board: z.string().min(1).max(512),
   winnerUserId: z.string().nullable(),
   /** Machine-readable end reason (checkmate, stalemate, resign, ...). */
   resultReason: z.string().max(60).nullable(),
+  /** Uno only: the viewer's own hand (unicast `state.request`, never broadcast). */
+  hand: z.array(z.string().max(8)).optional(),
+  /** Seats that accepted their invite (seat 0 = host, always accepted). */
+  accepted: z.array(z.string()),
   moveCount: z.number().int().min(0),
   startedBy: z.string(),
   startedAt: z.string(),
@@ -115,11 +122,17 @@ export const gameSessionSchema = z.object({
 });
 export type GameSession = z.infer<typeof gameSessionSchema>;
 
-export const gameSessionCreateSchema = z.object({
-  kind: gameKindSchema,
-  /** The opponent — must be a workspace member; creator takes the other seat. */
-  opponentId: z.string().min(1),
-});
+export const gameSessionCreateSchema = z
+  .object({
+    kind: gameKindSchema,
+    /** The opponent — must be a workspace member; creator takes the other seat. */
+    opponentId: z.string().min(1).optional(),
+    /** Party games (ludo/uno): 1–3 opponents, creator takes seat 0. */
+    opponentIds: z.array(z.string().min(1)).min(1).max(3).optional(),
+  })
+  .refine((v) => (v.opponentId ? !v.opponentIds : !!v.opponentIds), {
+    message: "Provide exactly one of opponentId or opponentIds",
+  });
 export type GameSessionCreate = z.infer<typeof gameSessionCreateSchema>;
 
 /** One client-submitted move, validated semantically by the rules engine. */
@@ -134,6 +147,41 @@ export const gameMoveSchema = z.discriminatedUnion("kind", [
     kind: z.literal("connect4"),
     col: z.number().int().min(0).max(6),
   }),
+  // Ludo: two-step roll-then-pick. roll = throw the dice (server rolls);
+  // token = move that token under the pending roll.
+  z
+    .object({
+      kind: z.literal("ludo"),
+      roll: z.literal(true).optional(),
+      token: z.number().int().min(0).max(3).optional(),
+    })
+    .refine((v) => (v.roll === true) !== (v.token !== undefined), {
+      message: "Provide exactly one of roll or token",
+    }),
+  z
+    .object({
+      kind: z.literal("uno"),
+      // Hands grow via draws/penalties — cap generously, engine checks bounds.
+      play: z.number().int().min(0).max(99).optional(),
+      wildColor: z.enum(["R", "Y", "G", "B"]).optional(),
+      draw: z.literal(true).optional(),
+      /** Table-talk: declare UNO (no turn needed, only with 1 card). */
+      callUno: z.literal(true).optional(),
+      /** Table-talk: catch a seat sitting on 1 undeclared card. */
+      catch: z.number().int().min(0).max(3).optional(),
+    })
+    .refine(
+      (v) => {
+        const set = [
+          v.play !== undefined,
+          v.draw === true,
+          v.callUno === true,
+          v.catch !== undefined,
+        ].filter(Boolean).length;
+        return set === 1;
+      },
+      { message: "Provide exactly one of play, draw, callUno or catch" },
+    ),
 ]);
 export type GameMove = z.infer<typeof gameMoveSchema>;
 

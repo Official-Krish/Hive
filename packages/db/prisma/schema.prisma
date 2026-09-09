@@ -721,6 +721,8 @@ model GameSession {
   status       GameStatus @default(ACTIVE)
   firstUserId  String
   secondUserId String
+  seatUserIds     String[] @default([])
+  acceptedUserIds String[] @default([])
   turnUserId   String?
   board        String
   winnerUserId String?
@@ -909,6 +911,8 @@ enum GlobalRole {
 enum GameKind {
   CHESS
   CONNECT4
+  LUDO
+  UNO
 }
 
 enum GameStatus {

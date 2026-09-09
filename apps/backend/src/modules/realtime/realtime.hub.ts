@@ -513,7 +513,13 @@ export class RealtimeHub {
         break;
       }
       case "game.state.request": {
-        const session = await this.games.byId(workspaceId, parsed.gameId);
+        // Unicast: seated Uno players also receive their own hand here —
+        // hands never travel on the broadcast topic.
+        const session = await this.games.byIdFor(
+          workspaceId,
+          parsed.gameId,
+          client.userId,
+        );
         if (!session) return;
         const event: RealtimeEvent = {
           type: "game.state",

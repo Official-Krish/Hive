@@ -11,6 +11,14 @@ import {
   type ChessState,
 } from "./chess";
 import { initialC4State, type C4Cell, type C4State } from "./connect4";
+import { initialLudoState, type LudoState } from "./ludo";
+import {
+  unoCardFromString,
+  unoCardToString,
+  type UnoCard,
+  type UnoColor,
+  type UnoState,
+} from "./uno";
 
 /** Full state → Forsyth–Edwards Notation (status/winner travel separately). */
 export function chessToFen(state: ChessState): string {
@@ -158,4 +166,136 @@ export function c4StateFromString(s: string, turn: "R" | "Y"): C4State {
   const cells = c4CellsFromString(s);
   const moves = cells.flat().filter((c) => c !== null).length;
   return { ...base, cells, turn, moves };
+}
+
+/** Ludo → `seats:turn:lastRoll:pending:sixes:tokens` (groups `;`-separated). */
+export function ludoToString(state: LudoState): string {
+  const groups = state.tokens.map((row) => row.join(",")).join(";");
+  return `${state.seats}:${state.turn}:${state.lastRoll ?? 0}:${state.pendingRoll ?? 0}:${state.sixes}:${groups}`;
+}
+
+/** Parse `ludoToString` output (moves reset — set by caller). */
+export function ludoStateFromString(s: string): LudoState {
+  const parts = s.split(":");
+  if (parts.length !== 6) throw new Error(`Bad Ludo string: ${s}`);
+  const [seatsStr, turnStr, rollStr, pendStr, sixStr, groups] = parts as [
+    string,
+    string,
+    string,
+    string,
+    string,
+    string,
+  ];
+  const seats = parseInt(seatsStr, 10);
+  if (![2, 3, 4].includes(seats)) throw new Error(`Bad Ludo seats: ${s}`);
+  const rows = groups.split(";");
+  if (rows.length !== seats) throw new Error(`Bad Ludo groups: ${s}`);
+  const tokens = rows.map((g) => {
+    const vals = g.split(",").map(Number);
+    if (vals.length !== 4 || vals.some((t) => t < -1 || t > 32)) {
+      throw new Error(`Bad Ludo tokens: ${s}`);
+    }
+    return vals;
+  });
+  const num = (v: string, name: string, min: number, max: number): number => {
+    const n = parseInt(v, 10);
+    if (!Number.isInteger(n) || n < min || n > max) {
+      throw new Error(`Bad Ludo ${name}: ${s}`);
+    }
+    return n;
+  };
+  const lastRoll = num(rollStr, "roll", 0, 6);
+  const pending = num(pendStr, "pending", 0, 6);
+  const base = initialLudoState(seats);
+  return {
+    ...base,
+    tokens,
+    turn: num(turnStr, "turn", 0, 99) % seats,
+    lastRoll: lastRoll || null,
+    pendingRoll: pending || null,
+    sixes: num(sixStr, "sixes", 0, 2),
+  };
+}
+
+/**
+ * Uno → `seats:turn:activeColor:moves:hands|deck|discard:saidBits:pending`
+ * (hands `;`-separated, cards `,`-separated, e.g. `R3,GS,W`).
+ */
+export function unoToString(state: UnoState): string {
+  const piles = [
+    state.hands.map((h) => h.map(unoCardToString).join(",")).join(";"),
+    state.deck.map(unoCardToString).join(","),
+    state.discard.map(unoCardToString).join(","),
+  ].join("|");
+  const bits = state.saidUno.map((b) => (b ? "1" : "0")).join("");
+  const pending = state.pendingUno === null ? "-" : String(state.pendingUno);
+  return `${state.seats}:${state.turn}:${state.activeColor}:${state.moves}:${piles}:${bits}:${pending}`;
+}
+
+export function unoStateFromString(s: string): UnoState {
+  // Piles never contain ":", so a plain split is safe.
+  const parts = s.split(":");
+  if (parts.length !== 5 && parts.length !== 7) {
+    throw new Error(`Bad Uno string: ${s}`);
+  }
+  const [seatsStr, turnStr, color, movesStr, piles] = parts as [
+    string,
+    string,
+    string,
+    string,
+    string,
+  ];
+  const seats = parseInt(seatsStr, 10);
+  if (![2, 3, 4].includes(seats)) throw new Error(`Bad Uno seats: ${s}`);
+  if (!/^[RYGB]$/.test(color)) throw new Error(`Bad Uno color: ${s}`);
+  const pileParts = piles.split("|");
+  if (pileParts.length !== 3) throw new Error(`Bad Uno piles: ${s}`);
+  const parsePile = (p: string): UnoCard[] =>
+    p === "" ? [] : p.split(",").map(unoCardFromString);
+  const hands = pileParts[0]!.split(";").map(parsePile);
+  if (hands.length !== seats) throw new Error(`Bad Uno hands: ${s}`);
+  const deck = parsePile(pileParts[1]!);
+  const discard = parsePile(pileParts[2]!);
+  if (discard.length < 1) throw new Error(`Bad Uno discard: ${s}`);
+  const turn = parseInt(turnStr, 10);
+  const moves = parseInt(movesStr, 10);
+  if (!Number.isInteger(turn) || turn < 0) {
+    throw new Error(`Bad Uno turn: ${s}`);
+  }
+  if (!Number.isInteger(moves) || moves < 0) {
+    throw new Error(`Bad Uno moves: ${s}`);
+  }
+  // Optional call/catch trailer (absent in pre-power-card rows).
+  let saidUno = Array(seats).fill(false);
+  let pendingUno: number | null = null;
+  if (parts.length === 7) {
+    const bits = parts[5]!;
+    if (!new RegExp(`^[01]{${seats}}$`).test(bits)) {
+      throw new Error(`Bad Uno said-bits: ${s}`);
+    }
+    saidUno = [...bits].map((b) => b === "1");
+    const pend = parts[6]!;
+    if (pend !== "-") {
+      const p = parseInt(pend, 10);
+      if (!Number.isInteger(p) || p < 0 || p >= seats) {
+        throw new Error(`Bad Uno pending: ${s}`);
+      }
+      pendingUno = p;
+    }
+  }
+  return {
+    seats,
+    hands,
+    deck,
+    discard,
+    activeColor: color as UnoColor,
+    // Clamp, don't throw: the backend owns the authoritative turn and
+    // re-syncs it on every move (self-healing for rebuilt tables).
+    turn: turn % seats,
+    saidUno,
+    pendingUno,
+    status: "playing",
+    winner: null,
+    moves,
+  };
 }

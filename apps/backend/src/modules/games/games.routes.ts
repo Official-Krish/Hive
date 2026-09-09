@@ -30,3 +30,4 @@ gamesRouter.patch(
   member,
   controller.decline,
 );
+gamesRouter.patch("/:workspaceId/games/:id/start", member, controller.start);
