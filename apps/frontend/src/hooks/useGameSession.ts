@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, http } from "@/lib/http";
 import type { RealtimeClient } from "@/lib/realtime";
 import type { GameKind, GameMove, GameSession } from "@hive/types";
@@ -26,11 +26,16 @@ export interface UseGameSessionResult {
   actionError: string | null;
   refresh: () => Promise<void>;
   open: (id: string | null) => void;
-  create: (kind: GameKind, opponentId: string) => Promise<GameSession | null>;
+  create: (
+    kind: GameKind,
+    opponents: string | string[],
+  ) => Promise<GameSession | null>;
   accept: (id: string) => Promise<void>;
   decline: (id: string) => Promise<void>;
   resign: (id: string) => Promise<void>;
+  start: (id: string) => Promise<void>;
   sendMove: (id: string, move: GameMove) => void;
+  requestState: (id: string) => void;
 }
 
 /**
@@ -47,6 +52,8 @@ export function useGameSession({
   const [openId, setOpenId] = useState<string | null>(null);
   const [rejected, setRejected] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  /** Last known Uno hands per match (broadcasts omit them). */
+  const handsRef = useRef<Map<string, string[]>>(new Map());
 
   const fail = (e: unknown, fallback: string): null => {
     setActionError(e instanceof ApiError ? e.message : fallback);
@@ -59,17 +66,20 @@ export function useGameSession({
         s.status === "active" && s.members.some((m) => m.userId === myUserId),
     ) ?? null;
 
+  /** Pending invites addressed to me (anything I didn't start). */
   const pendingInvite =
     sessions.find(
       (s) =>
         s.status === "pending" &&
-        s.members.some((m) => m.userId === myUserId && m.seat === "second"),
+        s.startedBy !== myUserId &&
+        s.members.some((m) => m.userId === myUserId),
     ) ?? null;
 
   const pendingInvites = sessions.filter(
     (s) =>
       s.status === "pending" &&
-      s.members.some((m) => m.userId === myUserId && m.seat === "second"),
+      s.startedBy !== myUserId &&
+      s.members.some((m) => m.userId === myUserId),
   );
 
   const refresh = useCallback(async () => {
@@ -88,6 +98,20 @@ export function useGameSession({
   useEffect(() => {
     if (!client) return;
     const offState = client.on("game.state", (e) => {
+      const incoming = e.session;
+      // Uno privacy: broadcasts carry no hand. Keep the last known hand so
+      // the UI never flickers, then pull the fresh private state.
+      if (
+        incoming.kind === "uno" &&
+        incoming.hand === undefined &&
+        incoming.members.some((m) => m.userId === myUserId)
+      ) {
+        const kept = handsRef.current.get(incoming.id);
+        if (kept) incoming.hand = kept;
+        client.requestGameState(incoming.id);
+      } else if (incoming.kind === "uno" && incoming.hand !== undefined) {
+        handsRef.current.set(incoming.id, incoming.hand);
+      }
       setSessions((prev) => {
         const next = prev.filter((s) => s.id !== e.session.id);
         if (e.session.status !== "finished") {
@@ -108,7 +132,7 @@ export function useGameSession({
       offState();
       offRejected();
     };
-  }, [client]);
+  }, [client, myUserId]);
 
   const open = useCallback((id: string | null) => {
     setRejected(null);
@@ -116,12 +140,18 @@ export function useGameSession({
   }, []);
 
   const create = useCallback(
-    async (kind: GameKind, opponentId: string): Promise<GameSession | null> => {
+    async (
+      kind: GameKind,
+      opponents: string | string[],
+    ): Promise<GameSession | null> => {
       setActionError(null);
       try {
+        const ids = Array.isArray(opponents) ? opponents : [opponents];
         const { session } = await http.games.create(workspaceId, {
           kind,
-          opponentId,
+          ...(kind === "ludo" || kind === "uno"
+            ? { opponentIds: ids }
+            : { opponentId: ids[0] }),
         });
         setSessions((prev) => [
           session,
@@ -190,6 +220,30 @@ export function useGameSession({
     [client],
   );
 
+  const requestState = useCallback(
+    (id: string) => {
+      client?.requestGameState(id);
+    },
+    [client],
+  );
+
+  const start = useCallback(
+    async (id: string) => {
+      setActionError(null);
+      try {
+        const { session } = await http.games.start(workspaceId, id);
+        setSessions((prev) => [
+          session,
+          ...prev.filter((s) => s.id !== session.id),
+        ]);
+      } catch (e) {
+        fail(e, "Could not start the match");
+        await refresh();
+      }
+    },
+    [workspaceId, refresh],
+  );
+
   return {
     sessions,
     active,
@@ -204,6 +258,8 @@ export function useGameSession({
     accept,
     decline,
     resign,
+    start,
     sendMove,
+    requestState,
   };
 }

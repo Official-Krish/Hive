@@ -1159,6 +1159,14 @@ export const http = {
       request(`/api/v1/workspaces/${workspaceId}/games/${gameId}/decline`, {
         method: "PATCH",
       }),
+
+    start: (
+      workspaceId: string,
+      gameId: string,
+    ): Promise<{ session: GameSession }> =>
+      request(`/api/v1/workspaces/${workspaceId}/games/${gameId}/start`, {
+        method: "PATCH",
+      }),
   },
 
   /* ── chat ── */

@@ -351,7 +351,7 @@ export function ChessBoard({
   const hoveringTarget = hoverSq !== null && targets.has(hoverSq);
 
   return (
-    <div className="relative">
+    <div className="relative h-full w-full">
       <DrawCanvas
         draw={draw}
         onPointerDown={onPointerDown}
@@ -425,8 +425,8 @@ function DrawCanvas({
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerLeave={onPointerLeave}
-      className="w-full touch-none rounded-xl ring-1 ring-black/10"
-      style={{ aspectRatio: "1", cursor }}
+      className="h-full w-full touch-none rounded-xl ring-1 ring-black/10"
+      style={{ cursor }}
       aria-label="Chess board"
     />
   );

@@ -129,8 +129,7 @@ export function Connect4Board({
       }}
       onMouseMove={(e) => setHover(colFromEvent(e))}
       onMouseLeave={() => setHover(null)}
-      className="w-full cursor-pointer rounded-2xl"
-      style={{ aspectRatio: `${W} / ${H}` }}
+      className="h-full w-full cursor-pointer rounded-2xl"
       aria-label="Connect four board"
     />
   );

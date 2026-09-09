@@ -80,6 +80,7 @@ export function GameInviteInbox({ games, onJoin }: GameInviteInboxProps) {
                     const challenger =
                       s.members.find((m) => m.seat === "first")?.name ??
                       "Someone";
+                    const party = s.kind === "ludo" || s.kind === "uno";
                     return (
                       <li key={s.id} className="px-4 py-3">
                         <div className="flex items-center gap-3">
@@ -88,7 +89,11 @@ export function GameInviteInbox({ games, onJoin }: GameInviteInboxProps) {
                               "flex size-9 shrink-0 items-center justify-center rounded-xl text-white shadow-sm",
                               s.kind === "chess"
                                 ? "bg-gradient-to-br from-neutral-800 to-neutral-950"
-                                : "bg-gradient-to-br from-rose-600 to-amber-500",
+                                : s.kind === "connect4"
+                                  ? "bg-gradient-to-br from-rose-600 to-amber-500"
+                                  : s.kind === "ludo"
+                                    ? "bg-gradient-to-br from-emerald-600 to-teal-800"
+                                    : "bg-gradient-to-br from-violet-600 to-fuchsia-600",
                             )}
                             aria-hidden
                           >
@@ -96,7 +101,7 @@ export function GameInviteInbox({ games, onJoin }: GameInviteInboxProps) {
                               <span className="font-serif text-[20px] leading-none">
                                 ♞
                               </span>
-                            ) : (
+                            ) : s.kind === "connect4" ? (
                               <span className="flex gap-[3px]">
                                 {[0, 1, 2, 3].map((i) => (
                                   <span
@@ -105,15 +110,30 @@ export function GameInviteInbox({ games, onJoin }: GameInviteInboxProps) {
                                   />
                                 ))}
                               </span>
+                            ) : s.kind === "ludo" ? (
+                              <span className="text-[18px] font-black leading-none">
+                                L
+                              </span>
+                            ) : (
+                              <span className="text-[18px] font-black italic leading-none">
+                                U
+                              </span>
                             )}
                           </span>
                           <span className="min-w-0 flex-1">
                             <span className="block truncate text-[13px] font-semibold text-neutral-900">
-                              {challenger} challenged you
+                              {challenger}{" "}
+                              {party ? "invited you" : "challenged you"}
                             </span>
                             <span className="block text-[12px] text-neutral-500">
-                              {s.kind === "chess" ? "Chess" : "Connect Four"} ·{" "}
-                              {timeLabel(s.startedAt)}
+                              {s.kind === "chess"
+                                ? "Chess"
+                                : s.kind === "connect4"
+                                  ? "Connect Four"
+                                  : s.kind === "ludo"
+                                    ? `Ludo · ${s.members.length} players`
+                                    : `Uno · ${s.members.length} players`}{" "}
+                              · {timeLabel(s.startedAt)}
                             </span>
                           </span>
                         </div>

@@ -39,6 +39,9 @@ interface AvatarProps {
     tone?: "amber" | "green" | "red" | "violet" | "neutral";
     icon?: ReactNode;
   }>;
+  /** Hide the floating nameplate (used for the local player — you know who
+   *  you are, and your own tag would sit on top of whatever you face). */
+  hideNameplate?: boolean;
 }
 
 const META_TONE: Record<string, string> = {
@@ -51,7 +54,13 @@ const META_TONE: Record<string, string> = {
 
 const _nameplateWorld = new THREE.Vector3();
 
-/** Nameplate with wall occlusion + distance culling (meta <15m, all <32m). */
+/** Range policy: full label under 10m, fades out by 14m, meta pills under 8m.
+ *  Keeps tags off distant components instead of plastering the whole office. */
+const TAG_FULL = 10;
+const TAG_FADE = 14;
+const TAG_META = 8;
+
+/** Nameplate with wall occlusion + proximity fade (meta <8m, gone past 14m). */
 function Nameplate({
   labelY,
   name,
@@ -75,8 +84,19 @@ function Nameplate({
     if (!g) return;
     g.getWorldPosition(_nameplateWorld);
     const d = camera.position.distanceTo(_nameplateWorld);
-    if (wrap.current) wrap.current.style.display = d < 32 ? "" : "none";
-    if (metaEl.current) metaEl.current.style.display = d < 15 ? "" : "none";
+    if (wrap.current) {
+      if (d >= TAG_FADE) {
+        wrap.current.style.display = "none";
+      } else {
+        wrap.current.style.display = "";
+        wrap.current.style.opacity =
+          d <= TAG_FULL
+            ? "1"
+            : String(1 - (d - TAG_FULL) / (TAG_FADE - TAG_FULL));
+      }
+    }
+    if (metaEl.current)
+      metaEl.current.style.display = d < TAG_META ? "" : "none";
   });
 
   return (
@@ -88,10 +108,10 @@ function Nameplate({
         zIndexRange={[50, 0]}
         style={{ pointerEvents: "none" }}
       >
-        <div ref={wrap} className="flex flex-col items-center gap-1">
+        <div ref={wrap} className="flex flex-col items-center gap-0.5">
           <div
             title={status}
-            className="flex items-center gap-1.5 whitespace-nowrap rounded-full bg-black/55 px-2 py-[2px] text-[9.5px] font-medium leading-none tracking-[0.01em] text-white/95 shadow-sm backdrop-blur-[2px] select-none"
+            className="flex items-center gap-1 whitespace-nowrap rounded-full bg-black/55 px-1.5 py-[2px] text-[8.5px] font-medium leading-none tracking-[0.01em] text-white/95 shadow-sm backdrop-blur-[2px] select-none"
           >
             <span className={`h-1 w-1 rounded-full ${badgeColor}`} />
             <span>{name}</span>
@@ -125,6 +145,7 @@ export default function Avatar({
   status = "Active",
   badgeColor = "bg-sky-500",
   meta,
+  hideNameplate = false,
 }: AvatarProps) {
   const { scene } = useGLTF(modelUrl);
   const idleFBX = useFBX(`${ASSET_BASE_URL}/Animations/idle.fbx`);
@@ -339,14 +360,18 @@ export default function Avatar({
       <primitive object={clonedScene} scale={SCALE} />
 
       {/* Minimal nameplate floating just above the head. No distanceFactor:
-          the label keeps a constant, legible screen size at every zoom level. */}
-      <Nameplate
-        labelY={labelY}
-        name={name}
-        status={status}
-        badgeColor={badgeColor}
-        meta={meta}
-      />
+          the label keeps a constant, legible screen size at every zoom level.
+          The local player gets none — their own tag would cover whatever they
+          face. */}
+      {!hideNameplate && (
+        <Nameplate
+          labelY={labelY}
+          name={name}
+          status={status}
+          badgeColor={badgeColor}
+          meta={meta}
+        />
+      )}
     </group>
   );
 }

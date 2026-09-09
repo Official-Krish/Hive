@@ -313,6 +313,7 @@ export function PlayerController({
             name={name}
             status={status}
             badgeColor={badgeColor}
+            hideNameplate
           />
           {coffee && <CoffeeCup />}
         </>
