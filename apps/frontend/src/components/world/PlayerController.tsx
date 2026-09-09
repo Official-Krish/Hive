@@ -281,7 +281,10 @@ export function PlayerController({
     hudAccum.current += delta;
     if (hudAccum.current > 0.08) {
       hudAccum.current = 0;
-      if (import.meta.env.DEV) {
+      // No env variables in the frontend — dev-only debug write gates on
+      // localhost.
+      const host = window.location.hostname;
+      if (host === "localhost" || host === "127.0.0.1") {
         (window as unknown as Record<string, unknown>).__dbg = {
           pos: [nextX, nextY, nextZ],
           vel: [velRef.current.x, velRef.current.z],

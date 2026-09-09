@@ -341,7 +341,9 @@ function InlineTextRow({
 function PerfProbe() {
   const { gl, scene, camera } = useThree();
   useEffect(() => {
-    if (!import.meta.env.DEV) return;
+    // No env variables in the frontend — dev-only probes gate on localhost.
+    const host = window.location.hostname;
+    if (host !== "localhost" && host !== "127.0.0.1") return;
     (window as unknown as Record<string, unknown>).__three = {
       gl,
       scene,
