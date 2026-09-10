@@ -2,6 +2,7 @@ import { CHILL_SCREEN, CHILL_SEATS, CHILL_LAMPS } from "./layout";
 import { M } from "./materials";
 
 const ARCADE_POSITION = [-7, 0, -15] as [number, number, number];
+const VENDING_POSITION = [-4.6, 0, -15] as [number, number, number];
 
 /**
  * The Chill Space / Play Area props: a big shared screen on the south wall
@@ -72,6 +73,54 @@ export function ChillSpace() {
         <mesh castShadow position={[0, 0.15, 0.42]}>
           <boxGeometry args={[0.55, 0.3, 0.5]} />
           <primitive object={M.tvBezel} attach="material" />
+        </mesh>
+      </group>
+
+      {/* API key vending machine — cabinet, glowing glass front, lit header. */}
+      <group position={VENDING_POSITION}>
+        <mesh castShadow position={[0, 1.0, 0]}>
+          <boxGeometry args={[1.0, 2.0, 0.7]} />
+          <primitive object={M.tvBezel} attach="material" />
+        </mesh>
+        {/* glass display with key slots */}
+        <mesh position={[0, 1.15, 0.36]}>
+          <planeGeometry args={[0.72, 0.95]} />
+          <meshStandardMaterial
+            color="#0b1220"
+            emissive="#38bdf8"
+            emissiveIntensity={0.35}
+            roughness={0.2}
+            metalness={0.4}
+          />
+        </mesh>
+        {/* provider strips */}
+        {["#f97316", "#a78bfa", "#34d399"].map((c, i) => (
+          <mesh key={c} position={[-0.24 + i * 0.24, 1.15, 0.37]}>
+            <planeGeometry args={[0.16, 0.7]} />
+            <meshStandardMaterial
+              color={c}
+              emissive={c}
+              emissiveIntensity={0.8}
+            />
+          </mesh>
+        ))}
+        {/* header sign */}
+        <mesh position={[0, 1.9, 0.36]}>
+          <planeGeometry args={[0.72, 0.22]} />
+          <meshStandardMaterial
+            color="#fbbf24"
+            emissive="#fbbf24"
+            emissiveIntensity={1.2}
+          />
+        </mesh>
+        {/* pickup tray */}
+        <mesh castShadow position={[0, 0.32, 0.42]}>
+          <boxGeometry args={[0.6, 0.28, 0.3]} />
+          <primitive object={M.tvBezel} attach="material" />
+        </mesh>
+        <mesh position={[0, 0.32, 0.58]}>
+          <planeGeometry args={[0.5, 0.14]} />
+          <meshStandardMaterial color="#020617" roughness={0.6} />
         </mesh>
       </group>
     </group>

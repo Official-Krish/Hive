@@ -45,6 +45,9 @@ model User {
   idempotencyKeys         IdempotencyKey[]
   updatedPrivacySettings  PrivacySetting[]
   updatedUsageBudgets     UsageBudget[]
+  createdApiKeys          ApiKeyPool[]        @relation("VendingKeyCreator")
+  apiKeyCheckouts         ApiKeyCheckout[]
+  updatedVendingRules     VendingRules[]
   githubAccounts          GitHubAccount[]
   conversationParticipants ConversationParticipant[]
   sentMessages            Message[]
@@ -96,6 +99,8 @@ model Workspace {
   chillMedia        ChillMedia?
   privacySetting    PrivacySetting?
   usageBudget       UsageBudget?
+  apiKeyPools       ApiKeyPool[]
+  vendingRules      VendingRules?
   invites           Invite[]
   githubInstallations GitHubInstallation[]
   githubNotifications GitHubNotification[]
@@ -826,6 +831,68 @@ model UsageBudget {
   alertAtPct       Int      @default(80)
   updatedById      String?
   updatedAt        DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  updatedBy User?     @relation(fields: [updatedById], references: [id], onDelete: SetNull)
+}
+
+enum VendingProvider {
+  CLAUDE
+  OPENCODE
+  CODEX
+}
+
+enum VendingKeyStatus {
+  AVAILABLE
+  CHECKED_OUT
+  REVOKED
+  RETIRED
+}
+
+model ApiKeyPool {
+  id              String           @id @default(cuid())
+  workspaceId     String
+  provider        VendingProvider
+  label           String
+  secretEncrypted String
+  keyHash         String           @unique
+  status          VendingKeyStatus @default(AVAILABLE)
+  checkoutCount   Int              @default(0)
+  maxCheckouts    Int?
+  createdById     String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  workspace Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy User?           @relation("VendingKeyCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  checkouts ApiKeyCheckout[]
+
+  @@index([workspaceId, provider, status])
+}
+
+model ApiKeyCheckout {
+  id         String   @id @default(cuid())
+  poolId     String
+  userId     String
+  revealedAt DateTime @default(now())
+
+  pool ApiKeyPool @relation(fields: [poolId], references: [id], onDelete: Cascade)
+  user User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([poolId])
+  @@index([userId, revealedAt])
+}
+
+model VendingRules {
+  id                            String   @id @default(cuid())
+  workspaceId                   String   @unique
+  maxPerUserPerProviderPer24h   Int      @default(1)
+  cooldownHours                 Int      @default(0)
+  minRole                       UserRole?
+  providerMinRoles              Json     @default("{}")
+  lowPoolAlertPct               Int      @default(20)
+  updatedById                   String?
+  updatedAt                     DateTime @updatedAt
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   updatedBy User?     @relation(fields: [updatedById], references: [id], onDelete: SetNull)

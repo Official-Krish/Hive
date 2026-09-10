@@ -67,6 +67,8 @@ import { useChillMedia } from "@/hooks/useChillMedia";
 import { ChillScreenProjection } from "./ChillScreenProjection";
 import { ChillScreenModal } from "./ChillScreenModal";
 import { GamesModal } from "./GamesModal";
+import { VendingModal } from "./VendingModal";
+import { useVending } from "@/hooks/useVending";
 import { useChat } from "@/hooks/useChat";
 import {
   Coffee,
@@ -74,6 +76,7 @@ import {
   Droplets,
   Gamepad2,
   Gauge,
+  KeyRound,
   Monitor,
   PenLine,
   Volume2,
@@ -103,6 +106,7 @@ const INTERACTABLE_ICONS: Record<InteractableIcon, LucideIcon> = {
   ci: Gauge,
   chill: Clapperboard,
   arcade: Gamepad2,
+  vending: KeyRound,
 };
 
 /* r3f v9.7 `events.connect(target)` can fire with a null container during a
@@ -404,6 +408,7 @@ export function WorldCanvas({
     avatars,
   });
   const games = useGameSession({ workspaceId, myUserId, client });
+  const vending = useVending(workspaceId);
   const call = useLiveKitCall(workspaceId, myUserId, nearIds, onlineCount, {
     volumePeers: focus.allowedPeers,
     muteRemote: focus.inFocus,
@@ -622,6 +627,7 @@ export function WorldCanvas({
   const [whiteboardId, setWhiteboardId] = useState<string | null>(null);
   const [chillScreenOpen, setChillScreenOpen] = useState(false);
   const [gamesOpen, setGamesOpen] = useState(false);
+  const [vendingOpen, setVendingOpen] = useState(false);
   // Onboarding: renderer ready, spawn fade, first-run tour.
   const [worldReady, setWorldReady] = useState(false);
   const [spawnFaded, setSpawnFaded] = useState(false);
@@ -659,6 +665,7 @@ export function WorldCanvas({
     ciOpen ||
     chillScreenOpen ||
     gamesOpen ||
+    vendingOpen ||
     whiteboardId !== null;
   const fppBlockedRef = useRef(fppBlocked);
   fppBlockedRef.current = fppBlocked;
@@ -725,6 +732,9 @@ export function WorldCanvas({
         case "arcade":
           setGamesOpen(true);
           break;
+        case "vending":
+          setVendingOpen(true);
+          break;
         case "whiteboard":
           setWhiteboardId(it.id);
           break;
@@ -747,6 +757,7 @@ export function WorldCanvas({
       ciOpen ||
       chillScreenOpen ||
       gamesOpen ||
+      vendingOpen ||
       whiteboardId !== null ||
       pair.open,
     onPress: handleInteract,
@@ -1445,6 +1456,7 @@ export function WorldCanvas({
             ciOpen ||
             chillScreenOpen ||
             gamesOpen ||
+            vendingOpen ||
             whiteboardId !== null
           }
           onRoomChange={handleRoomChange}
@@ -1547,6 +1559,15 @@ export function WorldCanvas({
           members={chat.members}
           games={games}
           onClose={() => setGamesOpen(false)}
+        />
+      )}
+      {vendingOpen && (
+        <VendingModal
+          vending={vending}
+          onClose={() => {
+            vending.dismissReveal();
+            setVendingOpen(false);
+          }}
         />
       )}
 

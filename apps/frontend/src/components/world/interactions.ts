@@ -7,10 +7,18 @@ export type InteractableKind =
   | "whiteboard"
   | "ci"
   | "chill-screen"
-  | "arcade";
+  | "arcade"
+  | "vending";
 
 export type InteractableIcon =
-  "coffee" | "water" | "monitor" | "board" | "ci" | "chill" | "arcade";
+  | "coffee"
+  | "water"
+  | "monitor"
+  | "board"
+  | "ci"
+  | "chill"
+  | "arcade"
+  | "vending";
 
 export interface Interactable {
   id: string;
@@ -138,6 +146,18 @@ const ARCADE: Interactable = {
   icon: "arcade",
 };
 
+/** API key vending machine beside the arcade — provider keys, one reveal. */
+const VENDING: Interactable = {
+  id: "vending-machine",
+  kind: "vending",
+  x: -4.6,
+  z: -13.4,
+  y: 0,
+  radius: 2.4,
+  prompt: "API key vending",
+  icon: "vending",
+};
+
 /** Every desk gets a "workspace" monitor you can lean in and use. */
 function monitorSpots(): Interactable[] {
   return [...DESKS, ...L2_DESKS, ...POD_DESKS].map((d, i) => {
@@ -162,6 +182,7 @@ export const INTERACTABLES: Interactable[] = [
   ...CI_SCREENS,
   CHILL_SCREEN,
   ARCADE,
+  VENDING,
   ...WHITEBOARD_SPOTS.map(([x, z], i): Interactable => ({
     id: `whiteboard-${i}`,
     kind: "whiteboard",

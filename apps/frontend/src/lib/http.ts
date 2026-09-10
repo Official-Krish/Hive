@@ -11,6 +11,9 @@ import type {
   UsageBudget,
   UsageBudgetInput,
   UsageSummary,
+  VendingAvailability,
+  VendingCheckout,
+  VendingProvider,
 } from "@hive/types";
 import { API_BASE_URL } from "./config";
 
@@ -1208,6 +1211,22 @@ export const http = {
       request(`/api/v1/workspaces/${workspaceId}/games/${gameId}/start`, {
         method: "PATCH",
       }),
+  },
+
+  vending: {
+    availability: (
+      workspaceId: string,
+    ): Promise<{ providers: VendingAvailability[] }> =>
+      request(`/api/v1/workspaces/${workspaceId}/vending/availability`),
+
+    checkout: (
+      workspaceId: string,
+      provider: VendingProvider,
+    ): Promise<VendingCheckout> =>
+      request(
+        `/api/v1/workspaces/${workspaceId}/vending/checkout/${provider}`,
+        { method: "POST" },
+      ),
   },
 
   /* ── chat ── */
