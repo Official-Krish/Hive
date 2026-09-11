@@ -25,6 +25,7 @@
         "@hive/events": "workspace:*",
         "@hive/games": "workspace:*",
         "@hive/queue": "workspace:*",
+        "@hive/review": "workspace:*",
         "@hive/types": "workspace:*",
         "cookie-parser": "^1.4.7",
         "cors": "^2.8.5",
@@ -94,6 +95,7 @@
       "dependencies": {
         "@hive/db": "workspace:*",
         "@hive/queue": "workspace:*",
+        "@hive/review": "workspace:*",
         "jsonwebtoken": "^9.0.3",
         "openai": "^7.5.0",
         "pino": "^9.6.0",
@@ -163,6 +165,15 @@
     },
     "packages/queue": {
       "name": "@hive/queue",
+      "devDependencies": {
+        "@types/bun": "latest",
+      },
+      "peerDependencies": {
+        "typescript": "^5",
+      },
+    },
+    "packages/review": {
+      "name": "@hive/review",
       "devDependencies": {
         "@types/bun": "latest",
       },
@@ -262,6 +273,8 @@
     "@hive/games": ["@hive/games@workspace:packages/games"],
 
     "@hive/queue": ["@hive/queue@workspace:packages/queue"],
+
+    "@hive/review": ["@hive/review@workspace:packages/review"],
 
     "@hive/types": ["@hive/types@workspace:packages/types"],
 

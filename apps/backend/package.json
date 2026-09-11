@@ -34,6 +34,7 @@
     "livekit-server-sdk": "^2.18.0",
     "openai": "^7.5.0",
     "zod": "^4.4.3",
-    "@hive/games": "workspace:*"
+    "@hive/games": "workspace:*",
+    "@hive/review": "workspace:*"
   }
 }

@@ -13,7 +13,7 @@ import {
   REVIEW_SYSTEM_PROMPT,
   scanSecrets,
   type ReviewFinding,
-} from "../../../backend/src/modules/github/review-scan";
+} from "@hive/review";
 
 export const schema = z.object({
   reviewId: z.string().min(1),

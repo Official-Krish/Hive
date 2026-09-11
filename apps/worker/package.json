@@ -24,6 +24,7 @@
     "jsonwebtoken": "^9.0.3",
     "openai": "^7.5.0",
     "pino": "^9.6.0",
-    "zod": "^4.4.3"
+    "zod": "^4.4.3",
+    "@hive/review": "workspace:*"
   }
 }

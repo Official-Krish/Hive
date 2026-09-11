@@ -9,6 +9,7 @@ COPY package.json bun.lock ./
 COPY apps/worker/package.json           apps/worker/package.json
 COPY packages/db/package.json           packages/db/package.json
 COPY packages/queue/package.json        packages/queue/package.json
+COPY packages/review/package.json       packages/review/package.json
 
 RUN bun install
 
@@ -17,6 +18,7 @@ RUN bun install
 COPY apps/worker/       apps/worker/
 COPY packages/db/       packages/db/
 COPY packages/queue/    packages/queue/
+COPY packages/review/   packages/review/
 
 RUN cd packages/db && DATABASE_URL="postgresql://placeholder:placeholder@localhost:5432/placeholder" bun --bun run prisma generate
 

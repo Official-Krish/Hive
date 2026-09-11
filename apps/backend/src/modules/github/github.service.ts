@@ -20,7 +20,7 @@ import {
 } from "../../lib/github";
 import { signOAuthState, verifyOAuthState } from "../../lib/jwt";
 import { safeEqual } from "../../lib/crypto";
-import { REVIEW_MARKER } from "./review-scan";
+import { REVIEW_MARKER } from "@hive/review";
 import { ReviewService } from "./review.service";
 import {
   AuthService,

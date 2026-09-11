@@ -13,6 +13,7 @@ COPY packages/queue/package.json        packages/queue/package.json
 COPY packages/types/package.json        packages/types/package.json
 COPY packages/games/package.json        packages/games/package.json
 COPY packages/events/package.json       packages/events/package.json
+COPY packages/review/package.json       packages/review/package.json
 
 RUN bun install
 
@@ -24,6 +25,7 @@ COPY packages/queue/    packages/queue/
 COPY packages/types/    packages/types/
 COPY packages/events/   packages/events/
 COPY packages/games/    packages/games/
+COPY packages/review/   packages/review/
 
 RUN cd packages/db && DATABASE_URL="postgresql://placeholder:placeholder@localhost:5432/placeholder" bun --bun run prisma generate
 

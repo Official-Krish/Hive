@@ -5,11 +5,6 @@ import { makeClient, startServer, stopServer, uniqueEmail } from "./helpers";
 import type { TestClient } from "./helpers";
 import { ReviewService } from "../src/modules/github/review.service";
 import { aiEnabled } from "../src/modules/ai/ai-client";
-import {
-  redactSecrets,
-  renderComment,
-  scanSecrets,
-} from "../src/modules/github/review-scan";
 
 let server: Server;
 let baseUrl = "";
@@ -50,60 +45,6 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await stopServer(server);
-});
-
-describe("reviewer scans (pure)", () => {
-  const diff = `diff --git a/.env b/.env
-new file mode 100644
-+++ b/.env
-@@ -0,0 +1,3 @@
-+AWS_KEY=AKIAIOSFODNN7EXAMPLE
-+PASSWORD="hunter2hunter"
-+OK=1
-diff --git a/src/app.ts b/src/app.ts
-+++ b/src/app.ts
-@@ -1,2 +1,3 @@
- context
-+const x = 1;
--old`;
-
-  test("finds leaked secrets with file + line", () => {
-    const findings = scanSecrets(diff);
-    expect(findings.length).toBe(2);
-    expect(findings[0]).toMatchObject({
-      severity: "critical",
-      file: ".env",
-      line: 1,
-    });
-    expect(findings[1]!.file).toBe(".env");
-  });
-
-  test("redacts before the model ever sees it", () => {
-    const redacted = redactSecrets(diff);
-    expect(redacted).not.toContain("AKIAIOSFODNN7EXAMPLE");
-    expect(redacted).not.toContain("hunter2hunter");
-    expect(redacted).toContain("***REDACTED***");
-    expect(redacted).toContain("const x = 1;");
-  });
-
-  test("renders a findings comment and a clean comment", () => {
-    const withFindings = renderComment(
-      7,
-      [
-        {
-          severity: "major",
-          file: "src/app.ts",
-          line: 2,
-          title: "No test",
-          detail: "Add one.",
-        },
-      ],
-      10,
-    );
-    expect(withFindings).toContain("## Reviewer pass on #7");
-    expect(withFindings).toContain("**major** `src/app.ts:2`");
-    expect(renderComment(7, [], 3)).toContain("Clean");
-  });
 });
 
 describe("reviewer trigger + toggle", () => {

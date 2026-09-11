@@ -26,6 +26,7 @@ FROM nginx:1.27-alpine AS runtime
 COPY docker/nginx.frontend.conf /etc/nginx/conf.d/default.conf
 COPY --from=builder /app/apps/frontend/dist /usr/share/nginx/html
 
+
 EXPOSE 80
 
 CMD ["nginx", "-g", "daemon off;"]
