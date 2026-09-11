@@ -70,5 +70,11 @@ githubRouter.get(
   requireWorkspaceMember(),
   controller.reviewsSummary,
 );
+githubRouter.get(
+  "/:workspaceId/reviews/recent",
+  requireAuth(),
+  requireWorkspaceMember(),
+  controller.reviewsRecent,
+);
 
 githubWebhookRouter.post("/", controller.webhook);

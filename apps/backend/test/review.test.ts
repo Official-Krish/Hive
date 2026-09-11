@@ -129,6 +129,62 @@ describe("reviewer trigger + toggle", () => {
     }
   });
 
+  test("recent reviews feed lists passes with findings", async () => {
+    await prisma.review.create({
+      data: {
+        workspaceId,
+        repositoryId,
+        prNumber: 42,
+        sha: "def456",
+        status: "DONE",
+        findings: [
+          {
+            severity: "major",
+            file: "src/x.ts",
+            line: 3,
+            title: "No test",
+            detail: "Add one.",
+          },
+        ],
+        costCents: 7,
+      },
+    });
+    const res = await member.api(
+      `/api/v1/github/${workspaceId}/reviews/recent`,
+    );
+    expect(res.status).toBe(200);
+    const body = await member.asJson<{
+      data: {
+        reviews: Array<{
+          prNumber: number;
+          findingCount: number;
+          findings: unknown[] | null;
+        }>;
+      };
+    }>(res);
+    const row = body.data.reviews.find((r) => r.prNumber === 42);
+    expect(row).toBeDefined();
+    expect(row!.findingCount).toBe(1);
+    expect(row!.findings).toHaveLength(1);
+
+    // Git metadata off → rows stay, findings masked.
+    await prisma.privacySetting.upsert({
+      where: { workspaceId },
+      create: { workspaceId, allowGitMetadata: false },
+      update: { allowGitMetadata: false },
+    });
+    const masked = await member.api(
+      `/api/v1/github/${workspaceId}/reviews/recent`,
+    );
+    const maskedBody = await member.asJson<{
+      data: {
+        reviews: Array<{ prNumber: number; findings: unknown[] | null }>;
+      };
+    }>(masked);
+    const maskedRow = maskedBody.data.reviews.find((r) => r.prNumber === 42);
+    expect(maskedRow!.findings).toBeNull();
+  });
+
   test("repo review toggle is maintainer+ only", async () => {
     const path = `/api/v1/workspaces/${workspaceId}/settings/repositories/${repositoryId}/review`;
     const denied = await member.api(path, {

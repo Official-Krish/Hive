@@ -43,6 +43,7 @@ import { useInteractions } from "@/hooks/useInteractions";
 import { useFocusRoom } from "@/hooks/useFocusRoom";
 import { usePairSession } from "@/hooks/usePairSession";
 import { useGameSession } from "@/hooks/useGameSession";
+import { REVIEWER_BOT_ID, useReviewerBot } from "@/hooks/useReviewerBot";
 import { http } from "@/lib/http";
 import RemoteAvatars from "./RemoteAvatars";
 import { Markers } from "./Markers";
@@ -67,6 +68,7 @@ import { useChillMedia } from "@/hooks/useChillMedia";
 import { ChillScreenProjection } from "./ChillScreenProjection";
 import { ChillScreenModal } from "./ChillScreenModal";
 import { GamesModal } from "./GamesModal";
+import { ReviewerModal } from "./ReviewerModal";
 import { VendingModal } from "./VendingModal";
 import { useVending } from "@/hooks/useVending";
 import { useChat } from "@/hooks/useChat";
@@ -79,6 +81,7 @@ import {
   KeyRound,
   Monitor,
   PenLine,
+  SearchCheck,
   Volume2,
   Zap,
   Trophy,
@@ -107,6 +110,7 @@ const INTERACTABLE_ICONS: Record<InteractableIcon, LucideIcon> = {
   chill: Clapperboard,
   arcade: Gamepad2,
   vending: KeyRound,
+  reviewer: SearchCheck,
 };
 
 /* r3f v9.7 `events.connect(target)` can fire with a null container during a
@@ -408,6 +412,7 @@ export function WorldCanvas({
     avatars,
   });
   const games = useGameSession({ workspaceId, myUserId, client });
+  const reviewer = useReviewerBot(client, DEFAULT_AVATAR);
   const vending = useVending(workspaceId);
   const closeVending = useCallback(() => {
     vending.dismissReveal();
@@ -525,7 +530,7 @@ export function WorldCanvas({
   interface FeedItem {
     key: string;
     text: string;
-    tone: "push" | "pr" | "test" | "bump" | "focusing" | "merge";
+    tone: "push" | "pr" | "test" | "bump" | "focusing" | "merge" | "review";
     at: number;
   }
   const [feed, setFeed] = useState<FeedItem[]>([]);
@@ -616,6 +621,20 @@ export function WorldCanvas({
     }, 5000);
   }, []);
 
+  // Bot renders through the normal avatar pipeline but stays out of
+  // proximity/voice/counts — those keep using the raw member map.
+  const avatarsWithBot = useMemo(
+    () => new Map([...avatars, [REVIEWER_BOT_ID, reviewer.bot]]),
+    [avatars, reviewer.bot],
+  );
+  const bubblesWithBot = useMemo(
+    () => ({
+      ...bumpBubbles,
+      ...(reviewer.bubble ? { [REVIEWER_BOT_ID]: reviewer.bubble } : {}),
+    }),
+    [bumpBubbles, reviewer.bubble],
+  );
+
   // Player world position (feet height included) for proximity interactions.
   const [playerPos, setPlayerPos] = useState<[number, number, number]>([
     SPAWN[0],
@@ -632,6 +651,7 @@ export function WorldCanvas({
   const [chillScreenOpen, setChillScreenOpen] = useState(false);
   const [gamesOpen, setGamesOpen] = useState(false);
   const [vendingOpen, setVendingOpen] = useState(false);
+  const [reviewerOpen, setReviewerOpen] = useState(false);
   // Onboarding: renderer ready, spawn fade, first-run tour.
   const [worldReady, setWorldReady] = useState(false);
   const [spawnFaded, setSpawnFaded] = useState(false);
@@ -670,6 +690,7 @@ export function WorldCanvas({
     chillScreenOpen ||
     gamesOpen ||
     vendingOpen ||
+    reviewerOpen ||
     whiteboardId !== null;
   const fppBlockedRef = useRef(fppBlocked);
   fppBlockedRef.current = fppBlocked;
@@ -739,6 +760,9 @@ export function WorldCanvas({
         case "vending":
           setVendingOpen(true);
           break;
+        case "reviewer":
+          setReviewerOpen(true);
+          break;
         case "whiteboard":
           setWhiteboardId(it.id);
           break;
@@ -762,6 +786,7 @@ export function WorldCanvas({
       chillScreenOpen ||
       gamesOpen ||
       vendingOpen ||
+      reviewerOpen ||
       whiteboardId !== null ||
       pair.open,
     onPress: handleInteract,
@@ -802,6 +827,17 @@ export function WorldCanvas({
             e.durationMs ? ` (${(e.durationMs / 1000).toFixed(1)}s)` : ""
           }`,
           "test",
+        ),
+      ),
+      client.on("review.started", (e) =>
+        push(`Reviewer started PR #${e.prNumber} · ${e.title}`, "review"),
+      ),
+      client.on("review.finished", (e) =>
+        push(
+          e.findingCount === 0
+            ? `Reviewer: PR #${e.prNumber} looks clean`
+            : `Reviewer: ${e.findingCount} finding${e.findingCount === 1 ? "" : "s"} on PR #${e.prNumber}`,
+          "review",
         ),
       ),
       client.on("social.bump", (e) => {
@@ -1215,7 +1251,9 @@ export function WorldCanvas({
                               ? "bg-amber-500"
                               : f.tone === "focusing"
                                 ? "bg-purple-500"
-                                : "bg-emerald-500"
+                                : f.tone === "review"
+                                  ? "bg-teal-500"
+                                  : "bg-emerald-500"
                       }`}
                     />
                   )}
@@ -1461,6 +1499,7 @@ export function WorldCanvas({
             chillScreenOpen ||
             gamesOpen ||
             vendingOpen ||
+            reviewerOpen ||
             whiteboardId !== null
           }
           onRoomChange={handleRoomChange}
@@ -1474,11 +1513,13 @@ export function WorldCanvas({
         />
 
         <RemoteAvatars
-          avatars={avatars}
+          avatars={avatarsWithBot}
           myUserId={myUserId}
           pills={nearbyTokens}
-          bubbles={bumpBubbles}
-          onAvatarClick={(id) => setOpenMemberId(id)}
+          bubbles={bubblesWithBot}
+          onAvatarClick={(id) => {
+            if (id !== REVIEWER_BOT_ID) setOpenMemberId(id);
+          }}
         />
 
         {/* Wayfinding markers over usable things + desk proximity dots */}
@@ -1566,6 +1607,12 @@ export function WorldCanvas({
         />
       )}
       {vendingOpen && <VendingModal vending={vending} onClose={closeVending} />}
+      {reviewerOpen && (
+        <ReviewerModal
+          workspaceId={workspaceId}
+          onClose={() => setReviewerOpen(false)}
+        />
+      )}
 
       {/* Proximity voice/video — only when near other members.
           Bottom-center column: video tiles above the mic/camera controls. */}

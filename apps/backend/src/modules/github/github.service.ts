@@ -328,6 +328,11 @@ export class GitHubService {
     return this.reviews.summary(workspaceId, from, to);
   }
 
+  /** Recent review activity for the bot panel. */
+  async recentReviews(workspaceId: string) {
+    return this.reviews.recent(workspaceId);
+  }
+
   /** List GitHub App installations for a workspace (at most one). */
   async listInstallations(workspaceId: string) {
     const installations = await prisma.gitHubInstallation.findMany({

@@ -1,5 +1,6 @@
 import { prisma, ReviewStatus } from "@hive/db";
 import type { RealtimeEvent } from "@hive/types";
+import { DEFAULT_PRIVACY_SETTING } from "@hive/types";
 import { aiEnabled } from "../ai/ai-client";
 import { realtimeBus } from "../realtime/realtime.bus";
 import { queue } from "../../lib/queue";
@@ -129,5 +130,46 @@ export class ReviewService {
       if (r.costCents !== null) costCents = (costCents ?? 0) + r.costCents;
     }
     return { reviewed: rows.length, findings, costCents };
+  }
+
+  /** Recent review activity for the bot panel. Findings gated on git metadata. */
+  async recent(workspaceId: string): Promise<
+    Array<{
+      id: string;
+      prNumber: number;
+      title: string;
+      repoName: string;
+      status: string;
+      findingCount: number;
+      findings: unknown[] | null;
+      costCents: number | null;
+      createdAt: string;
+    }>
+  > {
+    const privacy =
+      (await prisma.privacySetting.findUnique({ where: { workspaceId } })) ??
+      DEFAULT_PRIVACY_SETTING;
+    const rows = await prisma.review.findMany({
+      where: { workspaceId },
+      orderBy: { createdAt: "desc" },
+      take: 20,
+      include: { repository: { select: { name: true } } },
+    });
+    return rows.map((r) => {
+      const findings = Array.isArray(r.findings)
+        ? (r.findings as unknown[])
+        : [];
+      return {
+        id: r.id,
+        prNumber: r.prNumber,
+        title: `PR #${r.prNumber}`,
+        repoName: r.repository.name,
+        status: r.status.toLowerCase(),
+        findingCount: findings.length,
+        findings: privacy.allowGitMetadata ? findings : null,
+        costCents: r.costCents,
+        createdAt: r.createdAt.toISOString(),
+      };
+    });
   }
 }

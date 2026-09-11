@@ -252,6 +252,16 @@ export class GitHubController {
     });
   };
 
+  reviewsRecent = async (req: Request, res: Response): Promise<void> => {
+    const workspaceId =
+      typeof req.params.workspaceId === "string" ? req.params.workspaceId : "";
+    res.json({
+      data: {
+        reviews: await this.githubService.recentReviews(workspaceId),
+      },
+    });
+  };
+
   private safeNext(raw: unknown): string {
     const fallback = env.clientOrigins[0] ?? env.API_URL;
     if (typeof raw !== "string" || raw.length === 0 || raw.length > 2048) {

@@ -190,6 +190,7 @@ export interface WorkspaceRepository {
   fullName: string | null;
   url: string | null;
   provider: string;
+  reviewEnabled?: boolean;
 }
 
 export interface WorkspaceSettings {
@@ -217,6 +218,24 @@ export interface GitHubInstallationView {
   repositoryCount: number;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ReviewActivity {
+  id: string;
+  prNumber: number;
+  title: string;
+  repoName: string;
+  status: string;
+  findingCount: number;
+  findings: Array<{
+    severity: string;
+    file: string;
+    line: number | null;
+    title: string;
+    detail: string;
+  }> | null;
+  costCents: number | null;
+  createdAt: string;
 }
 
 export interface WorkspaceMemberPublic {
@@ -756,6 +775,21 @@ export const http = {
       request("/api/v1/github/notifications/read-all", { method: "POST" }),
     installUrl: (workspaceId: string): Promise<{ url: string }> =>
       request(`/api/v1/github/${workspaceId}/app/install/url`),
+    reviewsSummary: (
+      workspaceId: string,
+      params?: { from?: string; to?: string },
+    ): Promise<{
+      reviewed: number;
+      findings: number;
+      costCents: number | null;
+    }> =>
+      request(`/api/v1/github/${workspaceId}/reviews/summary`, {
+        query: params,
+      }),
+    reviewsRecent: (
+      workspaceId: string,
+    ): Promise<{ reviews: ReviewActivity[] }> =>
+      request(`/api/v1/github/${workspaceId}/reviews/recent`),
     listInstallations: (
       workspaceId: string,
     ): Promise<{ installations: GitHubInstallationView[] }> =>
@@ -814,6 +848,16 @@ export const http = {
       request(
         `/api/v1/workspaces/${workspaceId}/settings/repositories/${repoId}`,
         { method: "DELETE" },
+      ),
+
+    setRepoReview: (
+      workspaceId: string,
+      repoId: string,
+      reviewEnabled: boolean,
+    ): Promise<{ repository: { id: string; reviewEnabled: boolean } }> =>
+      request(
+        `/api/v1/workspaces/${workspaceId}/settings/repositories/${repoId}/review`,
+        { method: "PATCH", body: { reviewEnabled } },
       ),
 
     members: {

@@ -20,6 +20,7 @@ const RING_COLOR: Record<Interactable["icon"], string> = {
   chill: "#f472b6",
   arcade: "#a78bfa",
   vending: "#fbbf24",
+  reviewer: "#2dd4bf",
 };
 
 const RANGE = 8;
@@ -116,6 +117,20 @@ function drawGlyph(ctx: CanvasRenderingContext2D, icon: Interactable["icon"]) {
       ctx.lineTo(90, 78);
       ctx.moveTo(90, 94);
       ctx.lineTo(98, 86);
+      ctx.stroke();
+      break;
+    case "reviewer": // magnifier + check
+      ctx.beginPath();
+      ctx.arc(52, 52, 22, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(68, 68);
+      ctx.lineTo(92, 92);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(44, 53);
+      ctx.lineTo(51, 60);
+      ctx.lineTo(62, 46);
       ctx.stroke();
       break;
   }

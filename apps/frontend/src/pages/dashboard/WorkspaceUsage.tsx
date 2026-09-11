@@ -113,6 +113,11 @@ export function WorkspaceUsage() {
     queryFn: () => http.reads.throughput(workspaceId, range),
     enabled: isAdmin && tab === "throughput",
   });
+  const reviewsDigest = useQuery({
+    queryKey: ["reviews-summary", workspaceId, days],
+    queryFn: () => http.github.reviewsSummary(workspaceId, range),
+    enabled: isAdmin && tab === "throughput",
+  });
   const pool = useQuery({
     queryKey: ["vending-pool", workspaceId],
     queryFn: () => http.reads.vendingPool(workspaceId),
@@ -509,82 +514,107 @@ export function WorkspaceUsage() {
           )}
 
           {tab === "throughput" && (
-            <Card>
-              <CardHead title={`Team throughput · ${days}d`} />
-              <div className="px-5 py-2">
-                {throughput.isLoading ? (
-                  <div className="py-4 text-sm text-neutral-400">Loading…</div>
-                ) : sortedThroughput.length === 0 ? (
-                  <div className="py-4 text-sm text-neutral-400">
-                    No members found.
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left text-[13px]">
-                      <thead>
-                        <tr className="text-[11px] uppercase tracking-wide text-neutral-400">
-                          <th className="py-2 pr-3 font-semibold">Member</th>
-                          <th className="py-2 pr-3 text-right font-semibold">
-                            Tasks
-                          </th>
-                          <th className="py-2 pr-3 text-right font-semibold">
-                            PRs
-                          </th>
-                          <th className="py-2 pr-3 text-right font-semibold">
-                            Tests ✓/✗
-                          </th>
-                          <th className="py-2 pr-3 text-right font-semibold">
-                            Cost
-                          </th>
-                          <th className="py-2 text-right font-semibold">
-                            $/task
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {sortedThroughput.map((m) => (
-                          <tr
-                            key={m.userId}
-                            className="border-t border-black/[0.05]"
-                          >
-                            <td className="py-2 pr-3 font-semibold">
-                              {m.name}
-                            </td>
-                            <td className="py-2 pr-3 text-right font-mono">
-                              {m.tasksCompleted}
-                            </td>
-                            <td className="py-2 pr-3 text-right font-mono">
-                              {m.prsMerged}
-                            </td>
-                            <td className="py-2 pr-3 text-right font-mono">
-                              <span className="text-emerald-600">
-                                {m.testsPassed}
-                              </span>
-                              /
-                              <span
-                                className={
-                                  m.testsFailed > 0 ? "text-rose-600" : ""
-                                }
-                              >
-                                {m.testsFailed}
-                              </span>
-                            </td>
-                            <td className="py-2 pr-3 text-right font-mono">
-                              {fmtMoney(m.costCents)}
-                            </td>
-                            <td className="py-2 text-right font-mono">
-                              {m.costPerTaskCents !== null
-                                ? fmtMoney(m.costPerTaskCents)
-                                : "—"}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+            <>
+              {reviewsDigest.data &&
+                (reviewsDigest.data.reviewed > 0 ||
+                  reviewsDigest.data.findings > 0) && (
+                  <Card className="mb-4 flex flex-wrap items-center gap-x-6 gap-y-2 p-5">
+                    <Stat
+                      label="PRs reviewed"
+                      value={String(reviewsDigest.data.reviewed)}
+                    />
+                    <Stat
+                      label="Findings"
+                      value={String(reviewsDigest.data.findings)}
+                    />
+                    <Stat
+                      label="Review spend"
+                      value={fmtMoney(reviewsDigest.data.costCents)}
+                    />
+                    <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-neutral-400">
+                      Reviewer teammate · {days}d
+                    </span>
+                  </Card>
                 )}
-              </div>
-            </Card>
+              <Card>
+                <CardHead title={`Team throughput · ${days}d`} />
+                <div className="px-5 py-2">
+                  {throughput.isLoading ? (
+                    <div className="py-4 text-sm text-neutral-400">
+                      Loading…
+                    </div>
+                  ) : sortedThroughput.length === 0 ? (
+                    <div className="py-4 text-sm text-neutral-400">
+                      No members found.
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-[13px]">
+                        <thead>
+                          <tr className="text-[11px] uppercase tracking-wide text-neutral-400">
+                            <th className="py-2 pr-3 font-semibold">Member</th>
+                            <th className="py-2 pr-3 text-right font-semibold">
+                              Tasks
+                            </th>
+                            <th className="py-2 pr-3 text-right font-semibold">
+                              PRs
+                            </th>
+                            <th className="py-2 pr-3 text-right font-semibold">
+                              Tests ✓/✗
+                            </th>
+                            <th className="py-2 pr-3 text-right font-semibold">
+                              Cost
+                            </th>
+                            <th className="py-2 text-right font-semibold">
+                              $/task
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {sortedThroughput.map((m) => (
+                            <tr
+                              key={m.userId}
+                              className="border-t border-black/[0.05]"
+                            >
+                              <td className="py-2 pr-3 font-semibold">
+                                {m.name}
+                              </td>
+                              <td className="py-2 pr-3 text-right font-mono">
+                                {m.tasksCompleted}
+                              </td>
+                              <td className="py-2 pr-3 text-right font-mono">
+                                {m.prsMerged}
+                              </td>
+                              <td className="py-2 pr-3 text-right font-mono">
+                                <span className="text-emerald-600">
+                                  {m.testsPassed}
+                                </span>
+                                /
+                                <span
+                                  className={
+                                    m.testsFailed > 0 ? "text-rose-600" : ""
+                                  }
+                                >
+                                  {m.testsFailed}
+                                </span>
+                              </td>
+                              <td className="py-2 pr-3 text-right font-mono">
+                                {fmtMoney(m.costCents)}
+                              </td>
+                              <td className="py-2 text-right font-mono">
+                                {m.costPerTaskCents !== null
+                                  ? fmtMoney(m.costPerTaskCents)
+                                  : "—"}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </Card>
+            </>
           )}
 
           {tab === "keys" && (

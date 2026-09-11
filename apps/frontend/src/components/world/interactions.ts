@@ -8,7 +8,8 @@ export type InteractableKind =
   | "ci"
   | "chill-screen"
   | "arcade"
-  | "vending";
+  | "vending"
+  | "reviewer";
 
 export type InteractableIcon =
   | "coffee"
@@ -18,7 +19,8 @@ export type InteractableIcon =
   | "ci"
   | "chill"
   | "arcade"
-  | "vending";
+  | "vending"
+  | "reviewer";
 
 export interface Interactable {
   id: string;
@@ -158,6 +160,18 @@ const VENDING: Interactable = {
   icon: "vending",
 };
 
+/** Reviewer teammate nook — E opens what the bot is doing. */
+const REVIEWER: Interactable = {
+  id: "reviewer-desk",
+  kind: "reviewer",
+  x: -5.5,
+  z: 2.4,
+  y: 0,
+  radius: 2.2,
+  prompt: "Reviewer activity",
+  icon: "reviewer",
+};
+
 /** Every desk gets a "workspace" monitor you can lean in and use. */
 function monitorSpots(): Interactable[] {
   return [...DESKS, ...L2_DESKS, ...POD_DESKS].map((d, i) => {
@@ -183,6 +197,7 @@ export const INTERACTABLES: Interactable[] = [
   CHILL_SCREEN,
   ARCADE,
   VENDING,
+  REVIEWER,
   ...WHITEBOARD_SPOTS.map(([x, z], i): Interactable => ({
     id: `whiteboard-${i}`,
     kind: "whiteboard",

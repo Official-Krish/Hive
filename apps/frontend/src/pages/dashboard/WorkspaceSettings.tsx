@@ -138,6 +138,25 @@ export function WorkspaceSettings() {
       ),
   });
 
+  const reviewToggleMutation = useMutation({
+    mutationFn: ({ repoId, enabled }: { repoId: string; enabled: boolean }) =>
+      http.workspaces.setRepoReview(workspaceId, repoId, enabled),
+    onSuccess: (_data, vars) => {
+      queryClient.invalidateQueries({
+        queryKey: ["workspace", workspaceId, "settings"],
+      });
+      notifySuccess(
+        vars.enabled ? "Reviewer enabled for repo" : "Reviewer muted for repo",
+      );
+    },
+    onError: (err) =>
+      notifyError(
+        err instanceof ApiError
+          ? err.message
+          : "Couldn't update reviewer setting.",
+      ),
+  });
+
   const installations = useQuery({
     queryKey: ["github", "installations", workspaceId],
     queryFn: () => http.github.listInstallations(workspaceId),
@@ -357,6 +376,39 @@ export function WorkspaceSettings() {
                           <FiGithub className="size-4" aria-hidden />
                         </a>
                       )}
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={repo.reviewEnabled !== false}
+                        title={
+                          repo.reviewEnabled !== false
+                            ? "Reviewer on — click to mute"
+                            : "Reviewer muted — click to enable"
+                        }
+                        disabled={reviewToggleMutation.isPending}
+                        onClick={() =>
+                          reviewToggleMutation.mutate({
+                            repoId: repo.id,
+                            enabled: !(repo.reviewEnabled !== false),
+                          })
+                        }
+                        className={
+                          repo.reviewEnabled !== false
+                            ? "flex h-6 w-11 items-center rounded-full bg-emerald-600 px-0.5 transition-colors"
+                            : "flex h-6 w-11 items-center rounded-full bg-neutral-900/15 px-0.5 transition-colors"
+                        }
+                      >
+                        <span
+                          className={
+                            repo.reviewEnabled !== false
+                              ? "ml-auto size-5 rounded-full bg-white shadow"
+                              : "size-5 rounded-full bg-white shadow"
+                          }
+                        />
+                      </button>
+                      <span className="hidden font-mono text-[10px] uppercase tracking-wide text-neutral-400 sm:inline">
+                        reviewer
+                      </span>
                       <ConfirmBtn
                         variant="ghost"
                         confirmLabel="Unlink"
