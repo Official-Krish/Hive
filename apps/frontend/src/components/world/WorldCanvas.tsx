@@ -68,6 +68,7 @@ import { useChillMedia } from "@/hooks/useChillMedia";
 import { ChillScreenProjection } from "./ChillScreenProjection";
 import { ChillScreenModal } from "./ChillScreenModal";
 import { GamesModal } from "./GamesModal";
+import { FleetModal } from "./FleetModal";
 import { ReviewerModal } from "./ReviewerModal";
 import { VendingModal } from "./VendingModal";
 import { useVending } from "@/hooks/useVending";
@@ -82,6 +83,7 @@ import {
   Monitor,
   PenLine,
   SearchCheck,
+  Server,
   Volume2,
   Zap,
   Trophy,
@@ -111,6 +113,7 @@ const INTERACTABLE_ICONS: Record<InteractableIcon, LucideIcon> = {
   arcade: Gamepad2,
   vending: KeyRound,
   reviewer: SearchCheck,
+  fleet: Server,
 };
 
 /* r3f v9.7 `events.connect(target)` can fire with a null container during a
@@ -652,6 +655,7 @@ export function WorldCanvas({
   const [gamesOpen, setGamesOpen] = useState(false);
   const [vendingOpen, setVendingOpen] = useState(false);
   const [reviewerOpen, setReviewerOpen] = useState(false);
+  const [fleetOpen, setFleetOpen] = useState(false);
   // Onboarding: renderer ready, spawn fade, first-run tour.
   const [worldReady, setWorldReady] = useState(false);
   const [spawnFaded, setSpawnFaded] = useState(false);
@@ -691,6 +695,7 @@ export function WorldCanvas({
     gamesOpen ||
     vendingOpen ||
     reviewerOpen ||
+    fleetOpen ||
     whiteboardId !== null;
   const fppBlockedRef = useRef(fppBlocked);
   fppBlockedRef.current = fppBlocked;
@@ -763,6 +768,12 @@ export function WorldCanvas({
         case "reviewer":
           setReviewerOpen(true);
           break;
+        case "fleet":
+          setFleetOpen(true);
+          break;
+        case "reviewer-console":
+          setReviewerOpen(true);
+          break;
         case "whiteboard":
           setWhiteboardId(it.id);
           break;
@@ -787,6 +798,7 @@ export function WorldCanvas({
       gamesOpen ||
       vendingOpen ||
       reviewerOpen ||
+      fleetOpen ||
       whiteboardId !== null ||
       pair.open,
     onPress: handleInteract,
@@ -1500,6 +1512,7 @@ export function WorldCanvas({
             gamesOpen ||
             vendingOpen ||
             reviewerOpen ||
+            fleetOpen ||
             whiteboardId !== null
           }
           onRoomChange={handleRoomChange}
@@ -1611,6 +1624,13 @@ export function WorldCanvas({
         <ReviewerModal
           workspaceId={workspaceId}
           onClose={() => setReviewerOpen(false)}
+        />
+      )}
+      {fleetOpen && (
+        <FleetModal
+          workspaceId={workspaceId}
+          client={client}
+          onClose={() => setFleetOpen(false)}
         />
       )}
 

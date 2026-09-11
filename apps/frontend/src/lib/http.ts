@@ -416,6 +416,12 @@ export interface ActivitySummary {
 export interface AgentSessionSummary {
   id: string;
   agent: { id: string; name: string; type: string; model: string | null };
+  developer: {
+    id: string;
+    name: string;
+    email: string;
+    avatarUrl: string | null;
+  };
   status: string;
   title: string | null;
   summary: string | null;

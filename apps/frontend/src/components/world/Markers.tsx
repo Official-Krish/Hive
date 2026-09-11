@@ -21,6 +21,7 @@ const RING_COLOR: Record<Interactable["icon"], string> = {
   arcade: "#a78bfa",
   vending: "#fbbf24",
   reviewer: "#2dd4bf",
+  fleet: "#22d3ee",
 };
 
 const RANGE = 8;
@@ -132,6 +133,20 @@ function drawGlyph(ctx: CanvasRenderingContext2D, icon: Interactable["icon"]) {
       ctx.lineTo(51, 60);
       ctx.lineTo(62, 46);
       ctx.stroke();
+      break;
+    case "fleet": // server stack
+      ctx.strokeRect(34, 30, 60, 20);
+      ctx.strokeRect(34, 54, 60, 20);
+      ctx.strokeRect(34, 78, 60, 20);
+      ctx.beginPath();
+      ctx.arc(44, 40, 3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(44, 64, 3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(44, 88, 3, 0, Math.PI * 2);
+      ctx.fill();
       break;
   }
 }
