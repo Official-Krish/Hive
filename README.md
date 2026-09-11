@@ -9,6 +9,7 @@ and a spatial "AI lab" office.
 > This repository contains the **cloud platform** (API, worker, dashboard), the
 > **event contracts**, and the **local collector daemon** (`apps/collector`).
 
+![alt text](hero.png)
 ---
 
 ## Features
@@ -35,6 +36,20 @@ and a spatial "AI lab" office.
   (`push`, `pull_request`) with tokens encrypted at rest.
 - **Background jobs** — a Redis-backed queue worker for metrics aggregation,
   session/activity finalization, presence sweeps, and reapers.
+- **Mini-games arcade** — server-authoritative Chess, Connect Four, Ludo
+  (4 tokens, captures, blockades) and Uno (+2/+4, UNO call-and-catch) for
+  2–4 players, played live in the world over WebSockets.
+- **Usage & throughput dashboard** — per-workspace token spend (daily charts,
+  per-model and per-member splits), monthly budgets with alert thresholds,
+  and team throughput (tasks, PRs, tests, $/task). Admin/owner only.
+- **API key vending machine** — admins stock provider keys (Claude, OpenCode,
+  Codex; encrypted at rest, hashed for lookup) in a 3D machine on the
+  engineering floor; members check out one-time reveals gated by rate,
+  cooldown, and role rules, or receive admin-assigned keys.
+- **PR reviewer teammate** — an ambient bot avatar in the office that reviews
+  pull requests (secret scans + model pass, comment-only on GitHub), logs
+  spend to the workspace budget, and reports through the world ticker.
+  Per-repo on/off toggle in workspace settings.
 
 ---
 
