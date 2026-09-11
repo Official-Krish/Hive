@@ -5,8 +5,10 @@ import {
   type Prisma,
 } from "@hive/db";
 import type {
+  VendingAssignedKey,
   VendingAvailability,
   VendingCheckout,
+  VendingCheckoutRecord,
   VendingPoolEntry,
   VendingProvider as WireProvider,
   VendingRules,
@@ -426,6 +428,136 @@ export class VendingService {
         },
       });
     }
+  }
+
+  /** Admin ledger: every reveal, who took what and who assigned it. */
+  async checkouts(workspaceId: string): Promise<VendingCheckoutRecord[]> {
+    const rows = await prisma.apiKeyCheckout.findMany({
+      where: { pool: { workspaceId } },
+      orderBy: { revealedAt: "desc" },
+      take: 200,
+      include: {
+        pool: { select: { id: true, provider: true, label: true } },
+        user: { select: { id: true, name: true } },
+        assignedBy: { select: { name: true } },
+      },
+    });
+    return rows.map((r) => ({
+      id: r.id,
+      poolId: r.poolId,
+      provider: toWireProvider(r.pool.provider),
+      label: r.pool.label,
+      userId: r.user.id,
+      userName: r.user.name,
+      revealedAt: r.revealedAt.toISOString(),
+      assignedByName: r.assignedBy?.name ?? null,
+    }));
+  }
+
+  /**
+   * Admin assigns a key to a specific workspace member. Bypasses the rate
+   * rules (explicit admin intent) but still needs live stock. The assignee
+   * reads the secret back via `myKeys` — it is never returned here.
+   */
+  async assign(
+    workspaceId: string,
+    poolId: string,
+    targetUserId: string,
+    adminId: string,
+  ): Promise<VendingCheckoutRecord> {
+    const membership = await prisma.workspaceMember.findUnique({
+      where: {
+        workspaceId_userId: { workspaceId, userId: targetUserId },
+      },
+      select: { userId: true },
+    });
+    if (!membership) throw new NotFoundError("User is not in this workspace");
+    return this.withPoolLock(`${workspaceId}:assign:${poolId}`, async () => {
+      const key = await prisma.apiKeyPool.findFirst({
+        where: { id: poolId, workspaceId },
+      });
+      if (!key) throw new NotFoundError("No such stocked key");
+      if (key.status !== VendingKeyStatus.AVAILABLE) {
+        throw new BadRequestError("Key is not available for assignment");
+      }
+      if (key.maxCheckouts !== null && key.checkoutCount >= key.maxCheckouts) {
+        await prisma.apiKeyPool.update({
+          where: { id: key.id },
+          data: { status: VendingKeyStatus.RETIRED },
+        });
+        throw new BadRequestError("Key is not available for assignment");
+      }
+      const nextCount = key.checkoutCount + 1;
+      const retired =
+        key.maxCheckouts !== null && nextCount >= key.maxCheckouts;
+      const [created] = await prisma.$transaction([
+        prisma.apiKeyCheckout.create({
+          data: {
+            poolId: key.id,
+            userId: targetUserId,
+            assignedById: adminId,
+          },
+          include: {
+            user: { select: { id: true, name: true } },
+            assignedBy: { select: { name: true } },
+          },
+        }),
+        prisma.apiKeyPool.update({
+          where: { id: key.id },
+          data: {
+            checkoutCount: nextCount,
+            ...(retired ? { status: VendingKeyStatus.RETIRED } : {}),
+          },
+        }),
+      ]);
+      return {
+        id: created.id,
+        poolId: key.id,
+        provider: toWireProvider(key.provider),
+        label: key.label,
+        userId: created.user.id,
+        userName: created.user.name,
+        revealedAt: created.revealedAt.toISOString(),
+        assignedByName: created.assignedBy?.name ?? null,
+      };
+    });
+  }
+
+  /** Keys assigned to me by an admin, decrypted on demand. */
+  async myKeys(
+    workspaceId: string,
+    userId: string,
+  ): Promise<VendingAssignedKey[]> {
+    const rows = await prisma.apiKeyCheckout.findMany({
+      where: {
+        userId,
+        assignedById: { not: null },
+        pool: { workspaceId, status: { not: VendingKeyStatus.REVOKED } },
+      },
+      orderBy: { revealedAt: "desc" },
+      include: {
+        pool: true,
+        assignedBy: { select: { name: true } },
+      },
+    });
+    const out: VendingAssignedKey[] = [];
+    for (const r of rows) {
+      let secret: string;
+      try {
+        secret = decryptSecret(r.pool.secretEncrypted);
+      } catch {
+        continue;
+      }
+      out.push({
+        poolId: r.poolId,
+        provider: toWireProvider(r.pool.provider),
+        label: r.pool.label,
+        secret,
+        revealedAt: r.revealedAt.toISOString(),
+        assignedByName: r.assignedBy?.name ?? "admin",
+      });
+    }
+    return out;
   }
 
   private toWirePool(row: {

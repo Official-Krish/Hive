@@ -11,9 +11,14 @@ import type {
   UsageBudget,
   UsageBudgetInput,
   UsageSummary,
+  VendingAssignInput,
+  VendingAssignedKey,
   VendingAvailability,
   VendingCheckout,
+  VendingCheckoutRecord,
+  VendingPoolEntry,
   VendingProvider,
+  VendingStockInput,
 } from "@hive/types";
 import { API_BASE_URL } from "./config";
 
@@ -1121,6 +1126,34 @@ export const http = {
         method: "PATCH",
         body: input,
       }),
+
+    vendingPool: (
+      workspaceId: string,
+    ): Promise<{ entries: VendingPoolEntry[] }> =>
+      request(`/api/v1/workspaces/${workspaceId}/vending/pool`),
+
+    vendingStock: (
+      workspaceId: string,
+      input: VendingStockInput,
+    ): Promise<{ entry: VendingPoolEntry }> =>
+      request(`/api/v1/workspaces/${workspaceId}/vending/pool`, {
+        method: "POST",
+        body: input,
+      }),
+
+    vendingCheckouts: (
+      workspaceId: string,
+    ): Promise<{ checkouts: VendingCheckoutRecord[] }> =>
+      request(`/api/v1/workspaces/${workspaceId}/vending/checkouts`),
+
+    vendingAssign: (
+      workspaceId: string,
+      input: VendingAssignInput,
+    ): Promise<{ checkout: VendingCheckoutRecord }> =>
+      request(`/api/v1/workspaces/${workspaceId}/vending/assign`, {
+        method: "POST",
+        body: input,
+      }),
   },
 
   models: {
@@ -1227,6 +1260,9 @@ export const http = {
         `/api/v1/workspaces/${workspaceId}/vending/checkout/${provider}`,
         { method: "POST" },
       ),
+
+    myKeys: (workspaceId: string): Promise<{ keys: VendingAssignedKey[] }> =>
+      request(`/api/v1/workspaces/${workspaceId}/vending/my-keys`),
   },
 
   /* ── chat ── */

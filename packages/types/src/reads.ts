@@ -541,3 +541,30 @@ export const vendingRulesSchema = z.object({
   lowPoolAlertPct: z.number().int().min(1).max(100).default(20),
 });
 export type VendingRulesInput = z.infer<typeof vendingRulesSchema>;
+
+export interface VendingCheckoutRecord {
+  id: string;
+  poolId: string;
+  provider: VendingProvider;
+  label: string;
+  userId: string;
+  userName: string;
+  revealedAt: string;
+  assignedByName: string | null;
+}
+
+export interface VendingAssignedKey {
+  poolId: string;
+  provider: VendingProvider;
+  label: string;
+  /** Decrypted on demand — visible only to the assignee. */
+  secret: string;
+  revealedAt: string;
+  assignedByName: string;
+}
+
+export const vendingAssignSchema = z.object({
+  poolId: z.string().min(1),
+  userId: z.string().min(1),
+});
+export type VendingAssignInput = z.infer<typeof vendingAssignSchema>;

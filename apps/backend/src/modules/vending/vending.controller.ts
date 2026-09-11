@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import {
+  vendingAssignSchema,
   vendingProviderSchema,
   type VendingRulesInput,
   type VendingStockInput,
@@ -83,5 +84,33 @@ export class VendingController {
       role,
     );
     res.json({ data: result });
+  };
+
+  checkouts = async (req: Request, res: Response): Promise<void> => {
+    const records = await this.service.checkouts(
+      VendingController.workspaceId(req),
+    );
+    res.json({ data: { checkouts: records } });
+  };
+
+  assign = async (req: Request, res: Response): Promise<void> => {
+    const { userId } = getAuth(res);
+    const input = vendingAssignSchema.parse(req.body);
+    const record = await this.service.assign(
+      VendingController.workspaceId(req),
+      input.poolId,
+      input.userId,
+      userId,
+    );
+    res.status(201).json({ data: { checkout: record } });
+  };
+
+  myKeys = async (req: Request, res: Response): Promise<void> => {
+    const { userId } = getAuth(res);
+    const keys = await this.service.myKeys(
+      VendingController.workspaceId(req),
+      userId,
+    );
+    res.json({ data: { keys } });
   };
 }

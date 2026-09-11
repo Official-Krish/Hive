@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
-import { FiCheck, FiCopy, FiX, FiZap } from "react-icons/fi";
 import { type UseVendingResult } from "@/hooks/useVending";
-import type { VendingAvailability } from "@hive/types";
+import type { VendingAssignedKey, VendingAvailability } from "@hive/types";
 import { cn } from "@/lib/utils";
 
 interface VendingModalProps {
@@ -22,6 +21,54 @@ function retryLabel(secs: number | null): string | null {
   if (secs === null) return null;
   if (secs < 3600) return `retry in ${Math.ceil(secs / 60)}m`;
   return `retry in ${(secs / 3600).toFixed(1)}h`;
+}
+
+/** An admin-assigned key — masked until tapped, copyable. */
+function AssignedKeyRow({ entry }: { entry: VendingAssignedKey }) {
+  const [shown, setShown] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const meta = PROVIDER_META[entry.provider];
+  const copy = async (): Promise<void> => {
+    try {
+      await navigator.clipboard.writeText(entry.secret);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      /* clipboard blocked — select manually */
+    }
+  };
+  return (
+    <div className="rounded-xl bg-neutral-900/[0.03] px-3 py-2 ring-1 ring-black/[0.07]">
+      <div className="flex items-center gap-2">
+        <span className={cn("size-2.5 shrink-0 rounded-full", meta.dot)} />
+        <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-neutral-900">
+          {meta.label} · {entry.label}
+        </span>
+        <button
+          type="button"
+          onClick={() => setShown((v) => !v)}
+          className="rounded-lg px-2 py-1 text-[12px] font-semibold text-neutral-500 hover:bg-black/[0.05] hover:text-neutral-900"
+        >
+          {shown ? "Hide" : "Show"}
+        </button>
+        <button
+          type="button"
+          onClick={() => void copy()}
+          className="rounded-lg px-2 py-1 text-[12px] font-semibold text-neutral-500 hover:bg-black/[0.05] hover:text-neutral-900"
+        >
+          {copied ? "Copied" : "Copy"}
+        </button>
+      </div>
+      {shown && (
+        <div className="mt-1.5 break-all rounded-lg bg-neutral-900 px-2 py-1.5 font-mono text-[11.5px] text-emerald-300">
+          {entry.secret}
+        </div>
+      )}
+      <div className="mt-1 text-[10.5px] text-neutral-500">
+        from {entry.assignedByName}
+      </div>
+    </div>
+  );
 }
 
 export function VendingModal({ vending, onClose }: VendingModalProps) {
@@ -66,9 +113,9 @@ export function VendingModal({ vending, onClose }: VendingModalProps) {
             type="button"
             onClick={onClose}
             aria-label="Close vending machine"
-            className="rounded-lg p-2 text-neutral-500 transition-colors hover:bg-black/[0.05] hover:text-neutral-900"
+            className="rounded-lg px-2 py-1 text-[13px] font-semibold text-neutral-500 transition-colors hover:bg-black/[0.05] hover:text-neutral-900"
           >
-            <FiX className="size-4" />
+            Close
           </button>
         </div>
 
@@ -83,37 +130,26 @@ export function VendingModal({ vending, onClose }: VendingModalProps) {
           )}
 
           {vending.revealed ? (
-            <div className="flex flex-col items-center gap-3 rounded-2xl bg-neutral-950 px-4 py-8 text-center text-white shadow-md">
-              <span className="flex size-11 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-400/40">
-                <FiZap className="size-5" />
-              </span>
-              <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-white/50">
+            <div className="flex flex-col items-center gap-3 rounded-2xl bg-white px-4 py-8 text-center ring-1 ring-black/[0.07]">
+              <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-neutral-500">
                 {vending.revealed.label} · shown once
               </div>
               <button
                 type="button"
                 onClick={() => void copy()}
                 title="Copy to clipboard"
-                className="w-full break-all rounded-xl bg-white/[0.07] px-3 py-3 font-mono text-[12.5px] text-emerald-200 ring-1 ring-white/15 transition-colors hover:bg-white/[0.12]"
+                className="w-full break-all rounded-xl bg-neutral-900 px-3 py-3 font-mono text-[12.5px] text-emerald-300 transition-colors hover:bg-neutral-800"
               >
                 {vending.revealed.secret}
               </button>
               <button
                 type="button"
                 onClick={() => void copy()}
-                className="flex items-center gap-1.5 rounded-xl bg-emerald-500 px-4 py-2 text-[13px] font-bold text-neutral-950 transition-colors hover:bg-emerald-400"
+                className="rounded-xl bg-neutral-900 px-4 py-2 text-[13px] font-bold text-white transition-colors hover:bg-neutral-700"
               >
-                {copied ? (
-                  <>
-                    <FiCheck className="size-3.5" /> Copied
-                  </>
-                ) : (
-                  <>
-                    <FiCopy className="size-3.5" /> Copy key
-                  </>
-                )}
+                {copied ? "Copied" : "Copy key"}
               </button>
-              <p className="max-w-[300px] text-[12px] text-white/55">
+              <p className="max-w-[300px] text-[12px] text-neutral-500">
                 Copy it now — this key won't be shown again. Store it in your
                 local env, never in chat.
               </p>
@@ -123,7 +159,7 @@ export function VendingModal({ vending, onClose }: VendingModalProps) {
                   vending.dismissReveal();
                   onClose();
                 }}
-                className="rounded-xl bg-white/10 px-3.5 py-1.5 text-[12px] font-semibold text-white/70 ring-1 ring-white/15 hover:bg-white/20 hover:text-white"
+                className="rounded-xl bg-black/[0.05] px-3.5 py-1.5 text-[12px] font-semibold text-neutral-600 ring-1 ring-black/[0.07] hover:bg-black/[0.08]"
               >
                 Done
               </button>
@@ -133,6 +169,18 @@ export function VendingModal({ vending, onClose }: VendingModalProps) {
               {vending.loading && vending.providers.length === 0 && (
                 <div className="py-6 text-center text-[13px] text-neutral-500">
                   Contacting the machine…
+                </div>
+              )}
+              {vending.assigned.length > 0 && (
+                <div className="rounded-2xl bg-white px-3.5 py-3 ring-1 ring-black/[0.07]">
+                  <div className="mb-2 text-[10px] font-medium uppercase tracking-[0.18em] text-neutral-500">
+                    Assigned to you
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    {vending.assigned.map((k) => (
+                      <AssignedKeyRow key={k.poolId} entry={k} />
+                    ))}
+                  </div>
                 </div>
               )}
               {vending.providers.map((p) => {
@@ -164,7 +212,7 @@ export function VendingModal({ vending, onClose }: VendingModalProps) {
                       type="button"
                       disabled={!p.canCheckout}
                       onClick={() => void vending.checkout(p.provider)}
-                      className="shrink-0 rounded-xl bg-neutral-950 px-3.5 py-2 text-[12.5px] font-bold text-white transition-all hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-30"
+                      className="shrink-0 rounded-xl bg-neutral-900 px-3.5 py-2 text-[12.5px] font-bold text-white transition-all hover:bg-neutral-700 disabled:cursor-not-allowed disabled:opacity-30"
                     >
                       Get key
                     </button>

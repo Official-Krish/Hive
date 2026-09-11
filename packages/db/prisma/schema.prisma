@@ -47,6 +47,7 @@ model User {
   updatedUsageBudgets     UsageBudget[]
   createdApiKeys          ApiKeyPool[]        @relation("VendingKeyCreator")
   apiKeyCheckouts         ApiKeyCheckout[]
+  assignedApiKeys         ApiKeyCheckout[]      @relation("VendingKeyAssigner")
   updatedVendingRules     VendingRules[]
   githubAccounts          GitHubAccount[]
   conversationParticipants ConversationParticipant[]
@@ -871,13 +872,16 @@ model ApiKeyPool {
 }
 
 model ApiKeyCheckout {
-  id         String   @id @default(cuid())
-  poolId     String
-  userId     String
-  revealedAt DateTime @default(now())
+  id           String   @id @default(cuid())
+  poolId       String
+  userId       String
+  revealedAt   DateTime @default(now())
+  /** Set when an admin assigned (rather than self-checked-out) the key. */
+  assignedById String?
 
-  pool ApiKeyPool @relation(fields: [poolId], references: [id], onDelete: Cascade)
-  user User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pool       ApiKeyPool @relation(fields: [poolId], references: [id], onDelete: Cascade)
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assignedBy User?      @relation("VendingKeyAssigner", fields: [assignedById], references: [id], onDelete: SetNull)
 
   @@index([poolId])
   @@index([userId, revealedAt])

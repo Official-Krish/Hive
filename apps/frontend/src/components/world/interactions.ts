@@ -146,12 +146,12 @@ const ARCADE: Interactable = {
   icon: "arcade",
 };
 
-/** API key vending machine beside the arcade — provider keys, one reveal. */
+/** API key vending machine in the engineering room's NW corner. */
 const VENDING: Interactable = {
   id: "vending-machine",
   kind: "vending",
-  x: -4.6,
-  z: -13.4,
+  x: -30.3,
+  z: 1.2,
   y: 0,
   radius: 2.4,
   prompt: "API key vending",

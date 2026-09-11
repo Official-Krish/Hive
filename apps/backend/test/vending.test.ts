@@ -188,4 +188,76 @@ describe("vending machine", () => {
     );
     expect(set.status).toBe(200);
   });
+
+  test("admin assigns a key; ledger shows taken keys, assignee reads it", async () => {
+    const stock = await owner.api(
+      `/api/v1/workspaces/${workspaceId}/vending/pool`,
+      {
+        method: "POST",
+        body: {
+          provider: "opencode",
+          label: "assign-me",
+          secret: secretFor("assign"),
+          maxCheckouts: null,
+        },
+      },
+    );
+    expect(stock.status).toBe(201);
+    const poolId = (
+      await owner.asJson<{ data: { entry: { id: string } } }>(stock)
+    ).data.entry.id;
+
+    const me = await member.api("/api/v1/auth/me");
+    const memberId = (
+      await member.asJson<{ data: { user: { id: string } } }>(me)
+    ).data.user.id;
+
+    const assign = await owner.api(
+      `/api/v1/workspaces/${workspaceId}/vending/assign`,
+      { method: "POST", body: { poolId, userId: memberId } },
+    );
+    expect(assign.status).toBe(201);
+
+    // Assignee reads the key back; secret never in the ledger.
+    const mine = await member.api(
+      `/api/v1/workspaces/${workspaceId}/vending/my-keys`,
+    );
+    expect(mine.status).toBe(200);
+    const keys = (
+      await member.asJson<{ data: { keys: Array<{ secret: string }> } }>(mine)
+    ).data.keys;
+    expect(keys.length).toBe(1);
+    expect(keys[0]!.secret.length).toBeGreaterThan(8);
+
+    const ledger = await owner.api(
+      `/api/v1/workspaces/${workspaceId}/vending/checkouts`,
+    );
+    expect(ledger.status).toBe(200);
+    const raw = await ledger.text();
+    expect(raw).not.toContain(keys[0]!.secret);
+    const rows = (
+      JSON.parse(raw) as {
+        data: {
+          checkouts: Array<{ userId: string; assignedByName: string | null }>;
+        };
+      }
+    ).data.checkouts;
+    const row = rows.find((r) => r.userId === memberId);
+    expect(row).toBeDefined();
+    expect(row!.assignedByName).not.toBeNull();
+
+    // Members cannot see the ledger or assign.
+    expect(
+      (await member.api(`/api/v1/workspaces/${workspaceId}/vending/checkouts`))
+        .status,
+    ).toBe(403);
+    expect(
+      (
+        await member.api(`/api/v1/workspaces/${workspaceId}/vending/assign`, {
+          method: "POST",
+          body: { poolId, userId: memberId },
+        })
+      ).status,
+    ).toBe(403);
+  });
 });

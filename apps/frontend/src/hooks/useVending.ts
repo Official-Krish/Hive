@@ -1,9 +1,14 @@
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { ApiError, http } from "@/lib/http";
-import type { VendingAvailability, VendingCheckout } from "@hive/types";
+import type {
+  VendingAssignedKey,
+  VendingAvailability,
+  VendingCheckout,
+} from "@hive/types";
 
 export interface UseVendingResult {
   providers: VendingAvailability[];
+  assigned: VendingAssignedKey[];
   loading: boolean;
   /** Last checkout error (rule reason), cleared on next attempt. */
   error: string | null;
@@ -20,6 +25,7 @@ export interface UseVendingResult {
  */
 export function useVending(workspaceId: string): UseVendingResult {
   const [providers, setProviders] = useState<VendingAvailability[]>([]);
+  const [assigned, setAssigned] = useState<VendingAssignedKey[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [revealed, setRevealed] = useState<VendingCheckout | null>(null);
@@ -27,8 +33,12 @@ export function useVending(workspaceId: string): UseVendingResult {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const { providers } = await http.vending.availability(workspaceId);
+      const [{ providers }, { keys }] = await Promise.all([
+        http.vending.availability(workspaceId),
+        http.vending.myKeys(workspaceId),
+      ]);
       setProviders(providers);
+      setAssigned(keys);
     } catch {
       /* transient — retry on open */
     } finally {
@@ -52,13 +62,26 @@ export function useVending(workspaceId: string): UseVendingResult {
 
   const dismissReveal = useCallback(() => setRevealed(null), []);
 
-  return {
-    providers,
-    loading,
-    error,
-    revealed,
-    refresh,
-    checkout,
-    dismissReveal,
-  };
+  return useMemo(
+    () => ({
+      providers,
+      assigned,
+      loading,
+      error,
+      revealed,
+      refresh,
+      checkout,
+      dismissReveal,
+    }),
+    [
+      providers,
+      assigned,
+      loading,
+      error,
+      revealed,
+      refresh,
+      checkout,
+      dismissReveal,
+    ],
+  );
 }

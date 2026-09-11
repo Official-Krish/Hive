@@ -409,6 +409,10 @@ export function WorldCanvas({
   });
   const games = useGameSession({ workspaceId, myUserId, client });
   const vending = useVending(workspaceId);
+  const closeVending = useCallback(() => {
+    vending.dismissReveal();
+    setVendingOpen(false);
+  }, [vending.dismissReveal]);
   const call = useLiveKitCall(workspaceId, myUserId, nearIds, onlineCount, {
     volumePeers: focus.allowedPeers,
     muteRemote: focus.inFocus,
@@ -1561,15 +1565,7 @@ export function WorldCanvas({
           onClose={() => setGamesOpen(false)}
         />
       )}
-      {vendingOpen && (
-        <VendingModal
-          vending={vending}
-          onClose={() => {
-            vending.dismissReveal();
-            setVendingOpen(false);
-          }}
-        />
-      )}
+      {vendingOpen && <VendingModal vending={vending} onClose={closeVending} />}
 
       {/* Proximity voice/video — only when near other members.
           Bottom-center column: video tiles above the mic/camera controls. */}

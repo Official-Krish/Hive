@@ -1,5 +1,9 @@
 import { Router } from "express";
-import { vendingRulesSchema, vendingStockSchema } from "@hive/types";
+import {
+  vendingAssignSchema,
+  vendingRulesSchema,
+  vendingStockSchema,
+} from "@hive/types";
 import { requireAuth } from "../../middleware/authenticate";
 import { validateBody } from "../../middleware/validate";
 import {
@@ -57,4 +61,20 @@ vendingRouter.post(
   "/:workspaceId/vending/checkout/:provider",
   member,
   controller.checkout,
+);
+vendingRouter.get("/:workspaceId/vending/my-keys", member, controller.myKeys);
+
+// Admin: checkout ledger + direct assignment.
+vendingRouter.get(
+  "/:workspaceId/vending/checkouts",
+  member,
+  admin,
+  controller.checkouts,
+);
+vendingRouter.post(
+  "/:workspaceId/vending/assign",
+  member,
+  admin,
+  validateBody(vendingAssignSchema),
+  controller.assign,
 );
