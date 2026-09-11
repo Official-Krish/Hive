@@ -36,6 +36,10 @@ import {
   handler as finalizeActivities,
   schema as finalizeActivitiesSchema,
 } from "./finalize.activities";
+import {
+  handler as reviewRequest,
+  schema as reviewRequestSchema,
+} from "./review.request";
 
 export type JobHandler = (payload: unknown) => Promise<void>;
 
@@ -70,6 +74,7 @@ export const jobRegistry = new Map<string, JobDefinition>([
   ["presence.sweep", toJob(presenceSweepSchema, presenceSweep)],
   ["finalize.sessions", toJob(finalizeSessionsSchema, finalizeSessions)],
   ["finalize.activities", toJob(finalizeActivitiesSchema, finalizeActivities)],
+  ["review.request", toJob(reviewRequestSchema, reviewRequest)],
 ]);
 
 export async function dispatch(job: JobEnvelope): Promise<void> {

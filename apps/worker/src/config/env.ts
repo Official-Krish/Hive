@@ -31,6 +31,14 @@ const envSchema = z.object({
     .int()
     .positive()
     .default(60 * 1000),
+  // PR reviewer teammate (empty = reviewer jobs fail gracefully).
+  AI_PROVIDER: z.string().default(""),
+  AI_API_KEY: z.string().default(""),
+  AI_BASE_URL: z.string().default("https://integrate.api.nvidia.com/v1"),
+  AI_MODEL: z.string().default(""),
+  GITHUB_APP_ID: z.string().default(""),
+  GITHUB_APP_SLUG: z.string().default(""),
+  GITHUB_APP_PRIVATE_KEY: z.string().default(""),
 });
 
 const parsed = envSchema.safeParse(process.env);

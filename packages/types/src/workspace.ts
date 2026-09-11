@@ -59,6 +59,11 @@ export const linkRepoInputSchema = z.object({
 });
 export type LinkRepoInput = z.infer<typeof linkRepoInputSchema>;
 
+export const repoReviewInputSchema = z.object({
+  reviewEnabled: z.boolean(),
+});
+export type RepoReviewInput = z.infer<typeof repoReviewInputSchema>;
+
 export const createInviteInputSchema = z.object({
   email: z.email("Invalid email").max(255),
   role: assignableWorkspaceRoleSchema.optional(),

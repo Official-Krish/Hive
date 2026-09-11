@@ -92,6 +92,7 @@ model Workspace {
   tasks             Task[]
   efficiencyMetrics EfficiencyMetric[]
   alerts            Alert[]
+  reviews           Review[]
   maps              WorkspaceMap[]
   conversations     Conversation[]
   presences         Presence[]
@@ -321,6 +322,8 @@ model Repository {
   githubRepoId    Int?               @unique
   githubFullName  String?            @unique
   githubAccountId String?
+  /** PR reviewer teammate on/off for this repo. */
+  reviewEnabled   Boolean            @default(true)
   lastSyncedAt    DateTime?
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt
@@ -334,6 +337,7 @@ model Repository {
   agentSessions  AgentSession[]
   testRuns       TestRun[]
   issues         Issue[]
+  reviews        Review[]
   pairSessions   PairSession[]
 
   @@unique([workspaceId, name])
@@ -885,6 +889,36 @@ model ApiKeyCheckout {
 
   @@index([poolId])
   @@index([userId, revealedAt])
+}
+
+enum ReviewStatus {
+  QUEUED
+  RUNNING
+  DONE
+  FAILED
+  SKIPPED
+}
+
+/** One reviewer-teammate pass over a PR at a given head SHA. */
+model Review {
+  id           String       @id @default(cuid())
+  workspaceId  String
+  repositoryId String
+  prNumber     Int
+  sha          String
+  status       ReviewStatus @default(QUEUED)
+  findings     Json?
+  commentId    String?
+  costCents    Int?
+  error        String?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  workspace  Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  repository Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+
+  @@unique([repositoryId, prNumber, sha])
+  @@index([workspaceId, status])
 }
 
 model VendingRules {
