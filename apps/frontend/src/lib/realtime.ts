@@ -21,6 +21,8 @@ export type RealtimeEventMap = {
   "avatar.moved": Extract<RealtimeEvent, { type: "avatar.moved" }>;
   "repo.push": Extract<RealtimeEvent, { type: "repo.push" }>;
   "pr.updated": Extract<RealtimeEvent, { type: "pr.updated" }>;
+  "review.started": Extract<RealtimeEvent, { type: "review.started" }>;
+  "review.finished": Extract<RealtimeEvent, { type: "review.finished" }>;
   "test.finished": Extract<RealtimeEvent, { type: "test.finished" }>;
   "chat.message": Extract<RealtimeEvent, { type: "chat.message" }>;
   "chat.typing": Extract<RealtimeEvent, { type: "chat.typing" }>;

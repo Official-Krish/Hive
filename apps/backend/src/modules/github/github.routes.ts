@@ -64,5 +64,17 @@ githubRouter.delete(
   requireWorkspaceRole("maintainer", "admin", "owner"),
   controller.deleteInstallation,
 );
+githubRouter.get(
+  "/:workspaceId/reviews/summary",
+  requireAuth(),
+  requireWorkspaceMember(),
+  controller.reviewsSummary,
+);
+githubRouter.get(
+  "/:workspaceId/reviews/recent",
+  requireAuth(),
+  requireWorkspaceMember(),
+  controller.reviewsRecent,
+);
 
 githubWebhookRouter.post("/", controller.webhook);

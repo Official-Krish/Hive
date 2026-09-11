@@ -4,6 +4,7 @@ import type {
   CreateGithubInviteInput,
   CreateInviteInput,
   CreateWorkspaceInput,
+  RepoReviewInput,
   TransferOwnershipInput,
   UpdateMemberRoleInput,
   UpdateWorkspaceInput,
@@ -201,5 +202,17 @@ export class WorkspaceController {
       WorkspaceController.param(req, "id"),
     );
     res.status(204).end();
+  };
+
+  repoReview = async (req: Request, res: Response): Promise<void> => {
+    const auth = getAuth(res);
+    const input = req.body as RepoReviewInput;
+    const repo = await this.service.setRepoReview(
+      WorkspaceController.param(req, "workspaceId"),
+      auth.userId,
+      WorkspaceController.param(req, "id"),
+      input.reviewEnabled,
+    );
+    res.json({ data: { repository: repo } });
   };
 }

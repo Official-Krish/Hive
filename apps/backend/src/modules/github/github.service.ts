@@ -20,6 +20,8 @@ import {
 } from "../../lib/github";
 import { signOAuthState, verifyOAuthState } from "../../lib/jwt";
 import { safeEqual } from "../../lib/crypto";
+import { REVIEW_MARKER } from "./review-scan";
+import { ReviewService } from "./review.service";
 import {
   AuthService,
   type SessionContext,
@@ -54,7 +56,7 @@ interface GitHubPullRequestPayload {
     merged?: boolean;
     merged_at?: string | null;
     closed_at?: string | null;
-    head?: { ref?: string | null };
+    head?: { ref?: string | null; sha?: string | null };
     base?: { ref?: string | null };
     user?: { id?: number; login?: string };
   };
@@ -149,7 +151,47 @@ export class GitHubService {
       redirectUri: env.GITHUB_OAUTH_REDIRECT_URI,
     }),
     private readonly authService = new AuthService(),
+    private readonly reviews = new ReviewService(),
   ) {}
+
+  /**
+   * Our own review comment arriving back over the webhook = completion.
+   * The worker owns the DB write; this publishes the finished event.
+   */
+  private async handleReviewEcho(
+    workspaceId: string,
+    body: string,
+  ): Promise<void> {
+    const match = body.match(new RegExp(`${REVIEW_MARKER}\\s+(\\S+)\\s*-->`));
+    if (!match) return;
+    const review = await prisma.review.findUnique({
+      where: { id: match[1] },
+      select: {
+        id: true,
+        workspaceId: true,
+        repositoryId: true,
+        prNumber: true,
+        status: true,
+        findings: true,
+        costCents: true,
+      },
+    });
+    if (!review || review.workspaceId !== workspaceId) return;
+    const findings = Array.isArray(review.findings)
+      ? (review.findings as unknown[])
+      : [];
+    const event: RealtimeEvent = {
+      type: "review.finished",
+      workspaceId,
+      repositoryId: review.repositoryId,
+      prNumber: review.prNumber,
+      title: `PR #${review.prNumber}`,
+      findingCount: findings.length,
+      costCents: review.costCents,
+      timestamp: Date.now(),
+    };
+    realtimeBus.publish(workspaceId, event);
+  }
 
   buildLoginUrl(next: string): string {
     return this.client.buildAuthorizeUrl(signOAuthState(next));
@@ -275,6 +317,20 @@ export class GitHubService {
     });
 
     return { workspaceId };
+  }
+
+  /** Reviewer digest inputs for the throughput tab. */
+  async reviewSummary(
+    workspaceId: string,
+    from?: Date,
+    to?: Date,
+  ): Promise<{ reviewed: number; findings: number; costCents: number | null }> {
+    return this.reviews.summary(workspaceId, from, to);
+  }
+
+  /** Recent review activity for the bot panel. */
+  async recentReviews(workspaceId: string) {
+    return this.reviews.recent(workspaceId);
   }
 
   /** List GitHub App installations for a workspace (at most one). */
@@ -760,6 +816,22 @@ export class GitHubService {
           url: pr.html_url ?? null,
         });
       }
+
+      // Reviewer teammate: fresh pushes (not drafts) kick off a review pass.
+      const sha = pr.head?.sha ?? null;
+      if (
+        (payload.action === "opened" || payload.action === "synchronize") &&
+        !pr.draft &&
+        sha
+      ) {
+        await this.reviews.requestReview({
+          workspaceId: repo.workspaceId,
+          repositoryId: repo.id,
+          prNumber: pr.number,
+          sha,
+          title: upserted.title,
+        });
+      }
     }
   }
 
@@ -827,6 +899,11 @@ export class GitHubService {
       }
 
       if (event === "issue_comment" && payload.comment?.body) {
+        // Our own review comment echoing back = the worker finished.
+        if (payload.comment.body.includes(REVIEW_MARKER)) {
+          await this.handleReviewEcho(repo.workspaceId, payload.comment.body);
+          return;
+        }
         await this.notifyMentions(repo.workspaceId, payload.comment.body, {
           type: GitHubNotificationType.ISSUE_MENTION,
           title: `You were mentioned on Issue #${ghIssue.number}: ${

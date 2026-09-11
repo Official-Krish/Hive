@@ -464,3 +464,107 @@ export const usageBudgetSchema = z.object({
   alertAtPct: z.number().int().min(1).max(100).default(80),
 });
 export type UsageBudgetInput = z.infer<typeof usageBudgetSchema>;
+
+export const vendingProviderSchema = z.enum(["claude", "opencode", "codex"]);
+export type VendingProvider = z.infer<typeof vendingProviderSchema>;
+
+export const vendingKeyStatusSchema = z.enum([
+  "available",
+  "checked-out",
+  "revoked",
+  "retired",
+]);
+export type VendingKeyStatus = z.infer<typeof vendingKeyStatusSchema>;
+
+export interface VendingPoolEntry {
+  id: string;
+  provider: VendingProvider;
+  label: string;
+  keyHash: string;
+  status: VendingKeyStatus;
+  checkoutCount: number;
+  maxCheckouts: number | null;
+  createdAt: string;
+}
+
+export const vendingStockSchema = z.object({
+  provider: vendingProviderSchema,
+  label: z.string().min(1).max(60),
+  /** Raw provider key — encrypted at rest, hashed for lookup, never echoed. */
+  secret: z.string().min(8).max(500),
+  maxCheckouts: z.number().int().min(1).max(10_000).nullable().default(null),
+});
+export type VendingStockInput = z.infer<typeof vendingStockSchema>;
+
+export interface VendingAvailability {
+  provider: VendingProvider;
+  available: number;
+  /** Rule outcome for the caller: can they check out right now? */
+  canCheckout: boolean;
+  /** Machine-readable reason when canCheckout is false. */
+  reason: string | null;
+  /** Seconds until the limiting rule lifts (null when not rate-limited). */
+  retryAfterSecs: number | null;
+}
+
+export interface VendingCheckout {
+  poolId: string;
+  provider: VendingProvider;
+  label: string;
+  /** Plaintext key — shown once, never stored or re-served. */
+  secret: string;
+}
+
+const workspaceRoleSchema = z.enum([
+  "owner",
+  "admin",
+  "maintainer",
+  "developer",
+  "member",
+  "viewer",
+]);
+
+export interface VendingRules {
+  maxPerUserPerProviderPer24h: number;
+  cooldownHours: number;
+  minRole: string | null;
+  providerMinRoles: Record<string, string>;
+  lowPoolAlertPct: number;
+  updatedAt: string | null;
+}
+
+export const vendingRulesSchema = z.object({
+  maxPerUserPerProviderPer24h: z.number().int().min(1).max(100),
+  cooldownHours: z.number().int().min(0).max(168),
+  minRole: workspaceRoleSchema.nullable().default(null),
+  providerMinRoles: z.record(z.string(), workspaceRoleSchema).default({}),
+  lowPoolAlertPct: z.number().int().min(1).max(100).default(20),
+});
+export type VendingRulesInput = z.infer<typeof vendingRulesSchema>;
+
+export interface VendingCheckoutRecord {
+  id: string;
+  poolId: string;
+  provider: VendingProvider;
+  label: string;
+  userId: string;
+  userName: string;
+  revealedAt: string;
+  assignedByName: string | null;
+}
+
+export interface VendingAssignedKey {
+  poolId: string;
+  provider: VendingProvider;
+  label: string;
+  /** Decrypted on demand — visible only to the assignee. */
+  secret: string;
+  revealedAt: string;
+  assignedByName: string;
+}
+
+export const vendingAssignSchema = z.object({
+  poolId: z.string().min(1),
+  userId: z.string().min(1),
+});
+export type VendingAssignInput = z.infer<typeof vendingAssignSchema>;

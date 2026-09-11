@@ -203,7 +203,6 @@ export function Furnishings() {
         sofas={LOUNGE_SOFAS}
         coffeeTables={LOUNGE_TABLES}
       />
-
       {/* ---------------- Reception (east lobby) ---------------- */}
       <group>
         {/* Counter: main run + return */}
@@ -265,7 +264,6 @@ export function Furnishings() {
           <primitive object={M.stripWarm} attach="material" />
         </mesh>
       </group>
-
       {/* ---------------- Meeting conference tables ---------------- */}
       {MEETING_TABLES.map((t, i) => (
         <group key={i} position={t.position} rotation={t.rotation}>
@@ -295,7 +293,6 @@ export function Furnishings() {
           ))}
         </group>
       ))}
-
       {/* ---------------- Cafeteria ---------------- */}
       {/* Service counter (west edge) */}
       <group>
@@ -326,7 +323,6 @@ export function Furnishings() {
           <primitive object={M.stripWarm} attach="material" />
         </mesh>
       </group>
-
       {/* Coffee-bar island */}
       <group>
         <mesh position={[28.5, 0.5, 5.2]} castShadow receiveShadow>
@@ -353,7 +349,6 @@ export function Furnishings() {
           <primitive object={M.blackAnodized} attach="material" />
         </mesh>
       </group>
-
       {/* Communal bench table */}
       {CAFE_BENCH_TABLES.map((t, i) => (
         <group key={i} position={t.position} rotation={t.rotation}>
@@ -375,7 +370,6 @@ export function Furnishings() {
           ))}
         </group>
       ))}
-
       {/* Round dining tables */}
       <Instances
         frustumCulled={false}
@@ -425,7 +419,6 @@ export function Furnishings() {
           <Instance key={i} position={[s.position[0], 0.25, s.position[2]]} />
         ))}
       </Instances>
-
       {/* Tall units / fridges */}
       {FRIDGES.map(([x, z, ry], i) => (
         <group key={i} position={[x, 0, z]} rotation={[0, ry, 0]}>
@@ -443,15 +436,12 @@ export function Furnishings() {
           </mesh>
         </group>
       ))}
-
       {/* Water dispenser */}
       <WaterCooler x={WATER_COOLER[0]} z={WATER_COOLER[1]} />
-
       {/* ---------------- Storage & utility ---------------- */}
       {CREDENZAS.map(([x, z, w, d, ry], i) => (
         <Credenza key={i} x={x} z={z} w={w} d={d} ry={ry} />
       ))}
-
       {PRINTERS.map(([x, z], i) => (
         <group key={i} position={[x, 0, z]}>
           <mesh position={[0, 0.35, 0]} castShadow receiveShadow>
@@ -472,12 +462,95 @@ export function Furnishings() {
           </mesh>
         </group>
       ))}
-
       {/* ---------------- Focus pods ---------------- */}
       {PHONE_BOOTHS.map((b, i) => (
         <PhoneBooth key={i} position={b.position} rotation={b.rotation} />
       ))}
-
+      {/* ---------------- Engineering: API key vending machine ----------------
+          NW corner of the desk rows, front facing the desks (+x). */}
+      <group position={[-32.5, 0, 1.2]} rotation={[0, Math.PI / 2, 0]}>
+        <mesh castShadow position={[0, 1.0, 0]}>
+          <boxGeometry args={[1.0, 2.0, 0.7]} />
+          <primitive object={M.tvBezel} attach="material" />
+        </mesh>
+        {/* glass display with key slots */}
+        <mesh position={[0, 1.15, 0.36]}>
+          <planeGeometry args={[0.72, 0.95]} />
+          <meshStandardMaterial
+            color="#0b1220"
+            emissive="#38bdf8"
+            emissiveIntensity={0.35}
+            roughness={0.2}
+            metalness={0.4}
+          />
+        </mesh>
+        {/* provider strips */}
+        {["#f97316", "#a78bfa", "#34d399"].map((c, i) => (
+          <mesh key={c} position={[-0.24 + i * 0.24, 1.15, 0.37]}>
+            <planeGeometry args={[0.16, 0.7]} />
+            <meshStandardMaterial
+              color={c}
+              emissive={c}
+              emissiveIntensity={0.8}
+            />
+          </mesh>
+        ))}
+        {/* header sign */}
+        <mesh position={[0, 1.9, 0.36]}>
+          <planeGeometry args={[0.72, 0.22]} />
+          <meshStandardMaterial
+            color="#fbbf24"
+            emissive="#fbbf24"
+            emissiveIntensity={1.2}
+          />
+        </mesh>
+        {/* pickup tray */}
+        <mesh castShadow position={[0, 0.32, 0.42]}>
+          <boxGeometry args={[0.6, 0.28, 0.3]} />
+          <primitive object={M.tvBezel} attach="material" />
+        </mesh>
+        <mesh position={[0, 0.32, 0.58]}>
+          <planeGeometry args={[0.5, 0.14]} />
+          <meshStandardMaterial color="#020617" roughness={0.6} />
+        </mesh>
+      </group>
+      {/* ---------------- AI Lab: fleet console (aisle east end) ----------------
+          Wall-mounted status board facing west down the server aisle. */}{" "}
+      <group position={[30.5, 0, -14.6]} rotation={[0, -Math.PI / 2, 0]}>
+        <mesh castShadow position={[0, 1.6, 0]}>
+          <boxGeometry args={[2.6, 1.7, 0.18]} />
+          <primitive object={M.tvBezel} attach="material" />
+        </mesh>
+        <mesh position={[0, 1.6, 0.1]}>
+          <planeGeometry args={[2.3, 1.4]} />
+          <primitive object={M.screen} attach="material" />
+        </mesh>
+        {/* status light strip */}
+        <mesh position={[0, 0.62, 0.1]}>
+          <boxGeometry args={[2.3, 0.08, 0.04]} />
+          <primitive object={M.ledCyan} attach="material" />
+        </mesh>
+        <mesh castShadow position={[0, 0.3, 0.15]}>
+          <boxGeometry args={[0.5, 0.6, 0.3]} />
+          <primitive object={M.tvBezel} attach="material" />
+        </mesh>
+      </group>
+      {/* ---------------- AI Lab: reviewer totem (aisle west mouth) ----------
+          Slim kiosk facing south into the aisle — second door to the bot. */}
+      <group position={[6, 0, -12.6]}>
+        <mesh castShadow position={[0, 0.85, 0]}>
+          <boxGeometry args={[0.7, 1.7, 0.4]} />
+          <primitive object={M.tvBezel} attach="material" />
+        </mesh>
+        <mesh position={[0, 1.25, -0.21]} rotation={[0, Math.PI, 0]}>
+          <planeGeometry args={[0.5, 0.6]} />
+          <primitive object={M.screen} attach="material" />
+        </mesh>
+        <mesh position={[0, 0.45, -0.21]} rotation={[0, Math.PI, 0]}>
+          <planeGeometry args={[0.5, 0.12]} />
+          <primitive object={M.ledCyan} attach="material" />
+        </mesh>
+      </group>
       {/* ---------------- AI Lab: server racks ---------------- */}
       <Instances
         frustumCulled={false}

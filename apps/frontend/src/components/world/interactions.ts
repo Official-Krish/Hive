@@ -7,10 +7,23 @@ export type InteractableKind =
   | "whiteboard"
   | "ci"
   | "chill-screen"
-  | "arcade";
+  | "arcade"
+  | "vending"
+  | "reviewer"
+  | "fleet"
+  | "reviewer-console";
 
 export type InteractableIcon =
-  "coffee" | "water" | "monitor" | "board" | "ci" | "chill" | "arcade";
+  | "coffee"
+  | "water"
+  | "monitor"
+  | "board"
+  | "ci"
+  | "chill"
+  | "arcade"
+  | "vending"
+  | "reviewer"
+  | "fleet";
 
 export interface Interactable {
   id: string;
@@ -138,6 +151,54 @@ const ARCADE: Interactable = {
   icon: "arcade",
 };
 
+/** API key vending machine in the engineering room's NW corner. */
+const VENDING: Interactable = {
+  id: "vending-machine",
+  kind: "vending",
+  x: -30.3,
+  z: 1.2,
+  y: 0,
+  radius: 2.4,
+  prompt: "API key vending",
+  icon: "vending",
+};
+
+/** Reviewer teammate nook — E opens what the bot is doing. */
+const REVIEWER: Interactable = {
+  id: "reviewer-desk",
+  kind: "reviewer",
+  x: -5.5,
+  z: 2.4,
+  y: 0,
+  radius: 2.2,
+  prompt: "Reviewer activity",
+  icon: "reviewer",
+};
+
+/** AI Lab fleet console — live agent sessions down the server aisle. */
+const FLEET: Interactable = {
+  id: "fleet-console",
+  kind: "fleet",
+  x: 28.5,
+  z: -14.6,
+  y: 0,
+  radius: 2.6,
+  prompt: "Agent fleet",
+  icon: "fleet",
+};
+
+/** Reviewer console at the lab's west entry — second door, same view. */
+const REVIEWER_CONSOLE: Interactable = {
+  id: "reviewer-console",
+  kind: "reviewer-console",
+  x: 6,
+  z: -14.6,
+  y: 0,
+  radius: 2.4,
+  prompt: "Reviewer activity",
+  icon: "reviewer",
+};
+
 /** Every desk gets a "workspace" monitor you can lean in and use. */
 function monitorSpots(): Interactable[] {
   return [...DESKS, ...L2_DESKS, ...POD_DESKS].map((d, i) => {
@@ -162,6 +223,10 @@ export const INTERACTABLES: Interactable[] = [
   ...CI_SCREENS,
   CHILL_SCREEN,
   ARCADE,
+  VENDING,
+  REVIEWER,
+  FLEET,
+  REVIEWER_CONSOLE,
   ...WHITEBOARD_SPOTS.map(([x, z], i): Interactable => ({
     id: `whiteboard-${i}`,
     kind: "whiteboard",

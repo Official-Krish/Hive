@@ -11,6 +11,14 @@ import type {
   UsageBudget,
   UsageBudgetInput,
   UsageSummary,
+  VendingAssignInput,
+  VendingAssignedKey,
+  VendingAvailability,
+  VendingCheckout,
+  VendingCheckoutRecord,
+  VendingPoolEntry,
+  VendingProvider,
+  VendingStockInput,
 } from "@hive/types";
 import { API_BASE_URL } from "./config";
 
@@ -182,6 +190,7 @@ export interface WorkspaceRepository {
   fullName: string | null;
   url: string | null;
   provider: string;
+  reviewEnabled?: boolean;
 }
 
 export interface WorkspaceSettings {
@@ -209,6 +218,24 @@ export interface GitHubInstallationView {
   repositoryCount: number;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ReviewActivity {
+  id: string;
+  prNumber: number;
+  title: string;
+  repoName: string;
+  status: string;
+  findingCount: number;
+  findings: Array<{
+    severity: string;
+    file: string;
+    line: number | null;
+    title: string;
+    detail: string;
+  }> | null;
+  costCents: number | null;
+  createdAt: string;
 }
 
 export interface WorkspaceMemberPublic {
@@ -389,6 +416,12 @@ export interface ActivitySummary {
 export interface AgentSessionSummary {
   id: string;
   agent: { id: string; name: string; type: string; model: string | null };
+  developer: {
+    id: string;
+    name: string;
+    email: string;
+    avatarUrl: string | null;
+  };
   status: string;
   title: string | null;
   summary: string | null;
@@ -748,6 +781,21 @@ export const http = {
       request("/api/v1/github/notifications/read-all", { method: "POST" }),
     installUrl: (workspaceId: string): Promise<{ url: string }> =>
       request(`/api/v1/github/${workspaceId}/app/install/url`),
+    reviewsSummary: (
+      workspaceId: string,
+      params?: { from?: string; to?: string },
+    ): Promise<{
+      reviewed: number;
+      findings: number;
+      costCents: number | null;
+    }> =>
+      request(`/api/v1/github/${workspaceId}/reviews/summary`, {
+        query: params,
+      }),
+    reviewsRecent: (
+      workspaceId: string,
+    ): Promise<{ reviews: ReviewActivity[] }> =>
+      request(`/api/v1/github/${workspaceId}/reviews/recent`),
     listInstallations: (
       workspaceId: string,
     ): Promise<{ installations: GitHubInstallationView[] }> =>
@@ -806,6 +854,16 @@ export const http = {
       request(
         `/api/v1/workspaces/${workspaceId}/settings/repositories/${repoId}`,
         { method: "DELETE" },
+      ),
+
+    setRepoReview: (
+      workspaceId: string,
+      repoId: string,
+      reviewEnabled: boolean,
+    ): Promise<{ repository: { id: string; reviewEnabled: boolean } }> =>
+      request(
+        `/api/v1/workspaces/${workspaceId}/settings/repositories/${repoId}/review`,
+        { method: "PATCH", body: { reviewEnabled } },
       ),
 
     members: {
@@ -1118,6 +1176,34 @@ export const http = {
         method: "PATCH",
         body: input,
       }),
+
+    vendingPool: (
+      workspaceId: string,
+    ): Promise<{ entries: VendingPoolEntry[] }> =>
+      request(`/api/v1/workspaces/${workspaceId}/vending/pool`),
+
+    vendingStock: (
+      workspaceId: string,
+      input: VendingStockInput,
+    ): Promise<{ entry: VendingPoolEntry }> =>
+      request(`/api/v1/workspaces/${workspaceId}/vending/pool`, {
+        method: "POST",
+        body: input,
+      }),
+
+    vendingCheckouts: (
+      workspaceId: string,
+    ): Promise<{ checkouts: VendingCheckoutRecord[] }> =>
+      request(`/api/v1/workspaces/${workspaceId}/vending/checkouts`),
+
+    vendingAssign: (
+      workspaceId: string,
+      input: VendingAssignInput,
+    ): Promise<{ checkout: VendingCheckoutRecord }> =>
+      request(`/api/v1/workspaces/${workspaceId}/vending/assign`, {
+        method: "POST",
+        body: input,
+      }),
   },
 
   models: {
@@ -1208,6 +1294,25 @@ export const http = {
       request(`/api/v1/workspaces/${workspaceId}/games/${gameId}/start`, {
         method: "PATCH",
       }),
+  },
+
+  vending: {
+    availability: (
+      workspaceId: string,
+    ): Promise<{ providers: VendingAvailability[] }> =>
+      request(`/api/v1/workspaces/${workspaceId}/vending/availability`),
+
+    checkout: (
+      workspaceId: string,
+      provider: VendingProvider,
+    ): Promise<VendingCheckout> =>
+      request(
+        `/api/v1/workspaces/${workspaceId}/vending/checkout/${provider}`,
+        { method: "POST" },
+      ),
+
+    myKeys: (workspaceId: string): Promise<{ keys: VendingAssignedKey[] }> =>
+      request(`/api/v1/workspaces/${workspaceId}/vending/my-keys`),
   },
 
   /* ── chat ── */

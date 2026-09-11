@@ -85,7 +85,7 @@ export function WorkspaceUsage() {
   const { workspaceId = "" } = useParams();
   const queryClient = useQueryClient();
   const [days, setDays] = useState<(typeof RANGE_DAYS)[number]>(30);
-  const [tab, setTab] = useState<"usage" | "throughput">("usage");
+  const [tab, setTab] = useState<"usage" | "throughput" | "keys">("usage");
   const [capInput, setCapInput] = useState("");
   const [alertInput, setAlertInput] = useState("80");
 
@@ -112,6 +112,66 @@ export function WorkspaceUsage() {
     queryKey: ["throughput", workspaceId, days],
     queryFn: () => http.reads.throughput(workspaceId, range),
     enabled: isAdmin && tab === "throughput",
+  });
+  const reviewsDigest = useQuery({
+    queryKey: ["reviews-summary", workspaceId, days],
+    queryFn: () => http.github.reviewsSummary(workspaceId, range),
+    enabled: isAdmin && tab === "throughput",
+  });
+  const pool = useQuery({
+    queryKey: ["vending-pool", workspaceId],
+    queryFn: () => http.reads.vendingPool(workspaceId),
+    enabled: isAdmin && tab === "keys",
+  });
+  const ledger = useQuery({
+    queryKey: ["vending-checkouts", workspaceId],
+    queryFn: () => http.reads.vendingCheckouts(workspaceId),
+    enabled: isAdmin && tab === "keys",
+  });
+  const wsMembers = useQuery({
+    queryKey: ["workspace-members", workspaceId],
+    queryFn: () => http.workspaces.members.list(workspaceId),
+    enabled: isAdmin && tab === "keys",
+  });
+  const [assignPool, setAssignPool] = useState("");
+  const [assignUser, setAssignUser] = useState("");
+  const [stockProvider, setStockProvider] = useState("claude");
+  const [stockLabel, setStockLabel] = useState("");
+  const [stockSecret, setStockSecret] = useState("");
+  const [stockCap, setStockCap] = useState("");
+  const assignMutation = useMutation({
+    mutationFn: () =>
+      http.reads.vendingAssign(workspaceId, {
+        poolId: assignPool,
+        userId: assignUser,
+      }),
+    onSuccess: () => {
+      setAssignPool("");
+      setAssignUser("");
+      void queryClient.invalidateQueries({
+        queryKey: ["vending-pool", workspaceId],
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ["vending-checkouts", workspaceId],
+      });
+    },
+  });
+  const stockMutation = useMutation({
+    mutationFn: () =>
+      http.reads.vendingStock(workspaceId, {
+        provider: stockProvider as "claude" | "opencode" | "codex",
+        label: stockLabel.trim(),
+        secret: stockSecret.trim(),
+        maxCheckouts: stockCap.trim() === "" ? null : Number(stockCap),
+      }),
+    onSuccess: () => {
+      setStockLabel("");
+      setStockSecret("");
+      setStockCap("");
+      void queryClient.invalidateQueries({
+        queryKey: ["vending-pool", workspaceId],
+      });
+    },
   });
 
   const budgetMutation = useMutation({
@@ -167,7 +227,7 @@ export function WorkspaceUsage() {
         <>
           <div className="mt-4 flex flex-wrap items-center gap-2">
             <div className="flex rounded-xl bg-white p-1 ring-1 ring-black/[0.07]">
-              {(["usage", "throughput"] as const).map((t) => (
+              {(["usage", "throughput", "keys"] as const).map((t) => (
                 <button
                   key={t}
                   type="button"
@@ -178,7 +238,11 @@ export function WorkspaceUsage() {
                       : "rounded-lg px-3 py-1.5 text-[13px] font-medium text-neutral-500 hover:text-neutral-900"
                   }
                 >
-                  {t === "usage" ? "Token usage" : "Throughput"}
+                  {t === "usage"
+                    ? "Token usage"
+                    : t === "throughput"
+                      ? "Throughput"
+                      : "API keys"}
                 </button>
               ))}
             </div>
@@ -450,85 +514,432 @@ export function WorkspaceUsage() {
           )}
 
           {tab === "throughput" && (
-            <Card>
-              <CardHead title={`Team throughput · ${days}d`} />
-              <div className="px-5 py-2">
-                {throughput.isLoading ? (
-                  <div className="py-4 text-sm text-neutral-400">Loading…</div>
-                ) : sortedThroughput.length === 0 ? (
-                  <div className="py-4 text-sm text-neutral-400">
-                    No members found.
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left text-[13px]">
-                      <thead>
-                        <tr className="text-[11px] uppercase tracking-wide text-neutral-400">
-                          <th className="py-2 pr-3 font-semibold">Member</th>
-                          <th className="py-2 pr-3 text-right font-semibold">
-                            Tasks
-                          </th>
-                          <th className="py-2 pr-3 text-right font-semibold">
-                            PRs
-                          </th>
-                          <th className="py-2 pr-3 text-right font-semibold">
-                            Tests ✓/✗
-                          </th>
-                          <th className="py-2 pr-3 text-right font-semibold">
-                            Cost
-                          </th>
-                          <th className="py-2 text-right font-semibold">
-                            $/task
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {sortedThroughput.map((m) => (
-                          <tr
-                            key={m.userId}
-                            className="border-t border-black/[0.05]"
-                          >
-                            <td className="py-2 pr-3 font-semibold">
-                              {m.name}
-                            </td>
-                            <td className="py-2 pr-3 text-right font-mono">
-                              {m.tasksCompleted}
-                            </td>
-                            <td className="py-2 pr-3 text-right font-mono">
-                              {m.prsMerged}
-                            </td>
-                            <td className="py-2 pr-3 text-right font-mono">
-                              <span className="text-emerald-600">
-                                {m.testsPassed}
-                              </span>
-                              /
-                              <span
-                                className={
-                                  m.testsFailed > 0 ? "text-rose-600" : ""
-                                }
-                              >
-                                {m.testsFailed}
-                              </span>
-                            </td>
-                            <td className="py-2 pr-3 text-right font-mono">
-                              {fmtMoney(m.costCents)}
-                            </td>
-                            <td className="py-2 text-right font-mono">
-                              {m.costPerTaskCents !== null
-                                ? fmtMoney(m.costPerTaskCents)
-                                : "—"}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+            <>
+              {reviewsDigest.data &&
+                (reviewsDigest.data.reviewed > 0 ||
+                  reviewsDigest.data.findings > 0) && (
+                  <Card className="mb-4 flex flex-wrap items-center gap-x-6 gap-y-2 p-5">
+                    <Stat
+                      label="PRs reviewed"
+                      value={String(reviewsDigest.data.reviewed)}
+                    />
+                    <Stat
+                      label="Findings"
+                      value={String(reviewsDigest.data.findings)}
+                    />
+                    <Stat
+                      label="Review spend"
+                      value={fmtMoney(reviewsDigest.data.costCents)}
+                    />
+                    <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-neutral-400">
+                      Reviewer teammate · {days}d
+                    </span>
+                  </Card>
                 )}
-              </div>
-            </Card>
+              <Card>
+                <CardHead title={`Team throughput · ${days}d`} />
+                <div className="px-5 py-2">
+                  {throughput.isLoading ? (
+                    <div className="py-4 text-sm text-neutral-400">
+                      Loading…
+                    </div>
+                  ) : sortedThroughput.length === 0 ? (
+                    <div className="py-4 text-sm text-neutral-400">
+                      No members found.
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-[13px]">
+                        <thead>
+                          <tr className="text-[11px] uppercase tracking-wide text-neutral-400">
+                            <th className="py-2 pr-3 font-semibold">Member</th>
+                            <th className="py-2 pr-3 text-right font-semibold">
+                              Tasks
+                            </th>
+                            <th className="py-2 pr-3 text-right font-semibold">
+                              PRs
+                            </th>
+                            <th className="py-2 pr-3 text-right font-semibold">
+                              Tests ✓/✗
+                            </th>
+                            <th className="py-2 pr-3 text-right font-semibold">
+                              Cost
+                            </th>
+                            <th className="py-2 text-right font-semibold">
+                              $/task
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {sortedThroughput.map((m) => (
+                            <tr
+                              key={m.userId}
+                              className="border-t border-black/[0.05]"
+                            >
+                              <td className="py-2 pr-3 font-semibold">
+                                {m.name}
+                              </td>
+                              <td className="py-2 pr-3 text-right font-mono">
+                                {m.tasksCompleted}
+                              </td>
+                              <td className="py-2 pr-3 text-right font-mono">
+                                {m.prsMerged}
+                              </td>
+                              <td className="py-2 pr-3 text-right font-mono">
+                                <span className="text-emerald-600">
+                                  {m.testsPassed}
+                                </span>
+                                /
+                                <span
+                                  className={
+                                    m.testsFailed > 0 ? "text-rose-600" : ""
+                                  }
+                                >
+                                  {m.testsFailed}
+                                </span>
+                              </td>
+                              <td className="py-2 pr-3 text-right font-mono">
+                                {fmtMoney(m.costCents)}
+                              </td>
+                              <td className="py-2 text-right font-mono">
+                                {m.costPerTaskCents !== null
+                                  ? fmtMoney(m.costPerTaskCents)
+                                  : "—"}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </Card>
+            </>
+          )}
+
+          {tab === "keys" && (
+            <KeysTab
+              pool={pool.data?.entries ?? []}
+              loading={pool.isLoading}
+              checkouts={ledger.data?.checkouts ?? []}
+              members={wsMembers.data ?? []}
+              assignPool={assignPool}
+              setAssignPool={setAssignPool}
+              assignUser={assignUser}
+              setAssignUser={setAssignUser}
+              assigning={assignMutation.isPending}
+              assignError={assignMutation.isError}
+              onAssign={() => assignMutation.mutate()}
+              stockProvider={stockProvider}
+              setStockProvider={setStockProvider}
+              stockLabel={stockLabel}
+              setStockLabel={setStockLabel}
+              stockSecret={stockSecret}
+              setStockSecret={setStockSecret}
+              stockCap={stockCap}
+              setStockCap={setStockCap}
+              stocking={stockMutation.isPending}
+              stockError={stockMutation.isError}
+              stockOk={stockMutation.isSuccess}
+              onStock={() => stockMutation.mutate()}
+            />
           )}
         </>
       )}
+    </div>
+  );
+}
+
+function KeysTab({
+  pool,
+  loading,
+  checkouts,
+  members,
+  assignPool,
+  setAssignPool,
+  assignUser,
+  setAssignUser,
+  assigning,
+  assignError,
+  onAssign,
+  stockProvider,
+  setStockProvider,
+  stockLabel,
+  setStockLabel,
+  stockSecret,
+  setStockSecret,
+  stockCap,
+  setStockCap,
+  stocking,
+  stockError,
+  stockOk,
+  onStock,
+}: {
+  pool: Array<{
+    id: string;
+    provider: string;
+    label: string;
+    status: string;
+    checkoutCount: number;
+    maxCheckouts: number | null;
+  }>;
+  loading: boolean;
+  checkouts: Array<{
+    id: string;
+    provider: string;
+    label: string;
+    userName: string;
+    revealedAt: string;
+    assignedByName: string | null;
+  }>;
+  members: Array<{ userId: string; name: string }>;
+  assignPool: string;
+  setAssignPool: (v: string) => void;
+  assignUser: string;
+  setAssignUser: (v: string) => void;
+  assigning: boolean;
+  assignError: boolean;
+  onAssign: () => void;
+  stockProvider: string;
+  setStockProvider: (v: string) => void;
+  stockLabel: string;
+  setStockLabel: (v: string) => void;
+  stockSecret: string;
+  setStockSecret: (v: string) => void;
+  stockCap: string;
+  setStockCap: (v: string) => void;
+  stocking: boolean;
+  stockError: boolean;
+  stockOk: boolean;
+  onStock: () => void;
+}) {
+  const total = pool.length;
+  const taken = pool.filter((e) => e.checkoutCount > 0).length;
+  const untaken = pool.filter(
+    (e) => e.checkoutCount === 0 && e.status === "available",
+  ).length;
+  const available = pool.filter((e) => e.status === "available");
+
+  return (
+    <div className="mt-4 flex flex-col gap-4">
+      <Card className="grid grid-cols-3 gap-6 p-5">
+        <Stat label="Total keys" value={String(total)} />
+        <Stat label="Taken" value={String(taken)} />
+        <Stat label="Untaken" value={String(untaken)} />
+      </Card>
+
+      <Card>
+        <CardHead
+          title="Stock a key"
+          hint="Admins only — encrypted at rest, hashed for lookup"
+        />
+        <div className="flex flex-wrap items-end gap-3 px-5 py-4">
+          <label className="flex w-32 flex-col gap-1 text-[12px] font-medium text-neutral-500">
+            Provider
+            <select
+              value={stockProvider}
+              onChange={(e) => setStockProvider(e.target.value)}
+              className="rounded-xl bg-white px-3 py-2 text-[13px] text-neutral-900 ring-1 ring-black/[0.1]"
+            >
+              <option value="claude">Claude</option>
+              <option value="opencode">OpenCode</option>
+              <option value="codex">Codex</option>
+            </select>
+          </label>
+          <label className="flex min-w-36 flex-1 flex-col gap-1 text-[12px] font-medium text-neutral-500">
+            Label
+            <input
+              value={stockLabel}
+              onChange={(e) => setStockLabel(e.target.value)}
+              placeholder="team-key-1"
+              className="rounded-xl bg-white px-3 py-2 text-[13px] text-neutral-900 ring-1 ring-black/[0.1]"
+            />
+          </label>
+          <label className="flex min-w-44 flex-[2] flex-col gap-1 text-[12px] font-medium text-neutral-500">
+            Secret (paste once — never shown again)
+            <input
+              value={stockSecret}
+              onChange={(e) => setStockSecret(e.target.value)}
+              placeholder="sk-…"
+              autoComplete="off"
+              spellCheck={false}
+              className="rounded-xl bg-white px-3 py-2 font-mono text-[13px] text-neutral-900 ring-1 ring-black/[0.1]"
+            />
+          </label>
+          <label className="flex w-24 flex-col gap-1 text-[12px] font-medium text-neutral-500">
+            Max reveals
+            <input
+              value={stockCap}
+              onChange={(e) => setStockCap(e.target.value)}
+              placeholder="∞"
+              inputMode="numeric"
+              className="rounded-xl bg-white px-3 py-2 text-[13px] text-neutral-900 ring-1 ring-black/[0.1]"
+            />
+          </label>
+          <Btn
+            disabled={
+              !stockLabel.trim() || stockSecret.trim().length < 8 || stocking
+            }
+            onClick={onStock}
+          >
+            {stocking ? "Stocking…" : "Stock key"}
+          </Btn>
+        </div>
+        {stockError && (
+          <div className="px-5 pb-4 text-[12px] font-medium text-rose-600">
+            Could not stock — it may already exist.
+          </div>
+        )}
+        {stockOk && (
+          <div className="px-5 pb-4 text-[12px] font-medium text-emerald-600">
+            Key stocked — ready in the machine.
+          </div>
+        )}
+      </Card>
+
+      <Card>
+        <CardHead title="Assign a key" hint="Admins grant keys to members" />
+        <div className="flex flex-wrap items-end gap-3 px-5 py-4">
+          <label className="flex min-w-44 flex-1 flex-col gap-1 text-[12px] font-medium text-neutral-500">
+            Key
+            <select
+              value={assignPool}
+              onChange={(e) => setAssignPool(e.target.value)}
+              className="rounded-xl bg-white px-3 py-2 text-[13px] text-neutral-900 ring-1 ring-black/[0.1]"
+            >
+              <option value="">Select a stocked key…</option>
+              {available.map((e) => (
+                <option key={e.id} value={e.id}>
+                  {e.provider} · {e.label} ({e.checkoutCount}
+                  {e.maxCheckouts !== null ? `/${e.maxCheckouts}` : ""} taken)
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex min-w-44 flex-1 flex-col gap-1 text-[12px] font-medium text-neutral-500">
+            Member
+            <select
+              value={assignUser}
+              onChange={(e) => setAssignUser(e.target.value)}
+              className="rounded-xl bg-white px-3 py-2 text-[13px] text-neutral-900 ring-1 ring-black/[0.1]"
+            >
+              <option value="">Select a member…</option>
+              {members.map((m) => (
+                <option key={m.userId} value={m.userId}>
+                  {m.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <Btn
+            disabled={!assignPool || !assignUser || assigning}
+            onClick={onAssign}
+          >
+            {assigning ? "Assigning…" : "Assign key"}
+          </Btn>
+        </div>
+        {assignError && (
+          <div className="px-5 pb-4 text-[12px] font-medium text-rose-600">
+            Could not assign — the key may be exhausted.
+          </div>
+        )}
+      </Card>
+
+      <Card>
+        <CardHead title="Taken keys" hint="Who holds what" />
+        <div className="px-5 py-2">
+          {loading ? (
+            <div className="py-4 text-sm text-neutral-400">Loading…</div>
+          ) : checkouts.length === 0 ? (
+            <div className="py-4 text-sm text-neutral-400">
+              No checkouts yet.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-[13px]">
+                <thead>
+                  <tr className="text-[11px] uppercase tracking-wide text-neutral-400">
+                    <th className="py-2 pr-3 font-semibold">Key</th>
+                    <th className="py-2 pr-3 font-semibold">Holder</th>
+                    <th className="py-2 pr-3 font-semibold">Via</th>
+                    <th className="py-2 text-right font-semibold">Taken</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {checkouts.map((c) => (
+                    <tr key={c.id} className="border-t border-black/[0.05]">
+                      <td className="py-2 pr-3 font-semibold">
+                        {c.provider} · {c.label}
+                      </td>
+                      <td className="py-2 pr-3">{c.userName}</td>
+                      <td className="py-2 pr-3 text-neutral-500">
+                        {c.assignedByName
+                          ? `assigned by ${c.assignedByName}`
+                          : "self checkout"}
+                      </td>
+                      <td className="py-2 text-right font-mono text-neutral-500">
+                        {new Date(c.revealedAt).toLocaleDateString("en-US", {
+                          month: "short",
+                          day: "numeric",
+                        })}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </Card>
+
+      <Card>
+        <CardHead title="Stock" hint="Every stocked key + status" />
+        <div className="px-5 py-2">
+          {loading ? (
+            <div className="py-4 text-sm text-neutral-400">Loading…</div>
+          ) : pool.length === 0 ? (
+            <div className="py-4 text-sm text-neutral-500">
+              Nothing stocked yet — stock keys from the API (admin endpoint).
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-[13px]">
+                <thead>
+                  <tr className="text-[11px] uppercase tracking-wide text-neutral-400">
+                    <th className="py-2 pr-3 font-semibold">Key</th>
+                    <th className="py-2 pr-3 font-semibold">Status</th>
+                    <th className="py-2 text-right font-semibold">Checkouts</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pool.map((e) => (
+                    <tr key={e.id} className="border-t border-black/[0.05]">
+                      <td className="py-2 pr-3 font-semibold">
+                        {e.provider} · {e.label}
+                      </td>
+                      <td className="py-2 pr-3">
+                        <span
+                          className={
+                            e.status === "available"
+                              ? "rounded-full bg-emerald-600/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-700"
+                              : "rounded-full bg-neutral-900/[0.05] px-2 py-0.5 text-[11px] font-semibold text-neutral-500"
+                          }
+                        >
+                          {e.status}
+                        </span>
+                      </td>
+                      <td className="py-2 text-right font-mono">
+                        {e.checkoutCount}
+                        {e.maxCheckouts !== null ? `/${e.maxCheckouts}` : ""}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </Card>
     </div>
   );
 }

@@ -132,6 +132,65 @@ export class GitHubAppClient {
     const data = (await response.json()) as GitHubAppRepositoryList;
     return data.repositories ?? [];
   }
+
+  private async installationFetch(
+    installationId: string,
+    path: string,
+    init?: RequestInit,
+    accept = "application/vnd.github+json",
+  ): Promise<Response> {
+    const { token } = await this.getInstallationToken(installationId);
+    return fetch(`${this.apiBaseUrl}${path}`, {
+      ...init,
+      headers: {
+        Accept: accept,
+        Authorization: `Bearer ${token}`,
+        "X-GitHub-Api-Version": "2022-11-28",
+        ...(init?.headers ?? {}),
+      },
+    });
+  }
+
+  /** Unified diff for a pull request (empty string when unobtainable). */
+  async getPullDiff(
+    installationId: string,
+    fullName: string,
+    prNumber: number,
+  ): Promise<string> {
+    const response = await this.installationFetch(
+      installationId,
+      `/repos/${fullName}/pulls/${prNumber}`,
+      undefined,
+      "application/vnd.github.diff",
+    );
+    if (!response.ok) {
+      throw new Error(`GitHub pull diff failed: ${response.status}`);
+    }
+    return response.text();
+  }
+
+  /** Post a comment on a PR (issue-comments API — comment-only authority). */
+  async postPullComment(
+    installationId: string,
+    fullName: string,
+    prNumber: number,
+    body: string,
+  ): Promise<{ id: string }> {
+    const response = await this.installationFetch(
+      installationId,
+      `/repos/${fullName}/issues/${prNumber}/comments`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ body }),
+      },
+    );
+    if (!response.ok) {
+      throw new Error(`GitHub post comment failed: ${response.status}`);
+    }
+    const data = (await response.json()) as { id: number };
+    return { id: String(data.id) };
+  }
 }
 
 export const OAUTH_SCOPES = ["read:user", "user:email", "repo"];

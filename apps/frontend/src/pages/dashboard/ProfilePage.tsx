@@ -22,6 +22,7 @@ import {
   Spinner,
   inputClass,
 } from "@/components/dashboard/kit";
+import { AvatarPicker } from "@/components/dashboard/AvatarPicker";
 import { timeAgo } from "@/components/dashboard/primitives";
 
 export function ProfilePage() {
@@ -63,7 +64,10 @@ export function ProfilePage() {
       />
       <div className="max-w-2xl space-y-4">
         <IdentityCard />
-        <Avatar3DRow hasAvatar={!!user.mapAvatarModel} />
+        <Avatar3DRow
+          hasAvatar={!!user.mapAvatarModel}
+          currentModel={user.mapAvatarModel ?? null}
+        />
         <OrganizationsCard organizations={organizations} />
         <PasswordCard />
         <MachinesCard />
@@ -170,7 +174,38 @@ function IdentityCard() {
 }
 
 /* ── 3D avatar ─────────────────────────────────────────────── */
-function Avatar3DRow({ hasAvatar }: { hasAvatar: boolean }) {
+function Avatar3DRow({
+  hasAvatar,
+  currentModel,
+}: {
+  hasAvatar: boolean;
+  currentModel: string | null;
+}) {
+  const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [selected, setSelected] = useState<string | null>(null);
+
+  const mutation = useMutation({
+    mutationFn: (modelUrl: string) =>
+      http.auth.updateProfile({ mapAvatarModel: modelUrl }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["me"] });
+      notifySuccess("Avatar updated");
+      setOpen(false);
+    },
+    onError: (err) =>
+      notifyError(
+        err instanceof ApiError
+          ? err.message
+          : "Couldn't save your avatar. Try again.",
+      ),
+  });
+
+  const toggle = (): void => {
+    setSelected(currentModel);
+    setOpen((v) => !v);
+  };
+
   return (
     <Card>
       <div className="flex items-center justify-between gap-4 px-5 py-4">
@@ -195,13 +230,34 @@ function Avatar3DRow({ hasAvatar }: { hasAvatar: boolean }) {
             </p>
           </div>
         </div>
-        <Link
-          to="/dashboard/avatar"
+        <button
+          type="button"
+          onClick={toggle}
           className="flex-shrink-0 rounded-full border border-neutral-900/15 px-4 py-2 text-[13px] font-medium text-neutral-700 transition-colors hover:border-neutral-900/30 hover:text-neutral-900"
         >
-          {hasAvatar ? "Change" : "Pick one"}
-        </Link>
+          {open ? "Close" : hasAvatar ? "Change" : "Pick one"}
+        </button>
       </div>
+      {open && (
+        <div className="border-t border-neutral-900/[0.07] px-5 py-4">
+          <AvatarPicker selected={selected} onSelect={setSelected} />
+          <div className="mt-4 flex items-center gap-3">
+            <Btn
+              disabled={!selected || mutation.isPending}
+              onClick={() => selected && mutation.mutate(selected)}
+            >
+              {mutation.isPending && <Spinner />}
+              {mutation.isPending ? "Saving…" : "Save avatar"}
+            </Btn>
+            <Link
+              to="/dashboard/avatar"
+              className="text-[13px] font-medium text-neutral-500 hover:text-neutral-900"
+            >
+              Full-screen picker
+            </Link>
+          </div>
+        </div>
+      )}
     </Card>
   );
 }

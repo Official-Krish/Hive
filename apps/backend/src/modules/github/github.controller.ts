@@ -240,6 +240,28 @@ export class GitHubController {
     res.json({ data: { success: true } });
   };
 
+  reviewsSummary = async (req: Request, res: Response): Promise<void> => {
+    const workspaceId =
+      typeof req.params.workspaceId === "string" ? req.params.workspaceId : "";
+    const from =
+      typeof req.query.from === "string" ? new Date(req.query.from) : undefined;
+    const to =
+      typeof req.query.to === "string" ? new Date(req.query.to) : undefined;
+    res.json({
+      data: await this.githubService.reviewSummary(workspaceId, from, to),
+    });
+  };
+
+  reviewsRecent = async (req: Request, res: Response): Promise<void> => {
+    const workspaceId =
+      typeof req.params.workspaceId === "string" ? req.params.workspaceId : "";
+    res.json({
+      data: {
+        reviews: await this.githubService.recentReviews(workspaceId),
+      },
+    });
+  };
+
   private safeNext(raw: unknown): string {
     const fallback = env.clientOrigins[0] ?? env.API_URL;
     if (typeof raw !== "string" || raw.length === 0 || raw.length > 2048) {

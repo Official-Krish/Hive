@@ -19,6 +19,9 @@ const RING_COLOR: Record<Interactable["icon"], string> = {
   ci: "#34d399",
   chill: "#f472b6",
   arcade: "#a78bfa",
+  vending: "#fbbf24",
+  reviewer: "#2dd4bf",
+  fleet: "#22d3ee",
 };
 
 const RANGE = 8;
@@ -101,6 +104,49 @@ function drawGlyph(ctx: CanvasRenderingContext2D, icon: Interactable["icon"]) {
       ctx.moveTo(38, 88);
       ctx.quadraticCurveTo(64, 80, 90, 88);
       ctx.stroke();
+      break;
+    case "vending": // key
+      ctx.beginPath();
+      ctx.arc(48, 52, 18, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(62, 66);
+      ctx.lineTo(92, 96);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(82, 86);
+      ctx.lineTo(90, 78);
+      ctx.moveTo(90, 94);
+      ctx.lineTo(98, 86);
+      ctx.stroke();
+      break;
+    case "reviewer": // magnifier + check
+      ctx.beginPath();
+      ctx.arc(52, 52, 22, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(68, 68);
+      ctx.lineTo(92, 92);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(44, 53);
+      ctx.lineTo(51, 60);
+      ctx.lineTo(62, 46);
+      ctx.stroke();
+      break;
+    case "fleet": // server stack
+      ctx.strokeRect(34, 30, 60, 20);
+      ctx.strokeRect(34, 54, 60, 20);
+      ctx.strokeRect(34, 78, 60, 20);
+      ctx.beginPath();
+      ctx.arc(44, 40, 3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(44, 64, 3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(44, 88, 3, 0, Math.PI * 2);
+      ctx.fill();
       break;
   }
 }
