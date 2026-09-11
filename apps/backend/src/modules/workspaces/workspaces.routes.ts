@@ -4,6 +4,7 @@ import {
   createGithubInviteInputSchema,
   createInviteInputSchema,
   createWorkspaceInputSchema,
+  repoReviewInputSchema,
   transferOwnershipSchema,
   updateMemberRoleSchema,
   updateWorkspaceInputSchema,
@@ -71,6 +72,13 @@ workspacesRouter.delete(
   requireWorkspaceMember(),
   requireWorkspaceRole("maintainer", "admin", "owner"),
   controller.unlinkRepo,
+);
+workspacesRouter.patch(
+  "/:workspaceId/settings/repositories/:id/review",
+  requireWorkspaceMember(),
+  requireWorkspaceRole("maintainer", "admin", "owner"),
+  validateBody(repoReviewInputSchema),
+  controller.repoReview,
 );
 
 workspacesRouter.post(

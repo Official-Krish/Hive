@@ -157,6 +157,7 @@ export class WorkspaceService {
         fullName: repo.githubFullName ?? repo.name,
         url: repo.url,
         provider: repo.provider,
+        reviewEnabled: repo.reviewEnabled,
       })),
     };
   }
@@ -205,6 +206,28 @@ export class WorkspaceService {
       where: { id: repositoryId },
       data: { workspaceId: null },
     });
+  }
+
+  async setRepoReview(
+    workspaceId: string,
+    userId: string,
+    repositoryId: string,
+    reviewEnabled: boolean,
+  ): Promise<{ id: string; reviewEnabled: boolean }> {
+    await this.assertMinRank(workspaceId, userId, roleRank("maintainer"));
+    const repo = await prisma.repository.findFirst({
+      where: { id: repositoryId, workspaceId },
+      select: { id: true },
+    });
+    if (!repo) {
+      throw new NotFoundError("Repository is not linked to this workspace");
+    }
+    const updated = await prisma.repository.update({
+      where: { id: repositoryId },
+      data: { reviewEnabled },
+      select: { id: true, reviewEnabled: true },
+    });
+    return updated;
   }
 
   private async assignRepositoryInternal(
