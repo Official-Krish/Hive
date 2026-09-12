@@ -87,7 +87,14 @@ export type WhiteboardStroke = z.infer<typeof whiteboardStrokeSchema>;
 // the broadcast topic).
 // ---------------------------------------------------------------------------
 
-export const gameKindSchema = z.enum(["chess", "connect4", "ludo", "uno"]);
+export const gameKindSchema = z.enum([
+  "chess",
+  "connect4",
+  "ludo",
+  "uno",
+  "checkers",
+  "battleship",
+]);
 export type GameKind = z.infer<typeof gameKindSchema>;
 
 export const gameStatusSchema = z.enum(["pending", "active", "finished"]);
@@ -146,6 +153,15 @@ export const gameMoveSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("connect4"),
     col: z.number().int().min(0).max(6),
+  }),
+  z.object({
+    kind: z.literal("checkers"),
+    from: z.number().int().min(0).max(63),
+    to: z.number().int().min(0).max(63),
+  }),
+  z.object({
+    kind: z.literal("battleship"),
+    fire: z.number().int().min(0).max(99),
   }),
   // Ludo: two-step roll-then-pick. roll = throw the dice (server rolls);
   // token = move that token under the pending roll.
