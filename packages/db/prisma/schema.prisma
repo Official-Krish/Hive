@@ -1032,6 +1032,8 @@ enum GameKind {
   CONNECT4
   LUDO
   UNO
+  CHECKERS
+  BATTLESHIP
 }
 
 enum GameStatus {
