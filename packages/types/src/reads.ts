@@ -289,9 +289,77 @@ export interface AlertSummary {
   status: string;
   developerId: string | null;
   agentSessionId: string | null;
+  /** Structured detector payload (session/repo/budget refs). Privacy-gated. */
+  metadata: unknown;
   createdAt: string;
   resolvedAt: string | null;
 }
+
+// ---------------------------------------------------------------------------
+// Watchdog — proactive engineering alerts over already-ingested telemetry.
+// Detectors run in @hive/worker (watchdog.check); rows are plain Alert rows
+// (Alert.type is free-form, no migration needed). Messages are template-based
+// and cost-free; sensitive values travel only in metadata so PrivacyGate can
+// strip them per workspace settings.
+// ---------------------------------------------------------------------------
+
+export const watchdogAlertTypeSchema = z.enum([
+  "agent.stuck",
+  "token.burn",
+  "test.failing_streak",
+  "budget.risk",
+]);
+export type WatchdogAlertType = z.infer<typeof watchdogAlertTypeSchema>;
+
+export const agentStuckMetadataSchema = z.object({
+  sessionId: z.string(),
+  developerId: z.string().nullable().optional(),
+  status: z.string(),
+  stuckMinutes: z.number(),
+});
+export type AgentStuckMetadata = z.infer<typeof agentStuckMetadataSchema>;
+
+export const tokenBurnMetadataSchema = z.object({
+  sessionId: z.string(),
+  developerId: z.string().nullable().optional(),
+  windowTokens: z.number(),
+  windowCostCents: z.number().nullable(),
+});
+export type TokenBurnMetadata = z.infer<typeof tokenBurnMetadataSchema>;
+
+export const testFailingStreakMetadataSchema = z.object({
+  repositoryId: z.string().nullable(),
+  repositoryName: z.string().nullable(),
+  branch: z.string().nullable(),
+  command: z.string().nullable(),
+  consecutiveFailures: z.number(),
+});
+export type TestFailingStreakMetadata = z.infer<
+  typeof testFailingStreakMetadataSchema
+>;
+
+export const budgetRiskMetadataSchema = z.object({
+  period: z.string(),
+  monthSpendCents: z.number(),
+  monthlyCapCents: z.number(),
+  pct: z.number(),
+});
+export type BudgetRiskMetadata = z.infer<typeof budgetRiskMetadataSchema>;
+
+/** Tunable defaults — mirrored by worker env (WATCHDOG_* overrides). */
+export const WATCHDOG_DEFAULTS = {
+  /** WARNING when stuck this long, CRITICAL at 3x. */
+  stuckWarningMin: 10,
+  /** Burn window + flag threshold (tokens in 60m with zero output). */
+  burnWindowMin: 60,
+  burnTokens: 200_000,
+  /** Escalate burn to CRITICAL above this session-window cost. */
+  burnCostCents: 500,
+  /** Consecutive failures on same repo+branch+command. */
+  failStreak: 3,
+  /** Cap OPEN watchdog alerts per workspace per type (spam guard). */
+  maxOpenPerType: 20,
+} as const;
 
 export interface TaskSummary {
   id: string;

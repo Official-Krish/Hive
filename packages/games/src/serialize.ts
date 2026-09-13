@@ -11,6 +11,12 @@ import {
   type ChessState,
 } from "./chess";
 import { initialC4State, type C4Cell, type C4State } from "./connect4";
+import {
+  initialCheckerState,
+  type CheckerSquare,
+  type CheckerState,
+} from "./checkers";
+import { BS_CELLS, BS_SIZE, type BsCell, type BsState } from "./battleship";
 import { initialLudoState, type LudoState } from "./ludo";
 import {
   unoCardFromString,
@@ -167,7 +173,6 @@ export function c4StateFromString(s: string, turn: "R" | "Y"): C4State {
   const moves = cells.flat().filter((c) => c !== null).length;
   return { ...base, cells, turn, moves };
 }
-
 /** Ludo → `seats:turn:lastRoll:pending:sixes:tokens` (groups `;`-separated). */
 export function ludoToString(state: LudoState): string {
   const groups = state.tokens.map((row) => row.join(",")).join(";");
@@ -298,4 +303,195 @@ export function unoStateFromString(s: string): UnoState {
     winner: null,
     moves,
   };
+}
+
+/** Checkers → 64-char string, top rank first (`.` empty, r/R/b/B). */
+export function checkersToString(state: CheckerState): string {
+  let out = "";
+  for (let r = 7; r >= 0; r--) {
+    for (let f = 0; f < 8; f++) {
+      const p = state.board[r * 8 + f]!;
+      if (!p) out += ".";
+      else if (p.color === "R") out += p.rank === "king" ? "R" : "r";
+      else out += p.rank === "king" ? "B" : "b";
+    }
+  }
+  return out;
+}
+
+/** 64-char string → board grid (turn/status set by the caller). */
+export function checkerBoardFromString(s: string): CheckerSquare[] {
+  if (!/^[.rRbB]{64}$/.test(s)) throw new Error(`Bad checkers string: ${s}`);
+  const board: CheckerSquare[] = [];
+  for (let r = 7; r >= 0; r--) {
+    for (let f = 0; f < 8; f++) {
+      const ch = s[(7 - r) * 8 + f]!;
+      board[r * 8 + f] =
+        ch === "."
+          ? null
+          : ch === "r"
+            ? { color: "R", rank: "man" }
+            : ch === "R"
+              ? { color: "R", rank: "king" }
+              : ch === "b"
+                ? { color: "B", rank: "man" }
+                : { color: "B", rank: "king" };
+    }
+  }
+  return board;
+}
+
+export function checkerStateFromString(
+  s: string,
+  turn: "R" | "B",
+): CheckerState {
+  const base = initialCheckerState();
+  const board = checkerBoardFromString(s);
+  // Plies aren't recoverable (captures remove pieces); the backend owns it.
+  return { ...base, board, turn, moves: 0 };
+}
+
+function bsGridToString(grid: BsCell[]): string {
+  return grid
+    .map((c) =>
+      c === null ? "." : c === "ship" ? "S" : c === "hit" ? "H" : "M",
+    )
+    .join("");
+}
+
+function bsGridFromString(s: string, which: "fleet" | "shots"): BsCell[] {
+  if (!/^[.SHM]{100}$/.test(s))
+    throw new Error(`Bad battleship grid: ${which}`);
+  return [...s].map((ch): BsCell => {
+    if (ch === ".") return null;
+    if (ch === "S") {
+      if (which !== "fleet") throw new Error(`Ship in shots grid`);
+      return "ship";
+    }
+    if (ch === "H") return "hit";
+    if (ch === "M") {
+      if (which !== "fleet") return "miss";
+      throw new Error(`Miss in fleet grid`);
+    }
+    throw new Error(`Bad battleship cell: ${ch}`);
+  });
+}
+
+/** Battleship full state (server-side + DB only — never broadcast). */
+export function bsToString(state: BsState): string {
+  const parts = [
+    ...state.fleets.map(bsGridToString),
+    ...state.shots.map(bsGridToString),
+  ].join("|");
+  return `2:${state.turn}:${state.moves}:${parts}`;
+}
+
+export function bsStateFromString(s: string): BsState {
+  const m = s.match(/^2:([01]):(\d+):([^|]*)\|([^|]*)\|([^|]*)\|([^|]*)$/);
+  if (!m) throw new Error(`Bad battleship string: ${s}`);
+  const fleets = [
+    bsGridFromString(m[3]!, "fleet"),
+    bsGridFromString(m[4]!, "fleet"),
+  ];
+  const shots = [
+    bsGridFromString(m[5]!, "shots"),
+    bsGridFromString(m[6]!, "shots"),
+  ];
+  return {
+    seats: 2,
+    fleets: fleets as [BsCell[], BsCell[]],
+    shots: shots as [BsCell[], BsCell[]],
+    turn: parseInt(m[1]!, 10) as 0 | 1,
+    status: "playing",
+    winner: null,
+    moves: parseInt(m[2]!, 10),
+  };
+}
+
+/**
+ * Broadcast-safe board: both public shot maps + revealed sunk cells.
+ * Format: `turn:moves:shots0|shots1|sunk0|sunk1` (sunk = comma indices).
+ * Fleets stay secret; each seat's own fleet travels per-viewer.
+ */
+export function bsPublicToString(state: BsState): string {
+  const sunkOf = (fleet: BsCell[]): string => {
+    const seen = new Set<number>();
+    const out: number[] = [];
+    for (let i = 0; i < BS_CELLS; i++) {
+      if (fleet[i] === "hit" && !seen.has(i)) {
+        const ship = bsShipCellsForPublic(fleet, i);
+        for (const c of ship) seen.add(c);
+        if (ship.every((c) => fleet[c] === "hit")) out.push(...ship);
+      }
+    }
+    return out.sort((a, b) => a - b).join(",");
+  };
+  return (
+    `${state.turn}:${state.moves}:` +
+    `${bsGridToString(state.shots[0]!)}|${bsGridToString(state.shots[1]!)}|` +
+    `${sunkOf(state.fleets[0]!)}|${sunkOf(state.fleets[1]!)}`
+  );
+}
+
+function bsShipCellsForPublic(fleet: BsCell[], cell: number): number[] {
+  const seen = new Set<number>([cell]);
+  const stack = [cell];
+  while (stack.length > 0) {
+    const cur = stack.pop()!;
+    const r = Math.floor(cur / BS_SIZE);
+    const c = cur % BS_SIZE;
+    for (const [dr, dc] of [
+      [1, 0],
+      [-1, 0],
+      [0, 1],
+      [0, -1],
+    ] as const) {
+      const rr = r + dr;
+      const cc = c + dc;
+      if (rr < 0 || rr >= BS_SIZE || cc < 0 || cc >= BS_SIZE) continue;
+      const n = rr * BS_SIZE + cc;
+      if (!seen.has(n) && (fleet[n] === "ship" || fleet[n] === "hit")) {
+        seen.add(n);
+        stack.push(n);
+      }
+    }
+  }
+  return [...seen];
+}
+
+export interface BsPublic {
+  turn: number;
+  moves: number;
+  shots: [BsCell[], BsCell[]];
+  sunk: [number[], number[]];
+}
+
+export function bsPublicFromString(s: string): BsPublic {
+  const m = s.match(/^([01]):(\d+):([^|]*)\|([^|]*)\|([^|]*)\|([^|]*)$/);
+  if (!m) throw new Error(`Bad battleship public string: ${s}`);
+  const list = (p: string): number[] =>
+    p === "" ? [] : p.split(",").map(Number);
+  const sunk0 = list(m[5]!);
+  const sunk1 = list(m[6]!);
+  if (
+    [...sunk0, ...sunk1].some(
+      (n) => !Number.isInteger(n) || n < 0 || n >= BS_CELLS,
+    )
+  ) {
+    throw new Error(`Bad battleship sunk: ${s}`);
+  }
+  return {
+    turn: parseInt(m[1]!, 10),
+    moves: parseInt(m[2]!, 10),
+    shots: [
+      bsGridFromString(m[3]!, "shots"),
+      bsGridFromString(m[4]!, "shots"),
+    ] as [BsCell[], BsCell[]],
+    sunk: [sunk0, sunk1],
+  };
+}
+
+/** One seat's own fleet grid (unicast only — never broadcast). */
+export function bsFleetFor(state: BsState, seat: number): string {
+  return bsGridToString(state.fleets[seat] ?? []);
 }

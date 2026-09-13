@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { FaGithub, FaLinkedin, FaSquareXTwitter } from "react-icons/fa6";
+import { HiveMark } from "../icons/HiveMark";
 
 const COLUMNS: { title: string; links: { label: string; to: string }[] }[] = [
   {
@@ -37,22 +38,33 @@ const COLUMNS: { title: string; links: { label: string; to: string }[] }[] = [
   },
 ];
 
-export const Footer = () => {
+export const Footer = ({ tone = "dark" }: { tone?: "dark" | "light" }) => {
+  const light = tone === "light";
+  const brand = light ? "text-neutral-900" : "text-white";
+  const muted = light ? "text-neutral-500" : "text-neutral-400";
+  const link = light
+    ? "text-neutral-900 text-sm leading-5 font-medium hover:underline"
+    : "text-white text-sm leading-5 font-medium hover:underline";
+  const hairline = light ? "border-neutral-900/10" : "border-white/10";
+  const icon = light
+    ? "text-neutral-500 hover:text-neutral-900 size-6 transition-colors"
+    : "text-neutral-400 hover:text-white size-6 transition-colors";
   return (
     <div
       data-slot="container"
-      className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 flex flex-col gap-20 sm:gap-30 pt-16 sm:pt-20 pb-10"
+      className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 flex flex-col gap-20 sm:gap-30 pt-16 sm:pt-20 pb-10 border-t border-neutral-900/10 dark:border-white/10"
     >
       <div className="relative z-10 flex flex-col items-center justify-center gap-12 sm:gap-18">
         <div className="grid w-full grid-cols-1 gap-10 lg:grid-cols-2 lg:gap-0">
           <div className="flex flex-col gap-4">
             <Link
-              className="flex items-center gap-2 font-bold text-xl text-white"
+              className={`flex items-center gap-2 font-bold text-xl ${brand}`}
               to="/"
             >
+              <HiveMark className="size-7 text-white transition-transform duration-300 group-hover:scale-105" />
               <span>Hive</span>
             </Link>
-            <span className="text-neutral-400 text-sm leading-5">
+            <span className={`${muted} text-sm leading-5`}>
               Where your team and AI agents build together.
             </span>
           </div>
@@ -60,7 +72,9 @@ export const Footer = () => {
           <div className="grid grid-cols-2 gap-10 sm:grid-cols-4 md:gap-0">
             {COLUMNS.map((col) => (
               <div key={col.title} className="flex flex-col gap-4">
-                <h3 className="text-neutral-400 tracking-tight text-xs leading-5 font-medium">
+                <h3
+                  className={`${muted} tracking-tight text-xs leading-5 font-medium`}
+                >
                   {col.title}
                 </h3>
                 <ul className="flex flex-col gap-4">
@@ -68,7 +82,7 @@ export const Footer = () => {
                     l.to.startsWith("http") ? (
                       <li key={l.label}>
                         <a
-                          className="text-white text-sm leading-5 font-medium hover:underline"
+                          className={link}
                           href={l.to}
                           target="_blank"
                           rel="noopener noreferrer"
@@ -78,10 +92,7 @@ export const Footer = () => {
                       </li>
                     ) : (
                       <li key={l.label}>
-                        <Link
-                          className="text-white text-sm leading-5 font-medium hover:underline"
-                          to={l.to}
-                        >
+                        <Link className={link} to={l.to}>
                           {l.label}
                         </Link>
                       </li>
@@ -93,7 +104,9 @@ export const Footer = () => {
           </div>
         </div>
 
-        <div className="flex w-full flex-col justify-between gap-6 md:flex-row md:items-center md:gap-0 pt-6 border-t border-white/10">
+        <div
+          className={`flex w-full flex-col justify-between gap-6 md:flex-row md:items-center md:gap-0 pt-6 border-t ${hairline}`}
+        >
           <div>
             <span className="flex items-center gap-1">
               <svg
@@ -123,7 +136,7 @@ export const Footer = () => {
                   </clipPath>
                 </defs>
               </svg>
-              <span className="text-neutral-400 text-xs leading-5 font-medium">
+              <span className={`${muted} text-xs leading-5 font-medium`}>
                 2026 Hive All Rights Reserved
               </span>
             </span>
@@ -136,7 +149,7 @@ export const Footer = () => {
               href="https://x.com/KrishAnand0103"
               aria-label="Hive on X"
             >
-              <FaSquareXTwitter className="text-neutral-400 hover:text-white size-6 transition-colors" />
+              <FaSquareXTwitter className={icon} />
             </a>
             <a
               target="_blank"
@@ -144,7 +157,7 @@ export const Footer = () => {
               href="https://linkedin.com"
               aria-label="Hive on LinkedIn"
             >
-              <FaLinkedin className="text-neutral-400 hover:text-white size-6 transition-colors" />
+              <FaLinkedin className={icon} />
             </a>
             <a
               target="_blank"
@@ -152,7 +165,7 @@ export const Footer = () => {
               href="https://github.com/Official-Krish/hive/"
               aria-label="Hive on GitHub"
             >
-              <FaGithub className="text-neutral-400 hover:text-white size-6 transition-colors" />
+              <FaGithub className={icon} />
             </a>
           </div>
         </div>

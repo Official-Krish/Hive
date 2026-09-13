@@ -981,3 +981,110 @@ describe("party games", () => {
     }
   });
 });
+
+describe("checkers over websocket", () => {
+  test("opening move relays and flips the turn", async () => {
+    const { alice, bob, workspaceId: wid } = await twoPlayers();
+    const createRes = await authed(
+      `/api/v1/workspaces/${wid}/games`,
+      alice.cookie,
+      {
+        method: "POST",
+        body: JSON.stringify({ kind: "checkers", opponentId: bob.userId }),
+      },
+    );
+    expect(createRes.status).toBe(201);
+    const created = (await createRes.json()) as {
+      data: { session: GameSession };
+    };
+    // Initial board: 12 red men in ranks 1-3.
+    expect(created.data.session.board.replace(/[^r]/g, "")).toHaveLength(12);
+    await authed(
+      `/api/v1/workspaces/${wid}/games/${created.data.session.id}/accept`,
+      bob.cookie,
+      { method: "PATCH" },
+    );
+    const a = await connectSocket(alice.cookie, wid);
+    const b = await connectSocket(bob.cookie, wid);
+    try {
+      // d3 (19) → e4 (28).
+      a.send({
+        type: "game.move",
+        gameId: created.data.session.id,
+        move: { kind: "checkers", from: 19, to: 28 },
+      });
+      const s1 = await a.waitFor(
+        "game.state",
+        (e) => e.session.moveCount === 1,
+      );
+      expect(s1.session.turnUserId).toBe(bob.userId);
+      await b.waitFor("game.state", (e) => e.session.moveCount === 1);
+      // Backward onto own man — rejected to the sender only.
+      b.send({
+        type: "game.move",
+        gameId: created.data.session.id,
+        move: { kind: "checkers", from: 44, to: 53 },
+      });
+      const rej = await b.waitFor("game.move.rejected");
+      expect(rej.gameId).toBe(created.data.session.id);
+    } finally {
+      a.close();
+      b.close();
+    }
+  });
+});
+
+describe("battleship over websocket", () => {
+  test("shots resolve, privacy holds on broadcast", async () => {
+    const { alice, bob, workspaceId: wid } = await twoPlayers();
+    const createRes = await authed(
+      `/api/v1/workspaces/${wid}/games`,
+      alice.cookie,
+      {
+        method: "POST",
+        body: JSON.stringify({ kind: "battleship", opponentId: bob.userId }),
+      },
+    );
+    expect(createRes.status).toBe(201);
+    const created = (await createRes.json()) as {
+      data: { session: GameSession };
+    };
+    // Broadcast board carries no ships.
+    expect(created.data.session.board).not.toContain("S");
+    expect(created.data.session.hand).toBeUndefined();
+    await authed(
+      `/api/v1/workspaces/${wid}/games/${created.data.session.id}/accept`,
+      bob.cookie,
+      { method: "PATCH" },
+    );
+    const a = await connectSocket(alice.cookie, wid);
+    try {
+      a.send({
+        type: "game.move",
+        gameId: created.data.session.id,
+        move: { kind: "battleship", fire: 0 },
+      });
+      const s1 = await a.waitFor(
+        "game.state",
+        (e) => e.session.moveCount === 1,
+      );
+      expect(s1.session.turnUserId).toBe(bob.userId);
+      expect(s1.session.board).not.toContain("S");
+      // Unicast carries my fleet privately.
+      a.send({
+        type: "game.state.request",
+        gameId: created.data.session.id,
+      });
+      const mine = await a.waitFor(
+        "game.state",
+        (e) =>
+          e.session.id === created.data.session.id &&
+          e.session.hand !== undefined,
+      );
+      expect(mine.session.hand![0]).toHaveLength(100);
+      expect(mine.session.hand![0]).toContain("S");
+    } finally {
+      a.close();
+    }
+  });
+});

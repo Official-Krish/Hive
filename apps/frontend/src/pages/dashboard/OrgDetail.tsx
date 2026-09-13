@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ApiError, http, type OrgSummary } from "@/lib/http";
 import {
   BackLink,
+  Btn,
   Card,
   Note,
   PageHead,
@@ -39,9 +40,16 @@ export function OrgDetail() {
       <div>
         <BackLink to="/dashboard">Overview</BackLink>
         <Note tone="error">
-          {missing
-            ? "This organization doesn't exist or you're not a member."
-            : "We couldn't load this organization."}
+          <span className="flex flex-wrap items-center gap-3">
+            <span>
+              {missing
+                ? "This organization doesn't exist or you're not a member."
+                : "We couldn't load this organization."}
+            </span>
+            <Btn variant="ghost" onClick={() => org.refetch()}>
+              Retry
+            </Btn>
+          </span>
         </Note>
       </div>
     );

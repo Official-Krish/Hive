@@ -1,9 +1,12 @@
 import type { ChessMove, ChessState } from "./chess";
 import type { C4Move, C4State } from "./connect4";
+import type { CheckersMove, CheckerState } from "./checkers";
+import type { BsMove, BsState } from "./battleship";
 import type { LudoRoll, LudoState } from "./ludo";
 import type { UnoMove, UnoState } from "./uno";
 
-export type GameKind = "chess" | "connect4" | "ludo" | "uno";
+export type GameKind =
+  "chess" | "connect4" | "ludo" | "uno" | "checkers" | "battleship";
 
 /** Seat names in turn order — index 0 moves first. */
 export const SEAT_NAMES = ["first", "second", "third", "fourth"] as const;
@@ -22,6 +25,8 @@ export const GAME_LIMITS: Record<GameKind, { min: number; max: number }> = {
   connect4: { min: 2, max: 2 },
   ludo: { min: 2, max: 4 },
   uno: { min: 2, max: 4 },
+  checkers: { min: 2, max: 2 },
+  battleship: { min: 2, max: 2 },
 };
 
 /** First seat moves first in both games (White in chess, Red in C4). */
@@ -47,13 +52,17 @@ export type GameClientMove =
   | { kind: "chess"; move: ChessMove }
   | { kind: "connect4"; move: C4Move }
   | { kind: "ludo"; move: LudoRoll }
-  | { kind: "uno"; move: UnoMove };
+  | { kind: "uno"; move: UnoMove }
+  | { kind: "checkers"; move: CheckersMove }
+  | { kind: "battleship"; move: BsMove };
 
 export type GameSnapshot =
   | { kind: "chess"; state: ChessState }
   | { kind: "connect4"; state: C4State }
   | { kind: "ludo"; state: LudoState }
-  | { kind: "uno"; state: UnoState };
+  | { kind: "uno"; state: UnoState }
+  | { kind: "checkers"; state: CheckerState }
+  | { kind: "battleship"; state: BsState };
 
 export type GameMoveError =
   "not-your-turn" | "not-seated" | "bad-move" | "game-over" | "unknown-match";
@@ -98,4 +107,26 @@ export function resultFromLudo(state: LudoState): PartyGameResult {
 export function resultFromUno(state: UnoState): PartyGameResult {
   if (state.status !== "win" || state.winner === null) return null;
   return { outcome: "win", winner: state.winner };
+}
+
+export function resultFromCheckers(state: CheckerState): GameResult | null {
+  if (state.status === "playing") return null;
+  if (state.status === "win" && state.winner) {
+    return {
+      outcome: "win",
+      winner: state.winner === "R" ? "first" : "second",
+    };
+  }
+  return { outcome: "draw", reason: "forty quiet moves" };
+}
+
+export function resultFromBs(state: BsState): GameResult | null {
+  if (state.status === "playing") return null;
+  if (state.status === "win" && state.winner !== null) {
+    return {
+      outcome: "win",
+      winner: state.winner === 0 ? "first" : "second",
+    };
+  }
+  return null;
 }

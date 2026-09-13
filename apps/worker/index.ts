@@ -49,6 +49,10 @@ scheduler.every("finalize.activities", env.FINALIZE_INTERVAL_MS, () => ({
   name: "finalize.activities",
   payload: {},
 }));
+scheduler.every("watchdog.check", env.WATCHDOG_INTERVAL_MS, () => ({
+  name: "watchdog.check",
+  payload: {},
+}));
 
 scheduler.start();
 logger.info("hive worker started");

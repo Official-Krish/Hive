@@ -1,4 +1,11 @@
+import { Link } from "react-router-dom";
 import { StaticPage } from "@/components/layout/StaticPage";
+
+const SECTIONS = [
+  { id: "what", label: "What Hive is" },
+  { id: "principles", label: "What we believe" },
+  { id: "open", label: "Open source" },
+];
 
 export function AboutPage() {
   return (
@@ -6,6 +13,7 @@ export function AboutPage() {
       eyebrow="Company · About"
       title="Where your team and AI agents build together"
       description="Hive turns raw AI-coding activity into a living picture of what your team is building — developers, agents, and everything they ship, in one shared workspace."
+      sections={SECTIONS}
     >
       <h2 id="what">What Hive is</h2>
       <p>
@@ -41,7 +49,16 @@ export function AboutPage() {
       <p>
         Hive is MIT-licensed. The platform, event contracts, and local collector
         live in the open — audit them, self-host them, contribute back. Find us
-        on <a href="https://github.com">GitHub</a>.
+        on{" "}
+        <a
+          href="https://github.com/Official-Krish/hive"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          GitHub
+        </a>
+        . New here? <Link to="/install">Install the collector</Link> or read our{" "}
+        <Link to="/security">security model</Link>.
       </p>
     </StaticPage>
   );

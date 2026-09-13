@@ -16,8 +16,8 @@ import { http } from "@/lib/http";
 import { HiveMark } from "@/components/icons/HiveMark";
 
 const navLinks = [
-  { label: "FAQ", href: "#faq" },
-  { label: "Launch", href: "/auth" },
+  { label: "FAQ", to: "/#faq" },
+  { label: "Launch", to: "/auth" },
 ];
 
 const authNavLinks = [{ label: "Dashboard", href: "/dashboard" }];
@@ -25,6 +25,14 @@ const authNavLinks = [{ label: "Dashboard", href: "/dashboard" }];
 export function AppBar() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  // Solidify over light sections (FAQ) once the hero scrolls away.
+  const [scrolled, setScrolled] = useState(false);
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 24);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
   const profileRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
@@ -64,7 +72,9 @@ export function AppBar() {
     >
       <div
         className={cn(
-          "max-w-container mx-auto px-4 lg:px-8 flex h-16 items-center justify-between",
+          "max-w-container mx-auto px-4 lg:px-8 flex h-16 items-center justify-between rounded-2xl transition-all duration-300",
+          scrolled &&
+            "border border-white/10 bg-[#08090D]/80 shadow-[0_12px_40px_-12px_rgba(0,0,0,0.7)] backdrop-blur-xl",
         )}
       >
         {/* Brand Logo Box */}
@@ -98,13 +108,13 @@ export function AppBar() {
             ))
           ) : (
             navLinks.map((link) => (
-              <a
+              <Link
                 key={link.label}
-                href={link.href}
+                to={link.to}
                 className="px-3 py-2 text-sm font-medium text-neutral-300 hover:text-white transition-colors duration-200"
               >
                 {link.label}
-              </a>
+              </Link>
             ))
           )}
         </nav>
@@ -266,15 +276,15 @@ export function AppBar() {
             ))
           ) : (
             navLinks.map((link) => (
-              <a
+              <Link
                 key={link.label}
-                href={link.href}
+                to={link.to}
                 className="flex items-center justify-between rounded-lg px-4 py-2.5 text-sm font-medium text-neutral-200 hover:bg-white/5 hover:text-white transition-colors"
                 onClick={() => setMenuOpen(false)}
               >
                 <span>{link.label}</span>
                 <FiArrowUpRight className="text-xs opacity-40" />
-              </a>
+              </Link>
             ))
           )}
           {user ? (

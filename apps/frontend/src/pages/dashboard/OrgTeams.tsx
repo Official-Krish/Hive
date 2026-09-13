@@ -5,13 +5,13 @@ import { FiChevronDown, FiPlus } from "react-icons/fi";
 import { ApiError, http } from "@/lib/http";
 import {
   Avatar,
+  BaselineField,
   Btn,
   ConfirmBtn,
-  Field,
   Note,
   RoleBadge,
   Spinner,
-  inputClass,
+  baselineInputClass,
 } from "@/components/dashboard/kit";
 import { notifyError, notifySuccess } from "@/lib/toast";
 import type { OrgOutletContext } from "./OrgDetail";
@@ -59,7 +59,16 @@ export function OrgTeams() {
   }
 
   if (teams.isError) {
-    return <Note tone="error">We couldn't load the teams.</Note>;
+    return (
+      <Note tone="error">
+        <span className="flex flex-wrap items-center gap-3">
+          <span>We couldn&apos;t load the teams.</span>
+          <Btn variant="ghost" onClick={() => teams.refetch()}>
+            Retry
+          </Btn>
+        </span>
+      </Note>
+    );
   }
 
   return (
@@ -75,7 +84,7 @@ export function OrgTeams() {
         <Note>No teams yet. Teams group members inside this organization.</Note>
       )}
 
-      <div className="space-y-2">
+      <div className="divide-y divide-neutral-900/[0.07] border-t border-neutral-900/10">
         {teams.data?.map((t) => (
           <TeamCard
             key={t.id}
@@ -109,30 +118,30 @@ function CreateTeamForm({
         setName("");
         setSlug("");
       }}
-      className="flex flex-wrap items-end gap-2 rounded-lg border border-neutral-900/[0.08] bg-white p-3"
+      className="flex flex-wrap items-end gap-4 border-t border-neutral-900/10 py-4"
     >
       <div className="min-w-[160px] flex-1">
-        <Field label="New team name">
+        <BaselineField label="New team name">
           <input
-            className={inputClass}
+            className={baselineInputClass}
             value={name}
             onChange={(e) => setName(e.target.value)}
             maxLength={60}
             placeholder="Platform"
           />
-        </Field>
+        </BaselineField>
       </div>
       <div className="min-w-[160px] flex-1">
-        <Field label="Slug (optional)">
+        <BaselineField label="Slug (optional)">
           <input
-            className={inputClass}
+            className={baselineInputClass}
             value={slug}
             onChange={(e) => setSlug(e.target.value)}
             maxLength={40}
             placeholder="platform"
             spellCheck={false}
           />
-        </Field>
+        </BaselineField>
       </div>
       <Btn type="submit" disabled={busy || !name.trim()}>
         <FiPlus className="size-4" aria-hidden />
@@ -234,8 +243,8 @@ function TeamCard({
   const candidates = orgMemberOptions.filter((m) => !inTeam.has(m.userId));
 
   return (
-    <div className="rounded-lg border border-neutral-900/[0.08] bg-white">
-      <div className="flex items-center justify-between gap-3 px-3 py-2.5">
+    <div className="py-1">
+      <div className="flex items-center justify-between gap-3 py-2.5">
         <button
           type="button"
           className="flex min-w-0 flex-1 items-center gap-2 text-left"
@@ -249,13 +258,13 @@ function TeamCard({
             )}
             aria-hidden
           />
-          <span className="truncate text-[13px] font-medium text-neutral-800">
+          <span className="truncate text-[14px] font-semibold text-neutral-800">
             {team.name}
           </span>
-          <span className="truncate font-mono text-[11px] text-neutral-400">
+          <span className="data-mono truncate text-[11px] text-neutral-400">
             {team.slug}
           </span>
-          <span className="flex-shrink-0 text-[11px] tabular-nums text-neutral-400">
+          <span className="data-mono flex-shrink-0 text-[11px] tabular-nums text-neutral-400">
             {team.memberCount} member{team.memberCount === 1 ? "" : "s"}
           </span>
         </button>
@@ -272,13 +281,22 @@ function TeamCard({
       </div>
 
       {open && (
-        <div className="space-y-2 border-t border-neutral-900/[0.08] px-3 py-3">
+        <div className="space-y-2 py-2">
           {members.isLoading && (
             <div className="flex items-center gap-2.5 text-sm text-neutral-500">
               <Spinner /> Loading members…
             </div>
           )}
-          {members.isError && <Note tone="error">Couldn't load members.</Note>}
+          {members.isError && (
+            <Note tone="error">
+              <span className="flex flex-wrap items-center gap-3">
+                <span>Couldn&apos;t load members.</span>
+                <Btn variant="ghost" onClick={() => members.refetch()}>
+                  Retry
+                </Btn>
+              </span>
+            </Note>
+          )}
 
           {(members.data ?? []).map((m) => {
             const rowBusy =
@@ -288,7 +306,7 @@ function TeamCard({
             return (
               <div
                 key={m.userId}
-                className="flex items-center justify-between gap-3 rounded-lg bg-white px-3 py-2"
+                className="flex items-center justify-between gap-3 py-2"
               >
                 <div className="flex min-w-0 items-center gap-2.5">
                   <Avatar
@@ -311,7 +329,7 @@ function TeamCard({
                   {isOwner ? (
                     <>
                       <select
-                        className={`${inputClass} h-8 w-auto px-2 text-xs`}
+                        className={`${baselineInputClass} h-8 w-auto px-0 text-xs`}
                         value={m.role}
                         disabled={rowBusy}
                         onChange={(e) =>
@@ -351,12 +369,12 @@ function TeamCard({
                 if (!pickUserId) return;
                 addMember.mutate({ userId: pickUserId, role: pickRole });
               }}
-              className="flex flex-wrap items-end gap-2 border-t border-neutral-900/[0.08] pt-3"
+              className="flex flex-wrap items-end gap-4 border-t border-neutral-900/[0.08] pt-4"
             >
               <div className="min-w-[160px] flex-1">
-                <Field label="Add member">
+                <BaselineField label="Add member">
                   <select
-                    className={inputClass}
+                    className={baselineInputClass}
                     value={pickUserId}
                     onChange={(e) => setPickUserId(e.target.value)}
                   >
@@ -367,12 +385,12 @@ function TeamCard({
                       </option>
                     ))}
                   </select>
-                </Field>
+                </BaselineField>
               </div>
               <div>
-                <Field label="Role">
+                <BaselineField label="Role">
                   <select
-                    className={inputClass}
+                    className={baselineInputClass}
                     value={pickRole}
                     onChange={(e) => setPickRole(e.target.value)}
                   >
@@ -382,7 +400,7 @@ function TeamCard({
                       </option>
                     ))}
                   </select>
-                </Field>
+                </BaselineField>
               </div>
               <Btn type="submit" disabled={addMember.isPending || !pickUserId}>
                 <FiPlus className="size-4" aria-hidden />

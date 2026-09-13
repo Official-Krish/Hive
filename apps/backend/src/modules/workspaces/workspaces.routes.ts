@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, raw } from "express";
 import {
   linkRepoInputSchema,
   createGithubInviteInputSchema,
@@ -135,6 +135,12 @@ workspacesRouter.delete(
   controller.revokeInvite,
 );
 
+workspacesRouter.post(
+  "/:workspaceId/thumbnail",
+  requireWorkspaceMember(),
+  raw({ type: ["image/png", "image/jpeg"], limit: "1mb" }),
+  controller.setThumbnail,
+);
 workspacesRouter.post(
   "/:workspaceId/livekit/token",
   requireWorkspaceMember(),

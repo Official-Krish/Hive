@@ -180,6 +180,9 @@ export interface WorkspaceSummary {
   role: string;
   memberCount: number;
   createdAt: string;
+  /** Auto-captured world screenshot (S3 URL), null until first capture. */
+  thumbnailUrl: string | null;
+  thumbnailUpdatedAt: string | null;
   /** Full webhook secret, only present on create/rotate responses. */
   webhookSecret?: string;
 }
@@ -459,10 +462,13 @@ export interface MetricSummary {
 
 export interface AlertSummary {
   id: string;
-  title: string;
-  status: string;
   severity: string;
-  message: string | null;
+  type: string;
+  message: string;
+  status: string;
+  developerId: string | null;
+  agentSessionId: string | null;
+  metadata: unknown;
   createdAt: string;
   resolvedAt: string | null;
 }
@@ -829,6 +835,32 @@ export const http = {
 
     remove: (workspaceId: string): Promise<{ success: boolean }> =>
       request(`/api/v1/workspaces/${workspaceId}`, { method: "DELETE" }),
+
+    uploadThumbnail: (
+      workspaceId: string,
+      blob: Blob,
+      keepalive = false,
+    ): Promise<WorkspaceSummary> =>
+      fetch(`${API_BASE_URL}/api/v1/workspaces/${workspaceId}/thumbnail`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": blob.type || "image/jpeg" },
+        body: blob,
+        keepalive,
+      }).then(async (res) => {
+        if (!res.ok) {
+          const json = (await res.json().catch(() => null)) as {
+            error?: { code?: string; message?: string };
+          } | null;
+          throw new ApiError(
+            res.status,
+            json?.error?.code ?? "REQUEST_FAILED",
+            json?.error?.message ?? `Request failed with status ${res.status}`,
+          );
+        }
+        const json = (await res.json()) as { data: WorkspaceSummary };
+        return json.data;
+      }),
 
     getSettings: (workspaceId: string): Promise<WorkspaceSettings> =>
       request(`/api/v1/workspaces/${workspaceId}/settings`),

@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { StaticPage } from "@/components/layout/StaticPage";
 
 const SECTIONS = [
@@ -92,10 +93,10 @@ export function SecurityPage() {
       <h2 id="report">Report an issue</h2>
       <p>
         Found a vulnerability? Email{" "}
-        <a href="mailto:contact@hive.dev">contact@hive.dev</a> with details and
-        reproduction steps. We take reports seriously and will acknowledge
+        <a href="mailto:security@hive.dev">security@hive.dev</a> with details
+        and reproduction steps. We take reports seriously and will acknowledge
         within two business days. General privacy questions are covered in our{" "}
-        <a href="/privacy">Privacy Policy</a>.
+        <Link to="/privacy">Privacy Policy</Link>.
       </p>
     </StaticPage>
   );

@@ -371,12 +371,31 @@ export function LudoBoard({
         ctx.strokeRect(X(c) - CELL / 2, Y(r) - CELL / 2, CELL, CELL);
       });
       const [ar, ac] = col[0]!;
+      // entry chevron (drawn triangle, no font glyphs)
+      const cx = X(ac);
+      const cy = Y(ar);
+      const s2 = CELL * 0.22;
       ctx.fillStyle = "#ffffff";
-      ctx.font = `bold ${CELL * 0.55}px system-ui`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      const arrow = y === 0 ? "↓" : y === 1 ? "←" : y === 2 ? "↑" : "→";
-      ctx.fillText(arrow, X(ac), Y(ar) + 1);
+      ctx.beginPath();
+      if (y === 0) {
+        ctx.moveTo(cx, cy + s2);
+        ctx.lineTo(cx - s2, cy - s2 * 0.7);
+        ctx.lineTo(cx + s2, cy - s2 * 0.7);
+      } else if (y === 1) {
+        ctx.moveTo(cx - s2, cy);
+        ctx.lineTo(cx + s2 * 0.7, cy - s2);
+        ctx.lineTo(cx + s2 * 0.7, cy + s2);
+      } else if (y === 2) {
+        ctx.moveTo(cx, cy - s2);
+        ctx.lineTo(cx - s2, cy + s2 * 0.7);
+        ctx.lineTo(cx + s2, cy + s2 * 0.7);
+      } else {
+        ctx.moveTo(cx + s2, cy);
+        ctx.lineTo(cx - s2 * 0.7, cy - s2);
+        ctx.lineTo(cx - s2 * 0.7, cy + s2);
+      }
+      ctx.closePath();
+      ctx.fill();
     }
 
     // colored start cells

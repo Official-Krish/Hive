@@ -14,12 +14,14 @@ import type {
   WorkspaceSummary,
 } from "@hive/types";
 import {
+  BadRequestError,
   ConflictError,
   ForbiddenError,
   NotFoundError,
   WorkspaceLimitError,
 } from "../../core/errors";
 import { env } from "../../config/env";
+import { thumbnailKey, uploadFile, deleteFile } from "../../lib/s3";
 import { generateRandomToken, hashToken } from "../../lib/crypto";
 import { decryptSecret } from "../../lib/encryption";
 import { GitHubClient, type GitHubRepoDetail } from "../../lib/github";
@@ -33,12 +35,42 @@ import {
 
 const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_OWNED_WORKSPACES = 3;
+const MAX_THUMBNAIL_BYTES = 1024 * 1024;
+
+function isPng(body: Buffer): boolean {
+  return (
+    body.length >= 8 &&
+    body[0] === 0x89 &&
+    body[1] === 0x50 &&
+    body[2] === 0x4e &&
+    body[3] === 0x47
+  );
+}
+
+function isJpeg(body: Buffer): boolean {
+  return (
+    body.length >= 3 && body[0] === 0xff && body[1] === 0xd8 && body[2] === 0xff
+  );
+}
+
+/** Extracts the S3 key from a stored thumbnail URL (same public base). */
+function keyFromUrl(url: string | null): string | null {
+  if (!url) return null;
+  try {
+    const path = new URL(url).pathname.replace(/^\/+/, "");
+    return path.startsWith("hive/thumbnails/") ? path : null;
+  } catch {
+    return null;
+  }
+}
 
 type WorkspaceWithCount = {
   id: string;
   name: string;
   slug: string;
   description: string | null;
+  thumbnailUrl: string | null;
+  thumbnailUpdatedAt: Date | null;
   createdAt: Date;
   _count: { members: number };
 };
@@ -56,6 +88,8 @@ export class WorkspaceService {
             name: true,
             slug: true,
             description: true,
+            thumbnailUrl: true,
+            thumbnailUpdatedAt: true,
             createdAt: true,
             _count: { select: { members: true } },
           },
@@ -76,6 +110,8 @@ export class WorkspaceService {
             name: true,
             slug: true,
             description: true,
+            thumbnailUrl: true,
+            thumbnailUpdatedAt: true,
             createdAt: true,
             _count: { select: { members: true } },
           },
@@ -116,6 +152,8 @@ export class WorkspaceService {
         slug: true,
         description: true,
         webhookSecret: true,
+        thumbnailUrl: true,
+        thumbnailUpdatedAt: true,
         createdAt: true,
         _count: { select: { members: true } },
       },
@@ -160,6 +198,77 @@ export class WorkspaceService {
         reviewEnabled: repo.reviewEnabled,
       })),
     };
+  }
+
+  /**
+   * Stores a world screenshot for the workspace. Bytes are uploaded as-is —
+   * no resizing or re-encoding. Type is verified by magic bytes, not headers.
+   */
+  async setThumbnail(
+    workspaceId: string,
+    body: Buffer,
+    contentType: string,
+  ): Promise<WorkspaceSummary> {
+    const ext =
+      contentType === "image/png" && isPng(body)
+        ? "png"
+        : contentType === "image/jpeg" && isJpeg(body)
+          ? "jpg"
+          : null;
+    if (!ext) throw new BadRequestError("Body must be a PNG or JPEG image");
+    if (body.length === 0) throw new BadRequestError("Empty upload");
+    if (body.length > MAX_THUMBNAIL_BYTES) {
+      throw new BadRequestError("Image must be under 1MB");
+    }
+
+    const previous = await prisma.workspace.findUnique({
+      where: { id: workspaceId },
+      select: { thumbnailUrl: true },
+    });
+    if (!previous) throw new NotFoundError("Workspace not found");
+
+    const url = await uploadFile(
+      thumbnailKey(workspaceId, ext),
+      body,
+      contentType,
+    );
+    // Best-effort cleanup of the superseded cover (fire-and-forget safe:
+    // deleteFile never throws, and orphans are harmless).
+    const oldKey = keyFromUrl(previous.thumbnailUrl);
+    const membership = await prisma.workspaceMember.findFirst({
+      where: { workspaceId },
+      include: {
+        workspace: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            description: true,
+            thumbnailUrl: true,
+            thumbnailUpdatedAt: true,
+            createdAt: true,
+            _count: { select: { members: true } },
+          },
+        },
+      },
+    });
+    if (!membership) throw new NotFoundError("Workspace not found");
+    const updated = await prisma.workspace.update({
+      where: { id: workspaceId },
+      data: { thumbnailUrl: url, thumbnailUpdatedAt: new Date() },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        description: true,
+        thumbnailUrl: true,
+        thumbnailUpdatedAt: true,
+        createdAt: true,
+        _count: { select: { members: true } },
+      },
+    });
+    if (oldKey) void deleteFile(oldKey);
+    return this.summarize(updated, membership.role);
   }
 
   async rotateSecret(
@@ -360,6 +469,8 @@ export class WorkspaceService {
         name: true,
         slug: true,
         description: true,
+        thumbnailUrl: true,
+        thumbnailUpdatedAt: true,
         createdAt: true,
         _count: { select: { members: true } },
       },
@@ -726,6 +837,8 @@ export class WorkspaceService {
       description: workspace.description,
       role: roleToString(role),
       memberCount: workspace._count.members,
+      thumbnailUrl: workspace.thumbnailUrl,
+      thumbnailUpdatedAt: workspace.thumbnailUpdatedAt?.toISOString() ?? null,
       createdAt: workspace.createdAt.toISOString(),
     };
   }

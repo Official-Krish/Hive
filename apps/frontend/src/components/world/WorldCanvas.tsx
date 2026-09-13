@@ -73,6 +73,8 @@ import { ReviewerModal } from "./ReviewerModal";
 import { VendingModal } from "./VendingModal";
 import { useVending } from "@/hooks/useVending";
 import { useChat } from "@/hooks/useChat";
+import { useWatchdogAlerts } from "@/hooks/useWatchdogAlerts";
+import { ThumbnailCapture } from "@/hooks/useWorldThumbnail";
 import {
   Coffee,
   Clapperboard,
@@ -93,6 +95,9 @@ import type { Interactable, InteractableIcon } from "./interactions";
 
 const DEFAULT_AVATAR =
   AVATARS.male[0]?.model ?? `${ASSET_BASE_URL}/avatars/male/hive_male_01.glb`;
+
+/** Reviewer bot — purpose-built robot, not a human avatar. */
+const BOT_MODEL = "https://cdn.krishlabs.tech/hive/avatars/robot.glb";
 
 /* HUD material — warm bone paper floating over the 3D scene, same voice
    as the light dashboard. Shared tokens live in ./chrome; these two
@@ -415,7 +420,7 @@ export function WorldCanvas({
     avatars,
   });
   const games = useGameSession({ workspaceId, myUserId, client });
-  const reviewer = useReviewerBot(client, DEFAULT_AVATAR);
+  const reviewer = useReviewerBot(client, BOT_MODEL);
   const vending = useVending(workspaceId);
   const closeVending = useCallback(() => {
     vending.dismissReveal();
@@ -533,7 +538,15 @@ export function WorldCanvas({
   interface FeedItem {
     key: string;
     text: string;
-    tone: "push" | "pr" | "test" | "bump" | "focusing" | "merge" | "review";
+    tone:
+      | "push"
+      | "pr"
+      | "test"
+      | "bump"
+      | "focusing"
+      | "merge"
+      | "review"
+      | "alert";
     at: number;
   }
   const [feed, setFeed] = useState<FeedItem[]>([]);
@@ -852,6 +865,7 @@ export function WorldCanvas({
           "review",
         ),
       ),
+      client.on("alert.created", (e) => push(e.message, "alert")),
       client.on("social.bump", (e) => {
         if (e.developerId === myUserId) return;
         push(
@@ -894,6 +908,18 @@ export function WorldCanvas({
       clearInterval(prune);
     };
   }, [client, myUserId, pushFeed, addBubble, fireConfetti, showToast]);
+
+  // Watchdog: worker-created alerts never hit the WS (separate process), so
+  // poll the alerts API and push newly-seen OPEN alerts into the ticker.
+  const watchdog = useWatchdogAlerts(workspaceId, client);
+  const watchdogSeenRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    for (const a of watchdog.items) {
+      if (watchdogSeenRef.current.has(a.id)) continue;
+      watchdogSeenRef.current.add(a.id);
+      pushFeed(a.message, "alert");
+    }
+  }, [watchdog.items, pushFeed]);
 
   return (
     <div className="relative w-full h-screen overflow-hidden font-sans select-none">
@@ -1265,7 +1291,9 @@ export function WorldCanvas({
                                 ? "bg-purple-500"
                                 : f.tone === "review"
                                   ? "bg-teal-500"
-                                  : "bg-emerald-500"
+                                  : f.tone === "alert"
+                                    ? "bg-rose-500"
+                                    : "bg-emerald-500"
                       }`}
                     />
                   )}
@@ -1474,6 +1502,7 @@ export function WorldCanvas({
         onCreated={() => setWorldReady(true)}
       >
         <color attach="background" args={["#cdd8e3"]} />
+        <ThumbnailCapture workspaceId={workspaceId} />
 
         <Suspense fallback={null}>
           <OfficeLighting level={playerPos[1] > 3.1 ? 2 : 1} />

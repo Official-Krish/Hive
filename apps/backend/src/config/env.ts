@@ -43,6 +43,15 @@ const envSchema = z.object({
   LIVEKIT_URL: z.string().default(""),
   LIVEKIT_API_KEY: z.string().default(""),
   LIVEKIT_API_SECRET: z.string().default(""),
+  // World thumbnails (S3 or S3-compatible, e.g. R2/MinIO). Empty = uploads disabled.
+  S3_ENDPOINT: z.string().default(""),
+  S3_REGION: z.string().default("us-east-1"),
+  S3_BUCKET: z.string().default(""),
+  S3_ACCESS_KEY: z.string().default(""),
+  S3_SECRET_KEY: z.string().default(""),
+  // Public base URL for uploaded files. Defaults to the AWS S3 URL pattern;
+  // set explicitly when using R2/MinIO with a custom public domain.
+  THUMBNAIL_PUBLIC_BASE: z.string().default(""),
 });
 
 const parsed = envSchema.safeParse(process.env);

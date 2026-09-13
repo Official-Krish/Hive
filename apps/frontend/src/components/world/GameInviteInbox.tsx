@@ -3,6 +3,7 @@ import { Gamepad2, X } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 import { DIconBtn, EYEBROW, useDismiss } from "./chrome";
+import { AnchorIcon, CrownIcon } from "./games/GameIcons";
 import type { UseGameSessionResult } from "@/hooks/useGameSession";
 
 function timeLabel(iso: string): string {
@@ -93,7 +94,11 @@ export function GameInviteInbox({ games, onJoin }: GameInviteInboxProps) {
                                   ? "bg-gradient-to-br from-rose-600 to-amber-500"
                                   : s.kind === "ludo"
                                     ? "bg-gradient-to-br from-emerald-600 to-teal-800"
-                                    : "bg-gradient-to-br from-violet-600 to-fuchsia-600",
+                                    : s.kind === "checkers"
+                                      ? "bg-gradient-to-br from-red-700 to-neutral-900"
+                                      : s.kind === "battleship"
+                                        ? "bg-gradient-to-br from-sky-600 to-indigo-900"
+                                        : "bg-gradient-to-br from-violet-600 to-fuchsia-600",
                             )}
                             aria-hidden
                           >
@@ -114,6 +119,10 @@ export function GameInviteInbox({ games, onJoin }: GameInviteInboxProps) {
                               <span className="text-[18px] font-black leading-none">
                                 L
                               </span>
+                            ) : s.kind === "checkers" ? (
+                              <CrownIcon className="size-5" />
+                            ) : s.kind === "battleship" ? (
+                              <AnchorIcon className="size-5" />
                             ) : (
                               <span className="text-[18px] font-black italic leading-none">
                                 U
@@ -132,7 +141,11 @@ export function GameInviteInbox({ games, onJoin }: GameInviteInboxProps) {
                                   ? "Connect Four"
                                   : s.kind === "ludo"
                                     ? `Ludo · ${s.members.length} players`
-                                    : `Uno · ${s.members.length} players`}{" "}
+                                    : s.kind === "checkers"
+                                      ? "Checkers"
+                                      : s.kind === "battleship"
+                                        ? "Battleship"
+                                        : `Uno · ${s.members.length} players`}{" "}
                               · {timeLabel(s.startedAt)}
                             </span>
                           </span>

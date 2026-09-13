@@ -24,7 +24,7 @@ export function ScrollFilm() {
   const wrapRefs = useRef<(HTMLDivElement | null)[]>([]);
   const videoRefs = useRef<(HTMLVideoElement | null)[]>([]);
   const beatRefs = useRef<(HTMLDivElement | null)[]>([]);
-  const railRef = useRef<HTMLDivElement>(null);
+  const railFillRef = useRef<HTMLDivElement>(null);
   const tcRef = useRef<HTMLDivElement>(null);
 
   // durations live in a ref for the rAF loop (state mirrors for devtools)
@@ -32,6 +32,7 @@ export function ScrollFilm() {
   const [, setDurations] = useState<number[]>(durationsRef.current);
   // Only the current leg ±1 keeps a mounted video element (3 decoders, not 8).
   const [legIdx, setLegIdx] = useState(0);
+  const legIdxRef = useRef(0);
 
   const [loaded, setLoaded] = useState(0);
   const [ready, setReady] = useState(false);
@@ -164,6 +165,7 @@ export function ScrollFilm() {
           }
         });
         currentLeg = leg;
+        legIdxRef.current = leg;
         setLegIdx(leg);
       }
 
@@ -215,7 +217,7 @@ export function ScrollFilm() {
       }
 
       // HUD straight to the DOM — no React re-render in the loop.
-      const rail = railRef.current;
+      const rail = railFillRef.current;
       if (rail) rail.style.width = `${(smooth * 100).toFixed(2)}%`;
       const tc = tcRef.current;
       if (tc) {
@@ -244,6 +246,62 @@ export function ScrollFilm() {
     const t = setTimeout(() => setReady(true), 6000);
     return () => clearTimeout(t);
   }, []);
+
+  // skip affordance: offer an exit once the loader has had a beat
+  const [showSkip, setShowSkip] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setShowSkip(true), 2000);
+    return () => clearTimeout(t);
+  }, []);
+
+  // ── Scene transport: dots, keyboard, scrubbable rail ────────────
+  // Scroll position is the playhead, so navigating = scrolling to a fraction.
+  const scrollToFraction = (frac: number) => {
+    const section = sectionRef.current;
+    if (!section) return;
+    const rect = section.getBoundingClientRect();
+    const top = rect.top + window.scrollY;
+    const scrollable = Math.max(1, rect.height - window.innerHeight);
+    window.scrollTo({
+      top: top + Math.min(1, Math.max(0, frac)) * scrollable,
+      behavior: "smooth",
+    });
+  };
+  const goToScene = (leg: number) => {
+    const total = durationsRef.current.reduce((a, b) => a + b, 0);
+    let acc = 0;
+    for (let i = 0; i < Math.min(leg, LEG_COUNT - 1); i++)
+      acc += durationsRef.current[i]!;
+    scrollToFraction(total > 0 ? acc / total : leg / LEG_COUNT);
+  };
+
+  useEffect(() => {
+    if (reduced || !ready) return;
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t?.closest?.("input,textarea,select,[contenteditable]")) return;
+      if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+      const section = sectionRef.current;
+      if (!section) return;
+      const r = section.getBoundingClientRect();
+      if (r.bottom <= 0 || r.top >= window.innerHeight) return;
+      e.preventDefault();
+      const cur = legIdxRef.current;
+      goToScene(
+        e.key === "ArrowRight"
+          ? Math.min(LEG_COUNT - 1, cur + 1)
+          : Math.max(0, cur - 1),
+      );
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [reduced, ready]);
+
+  const onRailSeek = (clientX: number, el: HTMLDivElement) => {
+    const r = el.getBoundingClientRect();
+    if (r.width <= 0) return;
+    scrollToFraction((clientX - r.left) / r.width);
+  };
 
   const onMeta = (i: number, d: number) => {
     if (Number.isFinite(d) && d > 0) {
@@ -320,7 +378,7 @@ export function ScrollFilm() {
                     src={c.video}
                     muted
                     playsInline
-                    preload={i < 2 ? "auto" : "metadata"}
+                    preload={i < 2 ? "auto" : "none"}
                     disablePictureInPicture
                     onLoadedMetadata={(e) =>
                       onMeta(i, e.currentTarget.duration)
@@ -411,12 +469,12 @@ export function ScrollFilm() {
                         Launch your floor
                         <FiArrowRight className="transition-transform group-hover:translate-x-0.5" />
                       </Link>
-                      <a
-                        href="#proof"
+                      <Link
+                        to="/install"
                         className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/[0.05] px-5 py-3 text-[13px] text-white/70 backdrop-blur transition hover:bg-white/[0.1] hover:text-white/90"
                       >
-                        See the proof
-                      </a>
+                        Start in 2 minutes
+                      </Link>
                     </div>
                   )}
                 </div>
@@ -436,13 +494,98 @@ export function ScrollFilm() {
           </div>
         </div>
 
+        {/* ── Scene dots: jump the playhead ── */}
+        <nav
+          aria-label="Film scenes"
+          className={cn(
+            "absolute right-4 sm:right-8 top-1/2 z-[5] -translate-y-1/2 flex-col items-center gap-2.5 transition-opacity duration-700",
+            ready ? "flex opacity-100" : "flex opacity-0 pointer-events-none",
+          )}
+        >
+          {CHAPTERS.map((c, i) => (
+            <button
+              key={c.scene}
+              type="button"
+              onClick={() => goToScene(i)}
+              aria-label={`Go to scene ${c.scene}: ${c.title}`}
+              aria-current={i === legIdx ? "true" : undefined}
+              className="group flex items-center gap-2 p-1"
+            >
+              <span
+                className={cn(
+                  "hidden font-mono text-[10px] tabular-nums tracking-[0.14em] transition-colors group-hover:text-white/80",
+                  i === legIdx ? "text-white/70" : "text-white/0",
+                  "group-hover:text-white/80",
+                )}
+              >
+                {c.scene}
+              </span>
+              <span
+                className={cn(
+                  "block rounded-full transition-all duration-300",
+                  i === legIdx
+                    ? "h-5 w-1.5 bg-white/90"
+                    : "h-1.5 w-1.5 bg-white/30 group-hover:bg-white/60",
+                )}
+              />
+            </button>
+          ))}
+        </nav>
+
         <div className="absolute inset-x-0 bottom-0 z-[5] flex items-center gap-3 px-4 sm:px-8 pb-6">
-          <div className="relative h-px flex-1 bg-white/10">
+          <div
+            className="relative h-4 flex-1 cursor-pointer"
+            role="slider"
+            aria-label="Film progress — drag or click to scrub"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.round(
+              (durationsRef.current
+                .slice(0, legIdx)
+                .reduce((a, b) => a + b, 0) /
+                Math.max(
+                  1,
+                  durationsRef.current.reduce((a, b) => a + b, 0),
+                )) *
+                100,
+            )}
+            tabIndex={0}
+            onPointerDown={(e) => {
+              (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+              const bar = e.currentTarget.querySelector(
+                "[data-rail-bar]",
+              ) as HTMLDivElement | null;
+              if (bar) onRailSeek(e.clientX, bar);
+            }}
+            onPointerMove={(e) => {
+              if (e.buttons !== 1) return;
+              const bar = e.currentTarget.querySelector(
+                "[data-rail-bar]",
+              ) as HTMLDivElement | null;
+              if (bar) onRailSeek(e.clientX, bar);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+                e.preventDefault();
+                goToScene(
+                  e.key === "ArrowRight"
+                    ? Math.min(LEG_COUNT - 1, legIdx + 1)
+                    : Math.max(0, legIdx - 1),
+                );
+              }
+            }}
+          >
             <div
-              ref={railRef}
-              className="absolute left-0 top-0 h-px bg-white/60"
-              style={{ width: "0%" }}
-            />
+              data-rail-bar
+              className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-white/10"
+            >
+              <div
+                ref={railFillRef}
+                data-rail-fill
+                className="absolute left-0 top-0 h-px bg-white/60"
+                style={{ width: "0%" }}
+              />
+            </div>
           </div>
           <div className="hidden sm:block font-mono text-[10px] tracking-[0.16em] text-white/30">
             Scroll to play
@@ -478,6 +621,24 @@ export function ScrollFilm() {
           </div>
           <div className="relative font-mono text-[11px] tabular-nums text-white/40">
             {loaded} / {LEG_COUNT} scenes
+          </div>
+          <div
+            className={cn(
+              "relative transition-opacity duration-500",
+              showSkip ? "opacity-100" : "pointer-events-none opacity-0",
+            )}
+          >
+            <button
+              type="button"
+              onClick={() =>
+                document
+                  .getElementById("faq")
+                  ?.scrollIntoView({ behavior: "smooth" })
+              }
+              className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/[0.05] px-5 py-2.5 text-[12px] text-white/60 transition hover:bg-white/[0.12] hover:text-white"
+            >
+              Skip film <FiArrowDown aria-hidden />
+            </button>
           </div>
         </div>
       </div>

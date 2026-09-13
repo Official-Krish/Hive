@@ -3,11 +3,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError, http, type OrgMemberPublic } from "@/lib/http";
 import {
   Avatar,
+  Btn,
   ConfirmBtn,
   Note,
   RoleBadge,
   Spinner,
-  inputClass,
+  baselineInputClass,
 } from "@/components/dashboard/kit";
 import { notifyError, notifySuccess } from "@/lib/toast";
 import type { OrgOutletContext } from "./OrgDetail";
@@ -61,76 +62,90 @@ export function OrgMembers() {
   }
 
   if (members.isError) {
-    return <Note tone="error">We couldn't load the members.</Note>;
+    return (
+      <Note tone="error">
+        <span className="flex flex-wrap items-center gap-3">
+          <span>We couldn&apos;t load the members.</span>
+          <Btn variant="ghost" onClick={() => members.refetch()}>
+            Retry
+          </Btn>
+        </span>
+      </Note>
+    );
   }
 
   const list: OrgMemberPublic[] = members.data ?? [];
 
   return (
-    <div className="space-y-2">
+    <div>
       {list.length === 0 && (
         <Note>
           No members yet — workspaces in this org will add people here.
         </Note>
       )}
 
-      {list.map((m) => {
-        const rowBusy =
-          (changeRole.isPending && changeRole.variables?.userId === m.userId) ||
-          (remove.isPending && remove.variables === m.userId);
-        return (
-          <div
-            key={m.userId}
-            className="flex items-center justify-between gap-3 rounded-lg border border-neutral-900/[0.08] bg-white px-3 py-2.5"
-          >
-            <div className="flex min-w-0 items-center gap-2.5">
-              <Avatar name={m.name} src={m.avatarUrl} size={28} />
-              <div className="min-w-0">
-                <p className="truncate text-[13px] font-medium text-neutral-800">
-                  {m.name}
-                </p>
-                <p className="truncate text-[11px] text-neutral-500">
-                  {m.email}
-                </p>
-              </div>
-            </div>
+      {list.length > 0 && (
+        <ul className="divide-y divide-neutral-900/[0.07] border-t border-neutral-900/10">
+          {list.map((m) => {
+            const rowBusy =
+              (changeRole.isPending &&
+                changeRole.variables?.userId === m.userId) ||
+              (remove.isPending && remove.variables === m.userId);
+            return (
+              <li
+                key={m.userId}
+                className="flex items-center justify-between gap-3 px-4 py-3"
+              >
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <Avatar name={m.name} src={m.avatarUrl} size={28} />
+                  <div className="min-w-0">
+                    <p className="truncate text-[13px] font-medium text-neutral-800">
+                      {m.name}
+                    </p>
+                    <p className="truncate text-[11px] text-neutral-500">
+                      {m.email}
+                    </p>
+                  </div>
+                </div>
 
-            <div className="flex flex-shrink-0 items-center gap-2">
-              {isOwner ? (
-                <>
-                  <select
-                    className={`${inputClass} h-8 w-auto px-2 text-xs`}
-                    value={m.role}
-                    disabled={rowBusy}
-                    onChange={(e) =>
-                      changeRole.mutate({
-                        userId: m.userId,
-                        role: e.target.value,
-                      })
-                    }
-                  >
-                    {ROLES.map((r) => (
-                      <option key={r} value={r}>
-                        {r}
-                      </option>
-                    ))}
-                  </select>
-                  <ConfirmBtn
-                    variant="ghost"
-                    confirmLabel="Remove"
-                    pending={remove.isPending}
-                    onConfirm={() => remove.mutate(m.userId)}
-                  >
-                    Remove
-                  </ConfirmBtn>
-                </>
-              ) : (
-                <RoleBadge role={m.role} />
-              )}
-            </div>
-          </div>
-        );
-      })}
+                <div className="flex flex-shrink-0 items-center gap-2">
+                  {isOwner ? (
+                    <>
+                      <select
+                        className={`${baselineInputClass} h-8 w-auto px-0 text-xs`}
+                        value={m.role}
+                        disabled={rowBusy}
+                        onChange={(e) =>
+                          changeRole.mutate({
+                            userId: m.userId,
+                            role: e.target.value,
+                          })
+                        }
+                      >
+                        {ROLES.map((r) => (
+                          <option key={r} value={r}>
+                            {r}
+                          </option>
+                        ))}
+                      </select>
+                      <ConfirmBtn
+                        variant="ghost"
+                        confirmLabel="Remove"
+                        pending={remove.isPending}
+                        onConfirm={() => remove.mutate(m.userId)}
+                      >
+                        Remove
+                      </ConfirmBtn>
+                    </>
+                  ) : (
+                    <RoleBadge role={m.role} />
+                  )}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
 
       {!isOwner && (
         <p className="pt-2 font-mono text-[11px] text-neutral-400">

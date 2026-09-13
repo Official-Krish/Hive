@@ -42,6 +42,12 @@ and a spatial "AI lab" office.
 - **Usage & throughput dashboard** — per-workspace token spend (daily charts,
   per-model and per-member splits), monthly budgets with alert thresholds,
   and team throughput (tasks, PRs, tests, $/task). Admin/owner only.
+- **Watchdog alerts** — a worker scan (`watchdog.check`) that turns
+  already-ingested telemetry into actionable alerts: stuck agents
+  (`agent.stuck`), token burn with no output (`token.burn`), consecutive
+  test failures (`test.failing_streak`), and budget threshold breaches
+  (`budget.risk`). Surfaced in the dashboard inbox and the world ticker,
+  resolvable by developers+.
 - **API key vending machine** — admins stock provider keys (Claude, OpenCode,
   Codex; encrypted at rest, hashed for lookup) in a 3D machine on the
   engineering floor; members check out one-time reveals gated by rate,

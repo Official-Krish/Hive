@@ -1,19 +1,31 @@
 import {
+  applyBsMove,
   applyC4Move,
+  applyCheckerMove,
   applyLudoToken,
   applyMove,
   applyUnoMove,
+  bsFleetFor,
+  bsPublicToString,
+  bsStateFromString,
+  bsToString,
   c4StateFromString,
   c4ToString,
+  checkerStateFromString,
+  checkersToString,
   chessFromFen,
   chessToFen,
+  initialBsState,
   initialC4State,
+  initialCheckerState,
   initialChessState,
   initialLudoState,
   initialUnoState,
   ludoStateFromString,
   ludoToString,
+  resultFromBs,
   resultFromC4,
+  resultFromCheckers,
   resultFromChess,
   resultFromLudo,
   resultFromUno,
@@ -73,6 +85,10 @@ function toPrismaKind(kind: GameSessionCreate["kind"]): GameKind {
       return GameKind.LUDO;
     case "uno":
       return GameKind.UNO;
+    case "checkers":
+      return GameKind.CHECKERS;
+    case "battleship":
+      return GameKind.BATTLESHIP;
   }
 }
 
@@ -86,6 +102,10 @@ function toWireKind(kind: GameKind): GameSession["kind"] {
       return "ludo";
     case GameKind.UNO:
       return "uno";
+    case GameKind.CHECKERS:
+      return "checkers";
+    case GameKind.BATTLESHIP:
+      return "battleship";
   }
 }
 
@@ -156,6 +176,19 @@ export class GamesService {
         // log it — an unparseable stored board bricks every client view.
         console.warn(
           `[games] unparseable uno board for match ${row.id}:`,
+          err instanceof Error ? err.message : err,
+        );
+      }
+    }
+    if (kind === "battleship") {
+      try {
+        const state = bsStateFromString(row.board);
+        board = bsPublicToString(state);
+        const viewerSeat = viewerUserId ? seats.indexOf(viewerUserId) : -1;
+        if (viewerSeat >= 0) hand = [bsFleetFor(state, viewerSeat)];
+      } catch (err) {
+        console.warn(
+          `[games] unparseable battleship board for match ${row.id}:`,
           err instanceof Error ? err.message : err,
         );
       }
@@ -312,7 +345,11 @@ export class GamesService {
           ? c4ToString(initialC4State())
           : kind === GameKind.LUDO
             ? ludoToString(initialLudoState(seatCount))
-            : unoToString(initialUnoState(seatCount));
+            : kind === GameKind.CHECKERS
+              ? checkersToString(initialCheckerState())
+              : kind === GameKind.BATTLESHIP
+                ? bsToString(initialBsState())
+                : unoToString(initialUnoState(seatCount));
     const row = await prisma.gameSession.create({
       data: {
         workspaceId,
@@ -791,6 +828,60 @@ export class GamesService {
         // Unreachable through the zod schema (exactly one of roll/token).
         return { error: "Roll the dice first" };
       }
+    } else if (move.kind === "checkers") {
+      const turn = seatIdx === 0 ? ("R" as const) : ("B" as const);
+      let state;
+      try {
+        state = checkerStateFromString(row.board, turn);
+      } catch {
+        return { error: "Stored board is corrupt" };
+      }
+      const applied = applyCheckerMove(state, {
+        from: move.from,
+        to: move.to,
+        by: turn,
+      });
+      if ("error" in applied) {
+        return { error: describeCheckersError(applied.error) };
+      }
+      board = checkersToString(applied.state);
+      const result = resultFromCheckers(applied.state);
+      if (result) {
+        finished = true;
+        winnerUserId =
+          result.outcome === "win"
+            ? result.winner === "first"
+              ? row.firstUserId
+              : row.secondUserId
+            : null;
+        resultReason = result.outcome === "win" ? "no-moves" : result.reason;
+      }
+      nextTurn = finished ? null : seats[seatIdx === 0 ? 1 : 0]!;
+    } else if (move.kind === "battleship") {
+      let state;
+      try {
+        state = bsStateFromString(row.board);
+      } catch {
+        return { error: "Stored board is corrupt" };
+      }
+      const applied = applyBsMove(state, { seat: seatIdx, fire: move.fire });
+      if ("error" in applied) {
+        return { error: describeBsError(applied.error) };
+      }
+      // Stored board keeps both fleets; broadcasts redact it.
+      board = bsToString(applied.state);
+      const result = resultFromBs(applied.state);
+      if (result) {
+        finished = true;
+        winnerUserId =
+          result.outcome === "win"
+            ? result.winner === "first"
+              ? row.firstUserId
+              : row.secondUserId
+            : null;
+        resultReason = result.outcome === "win" ? "fleet-sunk" : result.reason;
+      }
+      nextTurn = finished ? null : seats[applied.state.turn]!;
     } else {
       let state: UnoState;
       try {
@@ -979,6 +1070,34 @@ function describeUnoError(code: string): string {
       return "You have a playable card";
     case "deck-empty":
       return "No cards left to draw";
+    default:
+      return "Illegal move";
+  }
+}
+
+function describeCheckersError(code: string): string {
+  switch (code) {
+    case "wrong-turn":
+      return "Not your turn";
+    case "no-piece":
+      return "No piece on that square";
+    case "must-capture":
+      return "You must take the capture";
+    case "must-continue":
+      return "Finish the multi-jump";
+    default:
+      return "Illegal move";
+  }
+}
+
+function describeBsError(code: string): string {
+  switch (code) {
+    case "wrong-turn":
+      return "Not your turn";
+    case "already-fired":
+      return "Already fired there";
+    case "bad-cell":
+      return "No such square";
     default:
       return "Illegal move";
   }

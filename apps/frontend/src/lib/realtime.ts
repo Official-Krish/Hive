@@ -40,6 +40,7 @@ export type RealtimeEventMap = {
   "chill.media.state": Extract<RealtimeEvent, { type: "chill.media.state" }>;
   "game.state": Extract<RealtimeEvent, { type: "game.state" }>;
   "game.move.rejected": Extract<RealtimeEvent, { type: "game.move.rejected" }>;
+  "alert.created": Extract<RealtimeEvent, { type: "alert.created" }>;
 };
 
 type EventHandler<K extends keyof RealtimeEventMap> = (

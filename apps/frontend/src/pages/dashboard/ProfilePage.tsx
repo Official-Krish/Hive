@@ -11,16 +11,14 @@ import { notifyError, notifySuccess } from "@/lib/toast";
 import {
   Avatar,
   Badge,
+  BaselineField,
   Btn,
-  Card,
-  CardHead,
   ConfirmBtn,
-  Field,
   Note,
   PageHead,
   SkeletonRows,
   Spinner,
-  inputClass,
+  baselineInputClass,
 } from "@/components/dashboard/kit";
 import { AvatarPicker } from "@/components/dashboard/AvatarPicker";
 import { timeAgo } from "@/components/dashboard/primitives";
@@ -62,23 +60,23 @@ export function ProfilePage() {
         title="Profile"
         sub="Who you are across Hive — identity, security, and your machines."
       />
-      <div className="max-w-2xl space-y-4">
-        <IdentityCard />
-        <Avatar3DRow
+      <div className="max-w-2xl">
+        <IdentitySection />
+        <AvatarSection
           hasAvatar={!!user.mapAvatarModel}
           currentModel={user.mapAvatarModel ?? null}
         />
-        <OrganizationsCard organizations={organizations} />
-        <PasswordCard />
-        <MachinesCard />
-        <SessionsCard />
+        <OrganizationsSection organizations={organizations} />
+        <PasswordSection />
+        <MachinesSection />
+        <SessionsSection />
       </div>
     </div>
   );
 }
 
 /* ── Identity ──────────────────────────────────────────────── */
-function IdentityCard() {
+function IdentitySection() {
   const queryClient = useQueryClient();
   const me = useQuery({
     queryKey: ["me"],
@@ -116,48 +114,45 @@ function IdentityCard() {
   const dirty = name.trim() !== user.name;
 
   return (
-    <Card>
-      <CardHead title="Identity" />
-      <div className="space-y-4 px-5 py-5">
-        <div className="flex items-center gap-4">
-          <Avatar
-            name={name.trim() || user.name}
-            src={user.avatarUrl}
-            size={52}
-          />
-          <div className="min-w-0">
-            <p className="truncate text-[15px] font-medium text-neutral-900">
-              {user.name}
-            </p>
-            <p className="truncate text-[13px] text-neutral-500">
-              {user.email}
-            </p>
-            <div className="mt-1.5 flex flex-wrap gap-1.5">
-              {user.emailVerified ? (
-                <Badge tone="live">Verified</Badge>
-              ) : (
-                <Badge tone="warn">Unverified</Badge>
-              )}
-              <Badge>
-                Joined{" "}
-                {new Date(user.createdAt).toLocaleDateString("en-US", {
-                  month: "short",
-                  year: "numeric",
-                })}
-              </Badge>
-            </div>
+    <section aria-label="Identity">
+      <div className="flex items-center gap-4">
+        <Avatar
+          name={name.trim() || user.name}
+          src={user.avatarUrl}
+          size={52}
+        />
+        <div className="min-w-0">
+          <p className="truncate text-xl font-bold tracking-tight text-neutral-900">
+            {user.name}
+          </p>
+          <p className="truncate text-[13px] text-neutral-500">{user.email}</p>
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {user.emailVerified ? (
+              <Badge tone="live">Verified</Badge>
+            ) : (
+              <Badge tone="warn">Unverified</Badge>
+            )}
+            <Badge>
+              Joined{" "}
+              {new Date(user.createdAt).toLocaleDateString("en-US", {
+                month: "short",
+                year: "numeric",
+              })}
+            </Badge>
           </div>
         </div>
+      </div>
 
-        <Field label="Display name">
+      <div className="mt-6 max-w-md space-y-7">
+        <BaselineField label="Display name">
           <input
-            className={inputClass}
+            className={baselineInputClass}
             value={name}
             onChange={(e) => setName(e.target.value)}
             maxLength={100}
             autoComplete="name"
           />
-        </Field>
+        </BaselineField>
 
         <div className="flex justify-end">
           <Btn
@@ -169,12 +164,12 @@ function IdentityCard() {
           </Btn>
         </div>
       </div>
-    </Card>
+    </section>
   );
 }
 
 /* ── 3D avatar ─────────────────────────────────────────────── */
-function Avatar3DRow({
+function AvatarSection({
   hasAvatar,
   currentModel,
 }: {
@@ -207,8 +202,16 @@ function Avatar3DRow({
   };
 
   return (
-    <Card>
-      <div className="flex items-center justify-between gap-4 px-5 py-4">
+    <section
+      aria-label="Spatial office avatar"
+      className="mt-12 border-t border-neutral-900/10 pt-6"
+    >
+      <button
+        type="button"
+        onClick={toggle}
+        aria-expanded={open}
+        className="flex w-full items-center justify-between gap-4 text-left"
+      >
         <div className="flex items-center gap-2.5">
           <span
             className={
@@ -220,26 +223,22 @@ function Avatar3DRow({
             {hasAvatar && <FiCheck className="size-3" aria-hidden />}
           </span>
           <div>
-            <p className="text-[13px] font-medium text-neutral-900">
+            <p className="text-[14px] font-semibold text-neutral-900">
               Spatial office avatar
             </p>
-            <p className="font-mono text-[11px] text-neutral-500">
+            <p className="data-mono text-[11px] uppercase tracking-[0.08em] text-neutral-500">
               {hasAvatar
                 ? "Set — teammates see it in the world"
                 : "Not set yet"}
             </p>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={toggle}
-          className="flex-shrink-0 rounded-full border border-neutral-900/15 px-4 py-2 text-[13px] font-medium text-neutral-700 transition-colors hover:border-neutral-900/30 hover:text-neutral-900"
-        >
+        <span className="flex-shrink-0 rounded-full border border-neutral-900/15 px-4 py-2 text-[13px] font-medium text-neutral-700">
           {open ? "Close" : hasAvatar ? "Change" : "Pick one"}
-        </button>
-      </div>
+        </span>
+      </button>
       {open && (
-        <div className="border-t border-neutral-900/[0.07] px-5 py-4">
+        <div className="pt-4">
           <AvatarPicker selected={selected} onSelect={setSelected} />
           <div className="mt-4 flex items-center gap-3">
             <Btn
@@ -258,35 +257,40 @@ function Avatar3DRow({
           </div>
         </div>
       )}
-    </Card>
+    </section>
   );
 }
 
 /* ── Organizations ─────────────────────────────────────────── */
-function OrganizationsCard({
+function OrganizationsSection({
   organizations,
 }: {
   organizations: { id: string; name: string; plan: string }[];
 }) {
   return (
-    <Card>
-      <CardHead title="Organizations" hint={`${organizations.length} total`} />
+    <section
+      aria-label="Organizations"
+      className="mt-12 border-t border-neutral-900/10 pt-6"
+    >
+      <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-neutral-400">
+        Organizations · {organizations.length}
+      </p>
       {organizations.length === 0 ? (
-        <p className="px-5 py-4 text-[13px] text-neutral-500">
+        <p className="py-3 text-[13px] text-neutral-500">
           You don&apos;t belong to any organizations yet.
         </p>
       ) : (
-        <ul className="divide-y divide-neutral-900/[0.06]">
+        <ul className="mt-1 divide-y divide-neutral-900/[0.07]">
           {organizations.map((o) => (
             <li key={o.id}>
               <Link
                 to={`/dashboard/o/${o.id}`}
-                className="group flex items-center justify-between gap-3 px-5 py-3 transition-colors hover:bg-neutral-900/[0.02]"
+                className="group flex items-center justify-between gap-3 py-3 transition-colors"
               >
-                <span className="truncate text-sm font-medium text-neutral-800">
+                <span className="truncate text-sm font-medium text-neutral-800 group-hover:text-neutral-950">
                   {o.name}
                 </span>
-                <span className="flex-shrink-0 font-mono text-[10px] uppercase tracking-[0.14em] text-neutral-400">
+                <span className="data-mono flex-shrink-0 text-[10px] uppercase tracking-[0.14em] text-neutral-400">
                   {o.plan}
                 </span>
               </Link>
@@ -294,12 +298,12 @@ function OrganizationsCard({
           ))}
         </ul>
       )}
-    </Card>
+    </section>
   );
 }
 
 /* ── Password ──────────────────────────────────────────────── */
-function PasswordCard() {
+function PasswordSection() {
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -328,23 +332,28 @@ function PasswordCard() {
     current.length > 0 && strongEnough && matches && !mutation.isPending;
 
   return (
-    <Card>
-      <CardHead
-        title="Password"
-        hint="Changing it signs out all other sessions."
-      />
-      <div className="space-y-4 px-5 py-5">
-        <Field label="Current password">
+    <section
+      aria-label="Password"
+      className="mt-12 border-t border-neutral-900/10 pt-6"
+    >
+      <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-neutral-400">
+        Password
+      </p>
+      <p className="mt-2 text-[13px] text-neutral-500">
+        Changing it signs out all other sessions.
+      </p>
+      <div className="mt-5 max-w-md space-y-7">
+        <BaselineField label="Current password">
           <input
             type="password"
-            className={inputClass}
+            className={baselineInputClass}
             value={current}
             onChange={(e) => setCurrent(e.target.value)}
             autoComplete="current-password"
           />
-        </Field>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field
+        </BaselineField>
+        <div className="grid gap-7 sm:grid-cols-2">
+          <BaselineField
             label="New password"
             hint={
               next && !strongEnough
@@ -354,13 +363,13 @@ function PasswordCard() {
           >
             <input
               type="password"
-              className={inputClass}
+              className={baselineInputClass}
               value={next}
               onChange={(e) => setNext(e.target.value)}
               autoComplete="new-password"
             />
-          </Field>
-          <Field
+          </BaselineField>
+          <BaselineField
             label="Confirm new password"
             hint={
               confirm && !matches ? "Passwords don't match yet." : undefined
@@ -368,12 +377,12 @@ function PasswordCard() {
           >
             <input
               type="password"
-              className={inputClass}
+              className={baselineInputClass}
               value={confirm}
               onChange={(e) => setConfirm(e.target.value)}
               autoComplete="new-password"
             />
-          </Field>
+          </BaselineField>
         </div>
         <div className="flex justify-end">
           <Btn disabled={!canSubmit} onClick={() => mutation.mutate()}>
@@ -382,12 +391,12 @@ function PasswordCard() {
           </Btn>
         </div>
       </div>
-    </Card>
+    </section>
   );
 }
 
 /* ── Machines ──────────────────────────────────────────────── */
-function MachinesCard() {
+function MachinesSection() {
   const queryClient = useQueryClient();
   const devices = useQuery({
     queryKey: ["devices"],
@@ -422,89 +431,96 @@ function MachinesCard() {
   });
 
   return (
-    <Card>
-      <CardHead
-        title="Machines"
-        hint="Collectors registered to your account."
-      />
-      {devices.isLoading && (
-        <div className="space-y-3 px-5 py-4">
-          {[0, 1].map((i) => (
-            <div
-              key={i}
-              className="h-9 animate-pulse rounded-lg bg-neutral-900/[0.05]"
-            />
-          ))}
-        </div>
-      )}
-      {devices.isError && (
-        <p className="px-5 py-4 text-[13px] text-neutral-500">
-          Couldn&apos;t load machines right now.
-        </p>
-      )}
-      {devices.isSuccess && devices.data.length === 0 && (
-        <p className="px-5 py-4 text-[13px] text-neutral-500">
-          No machines registered. Install the collector and run{" "}
-          <code className="rounded bg-neutral-900/[0.06] px-1 py-px font-mono text-[11px]">
-            hive start
-          </code>{" "}
-          to add this one.
-        </p>
-      )}
-      {devices.isSuccess && devices.data.length > 0 && (
-        <ul className="divide-y divide-neutral-900/[0.06]">
-          {devices.data.map((d) => (
-            <li
-              key={d.id}
-              className="flex items-center justify-between gap-3 px-5 py-3"
-            >
-              <div className="min-w-0">
-                <p className="flex items-center gap-2 truncate text-sm font-medium text-neutral-800">
-                  <span
-                    className={
-                      d.online
-                        ? "size-1.5 flex-shrink-0 rounded-full bg-emerald-500"
-                        : "size-1.5 flex-shrink-0 rounded-full bg-neutral-300"
-                    }
-                  />
-                  {d.name}
-                </p>
-                <p className="mt-0.5 truncate font-mono text-[11px] text-neutral-500">
-                  {[d.type, d.os, d.arch].filter(Boolean).join(" · ")}
-                  {d.lastSeenAt ? ` · seen ${timeAgo(d.lastSeenAt)}` : ""}
-                </p>
-              </div>
-              <div className="flex flex-shrink-0 items-center gap-2">
-                {d.online ? (
-                  <ConfirmBtn
-                    variant="ghost"
-                    confirmLabel="Shut down"
-                    pending={stop.isPending}
-                    onConfirm={() => stop.mutate(d.id)}
-                  >
-                    Stop
-                  </ConfirmBtn>
-                ) : (
-                  <ConfirmBtn
-                    variant="ghost"
-                    confirmLabel="Revoke key"
-                    pending={revoke.isPending}
-                    onConfirm={() => revoke.mutate(d.id)}
-                  >
-                    Revoke
-                  </ConfirmBtn>
-                )}
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-    </Card>
+    <section
+      aria-label="Machines"
+      className="mt-12 border-t border-neutral-900/10 pt-6"
+    >
+      <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-neutral-400">
+        Machines
+      </p>
+      <p className="mt-2 text-[13px] text-neutral-500">
+        Collectors registered to your account.
+      </p>
+      <div className="mt-3">
+        {devices.isLoading && (
+          <div className="space-y-3 py-2">
+            {[0, 1].map((i) => (
+              <div
+                key={i}
+                className="h-9 animate-pulse rounded-lg bg-neutral-900/[0.05]"
+              />
+            ))}
+          </div>
+        )}
+        {devices.isError && (
+          <p className="py-3 text-[13px] text-neutral-500">
+            Couldn&apos;t load machines right now.
+          </p>
+        )}
+        {devices.isSuccess && devices.data.length === 0 && (
+          <p className="py-3 text-[13px] text-neutral-500">
+            No machines registered. Install the collector and run{" "}
+            <code className="rounded bg-neutral-900/[0.06] px-1 py-px font-mono text-[11px]">
+              hive start
+            </code>{" "}
+            to add this one.
+          </p>
+        )}
+        {devices.isSuccess && devices.data.length > 0 && (
+          <ul className="divide-y divide-neutral-900/[0.07] border-t border-neutral-900/10">
+            {devices.data.map((d) => (
+              <li
+                key={d.id}
+                className="flex items-center justify-between gap-3 py-3"
+              >
+                <div className="min-w-0">
+                  <p className="flex items-center gap-2 truncate text-sm font-medium text-neutral-800">
+                    <span
+                      className={
+                        d.online
+                          ? "size-1.5 flex-shrink-0 rounded-full bg-emerald-500"
+                          : "size-1.5 flex-shrink-0 rounded-full bg-neutral-300"
+                      }
+                    />
+                    {d.name}
+                  </p>
+                  <p className="data-mono mt-0.5 truncate text-[11px] text-neutral-500">
+                    {[d.type, d.os, d.arch].filter(Boolean).join(" · ")}
+                    {d.lastSeenAt ? ` · seen ${timeAgo(d.lastSeenAt)}` : ""}
+                  </p>
+                </div>
+                <div className="flex flex-shrink-0 items-center gap-2">
+                  {d.online ? (
+                    <ConfirmBtn
+                      variant="ghost"
+                      confirmLabel="Shut down"
+                      pending={stop.isPending}
+                      onConfirm={() => stop.mutate(d.id)}
+                    >
+                      Stop
+                    </ConfirmBtn>
+                  ) : (
+                    <ConfirmBtn
+                      variant="ghost"
+                      confirmLabel="Revoke key"
+                      pending={revoke.isPending}
+                      onConfirm={() => revoke.mutate(d.id)}
+                    >
+                      Revoke
+                    </ConfirmBtn>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </section>
   );
 }
 
 /* ── Sessions ──────────────────────────────────────────────── */
-function SessionsCard() {
+function SessionsSection() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -520,10 +536,13 @@ function SessionsCard() {
   });
 
   return (
-    <Card>
-      <div className="flex items-center justify-between gap-4 px-5 py-4">
+    <section
+      aria-label="Sessions"
+      className="mt-12 border-t border-neutral-900/10 pt-6"
+    >
+      <div className="flex items-center justify-between gap-4">
         <div>
-          <p className="text-[13px] font-medium text-neutral-900">
+          <p className="text-[14px] font-semibold text-neutral-900">
             Sign out everywhere
           </p>
           <p className="mt-0.5 text-xs text-neutral-500">
@@ -539,7 +558,7 @@ function SessionsCard() {
           Sign out
         </ConfirmBtn>
       </div>
-    </Card>
+    </section>
   );
 }
 

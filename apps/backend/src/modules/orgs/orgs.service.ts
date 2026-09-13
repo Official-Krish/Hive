@@ -155,6 +155,8 @@ export class OrgService {
         name: true,
         slug: true,
         description: true,
+        thumbnailUrl: true,
+        thumbnailUpdatedAt: true,
         createdAt: true,
         _count: { select: { members: true } },
       },
@@ -174,6 +176,8 @@ export class OrgService {
       description: w.description,
       role: roleByWorkspace.get(w.id) ?? "member",
       memberCount: w._count.members,
+      thumbnailUrl: w.thumbnailUrl,
+      thumbnailUpdatedAt: w.thumbnailUpdatedAt?.toISOString() ?? null,
       createdAt: w.createdAt.toISOString(),
     }));
   }

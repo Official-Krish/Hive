@@ -6,13 +6,19 @@
    ───────────────────────────────────────────────────────────── */
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { Link } from "react-router-dom";
+import { FiBriefcase, FiUser } from "react-icons/fi";
+import { useQuery } from "@tanstack/react-query";
+import { http } from "@/lib/http";
 import { DASHBOARD_NAV, Sidebar, useReceivedInviteCount } from "./Sidebar";
+import { ScrollToTop } from "../layout/ScrollToTop";
+import { LiveDot } from "./kit";
 import { cn } from "@/lib/utils";
 
 export function DashboardLayout() {
   const { pathname } = useLocation();
   return (
     <div className="relative min-h-screen bg-[#F4F3EF] text-neutral-900">
+      <ScrollToTop />
       <Sidebar />
       <MobileBar />
 
@@ -30,6 +36,26 @@ export function DashboardLayout() {
 /* compact top bar — the rail is hidden below lg */
 function MobileBar() {
   const inviteCount = useReceivedInviteCount();
+  const { data: me } = useQuery({
+    queryKey: ["me"],
+    queryFn: http.auth.me,
+    retry: false,
+    staleTime: 60_000,
+  });
+  const firstOrg = me?.organizations?.[0];
+  const { data: device } = useQuery({
+    queryKey: ["devices", "me", "status"],
+    queryFn: http.devices.status,
+    retry: false,
+    staleTime: 30_000,
+  });
+  const pill = (isActive: boolean) =>
+    cn(
+      "flex flex-shrink-0 items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+      isActive
+        ? "border-neutral-900/20 bg-neutral-900/[0.06] text-neutral-900"
+        : "border-neutral-900/[0.08] text-neutral-500",
+    );
   return (
     <div className="sticky top-0 z-40 border-b border-neutral-900/[0.08] bg-[#F4F3EF]/90 backdrop-blur-md lg:hidden">
       <div className="flex h-14 items-center justify-between px-5">
@@ -41,6 +67,18 @@ function MobileBar() {
             Console
           </span>
         </Link>
+        {device &&
+          (device.hasOnlineDevice ? (
+            <span className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-neutral-500">
+              <LiveDot tone="live" />
+              Live
+            </span>
+          ) : (
+            <span className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-neutral-500">
+              <LiveDot tone="away" />
+              Offline
+            </span>
+          ))}
       </div>
       <nav
         aria-label="Console"
@@ -51,14 +89,7 @@ function MobileBar() {
             key={href}
             to={href}
             end={end}
-            className={({ isActive }) =>
-              cn(
-                "flex flex-shrink-0 items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
-                isActive
-                  ? "border-neutral-900/20 bg-neutral-900/[0.06] text-neutral-900"
-                  : "border-neutral-900/[0.08] text-neutral-500",
-              )
-            }
+            className={({ isActive }) => pill(isActive)}
           >
             <Icon className="size-3.5" aria-hidden />
             <span>{label}</span>
@@ -69,6 +100,22 @@ function MobileBar() {
             )}
           </NavLink>
         ))}
+        {firstOrg && (
+          <NavLink
+            to={`/dashboard/o/${firstOrg.id}`}
+            className={({ isActive }) => pill(isActive)}
+          >
+            <FiBriefcase className="size-3.5" aria-hidden />
+            <span className="max-w-24 truncate">{firstOrg.name}</span>
+          </NavLink>
+        )}
+        <NavLink
+          to="/dashboard/profile"
+          className={({ isActive }) => pill(isActive)}
+        >
+          <FiUser className="size-3.5" aria-hidden />
+          <span>Profile</span>
+        </NavLink>
       </nav>
     </div>
   );

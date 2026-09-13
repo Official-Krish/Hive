@@ -37,6 +37,10 @@ import {
   schema as finalizeActivitiesSchema,
 } from "./finalize.activities";
 import {
+  handler as watchdogCheck,
+  schema as watchdogCheckSchema,
+} from "./watchdog.check";
+import {
   handler as reviewRequest,
   schema as reviewRequestSchema,
 } from "./review.request";
@@ -74,6 +78,7 @@ export const jobRegistry = new Map<string, JobDefinition>([
   ["presence.sweep", toJob(presenceSweepSchema, presenceSweep)],
   ["finalize.sessions", toJob(finalizeSessionsSchema, finalizeSessions)],
   ["finalize.activities", toJob(finalizeActivitiesSchema, finalizeActivities)],
+  ["watchdog.check", toJob(watchdogCheckSchema, watchdogCheck)],
   ["review.request", toJob(reviewRequestSchema, reviewRequest)],
 ]);
 

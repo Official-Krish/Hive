@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import { FiCheck } from "react-icons/fi";
@@ -36,33 +37,7 @@ export function AvatarPicker({
             )}
           >
             <div className="aspect-square w-full bg-[#E9E7E2]">
-              <Canvas
-                camera={{
-                  position: [0, 1, 3.4],
-                  fov: 35,
-                  near: 0.1,
-                  far: 50,
-                }}
-                dpr={[1, 1.5]}
-                frameloop="demand"
-                gl={{ antialias: true, powerPreference: "low-power" }}
-              >
-                <ambientLight intensity={1.6} />
-                <directionalLight position={[3, 5, 3]} intensity={1.4} />
-                <directionalLight position={[-3, 2, -2]} intensity={0.6} />
-                <Avatar
-                  modelUrl={opt.model}
-                  position={[0, -0.9, 0]}
-                  name={opt.name}
-                  status=""
-                  badgeColor="bg-emerald-400"
-                />
-                <OrbitControls
-                  enableZoom={false}
-                  enablePan={false}
-                  target={[0, 0.4, 0]}
-                />
-              </Canvas>
+              <LazyPreview name={opt.name} model={opt.model} />
             </div>
             <div className="flex items-center justify-between gap-2 px-3 py-2.5 text-left">
               <span className="truncate text-[13px] font-medium text-neutral-800">
@@ -78,6 +53,70 @@ export function AvatarPicker({
           </button>
         );
       })}
+    </div>
+  );
+}
+
+/**
+ * Mounts the WebGL preview only once the tile scrolls near the viewport —
+ * 8 simultaneous contexts + GLB fetches otherwise hit the page on load.
+ */
+function LazyPreview({ name, model }: { name: string; model: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || visible) return;
+    const io = new IntersectionObserver(
+      ([entry]) => {
+        if (entry?.isIntersecting) {
+          setVisible(true);
+          io.disconnect();
+        }
+      },
+      { rootMargin: "200px" },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [visible]);
+
+  return (
+    <div ref={ref} className="h-full w-full">
+      {visible ? (
+        <Canvas
+          camera={{
+            position: [0, 1, 3.4],
+            fov: 35,
+            near: 0.1,
+            far: 50,
+          }}
+          dpr={[1, 1.5]}
+          frameloop="demand"
+          gl={{ antialias: true, powerPreference: "low-power" }}
+        >
+          <ambientLight intensity={1.6} />
+          <directionalLight position={[3, 5, 3]} intensity={1.4} />
+          <directionalLight position={[-3, 2, -2]} intensity={0.6} />
+          <Avatar
+            modelUrl={model}
+            position={[0, -0.9, 0]}
+            name={name}
+            status=""
+            badgeColor="bg-emerald-400"
+          />
+          <OrbitControls
+            enableZoom={false}
+            enablePan={false}
+            target={[0, 0.4, 0]}
+          />
+        </Canvas>
+      ) : (
+        <div
+          aria-hidden
+          className="h-full w-full animate-pulse bg-neutral-900/[0.04]"
+        />
+      )}
     </div>
   );
 }

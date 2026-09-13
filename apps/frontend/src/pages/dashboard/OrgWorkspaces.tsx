@@ -2,7 +2,7 @@ import { Link, useOutletContext } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { FiArrowUpRight } from "react-icons/fi";
 import { http } from "@/lib/http";
-import { Note, RoleBadge, Row, Spinner } from "@/components/dashboard/kit";
+import { Note, RoleBadge, Row, Spinner, Btn } from "@/components/dashboard/kit";
 import type { OrgOutletContext } from "./OrgDetail";
 
 export function OrgWorkspaces() {
@@ -23,7 +23,16 @@ export function OrgWorkspaces() {
   }
 
   if (workspaces.isError) {
-    return <Note tone="error">We couldn't load the workspaces.</Note>;
+    return (
+      <Note tone="error">
+        <span className="flex flex-wrap items-center gap-3">
+          <span>We couldn&apos;t load the workspaces.</span>
+          <Btn variant="ghost" onClick={() => workspaces.refetch()}>
+            Retry
+          </Btn>
+        </span>
+      </Note>
+    );
   }
 
   const list = workspaces.data ?? [];
@@ -41,15 +50,12 @@ export function OrgWorkspaces() {
   }
 
   return (
-    <ul className="space-y-2">
+    <ul className="divide-y divide-neutral-900/[0.07] border-t border-neutral-900/10">
       {list.map((w) => (
-        <li
-          key={w.id}
-          className="rounded-lg border border-neutral-900/[0.08] bg-white transition-colors hover:bg-neutral-900/[0.03]"
-        >
-          <Row to={`/dashboard/w/${w.id}`}>
+        <li key={w.id}>
+          <Row to={`/dashboard/w/${w.id}`} className="px-0">
             <div className="min-w-0 flex-1">
-              <p className="truncate text-[13px] font-medium text-neutral-800">
+              <p className="truncate text-[14px] font-semibold text-neutral-800">
                 {w.name}
               </p>
               <p className="truncate text-[11px] text-neutral-500">

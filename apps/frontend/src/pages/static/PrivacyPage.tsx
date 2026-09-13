@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { StaticPage } from "@/components/layout/StaticPage";
 
 const SECTIONS = [
@@ -111,7 +112,7 @@ export function PrivacyPage() {
       <p>
         Privacy questions:{" "}
         <a href="mailto:contact@hive.dev">contact@hive.dev</a>. Security issues:
-        see our <a href="/security">security page</a>.
+        see our <Link to="/security">security page</Link>.
       </p>
     </StaticPage>
   );

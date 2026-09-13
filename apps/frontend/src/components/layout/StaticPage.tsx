@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import type { ReactNode } from "react";
 import { FiArrowRight } from "react-icons/fi";
@@ -11,7 +12,7 @@ export interface StaticSection {
 
 /**
  * Shared shell for public static pages — same voice as the landing:
- * mono eyebrow, serif display title, quiet prose, TOC sidebar on desktop.
+ * mono eyebrow, grotesk display title, quiet prose, TOC sidebar on desktop.
  */
 export function StaticPage({
   eyebrow,
@@ -31,6 +32,7 @@ export function StaticPage({
   cta?: boolean;
 }) {
   usePageMeta(title, description);
+  const activeId = useActiveSection(sections);
 
   return (
     <div className="relative bg-[#08090D] text-slate-100">
@@ -59,19 +61,49 @@ export function StaticPage({
           )}
         >
           {sections && sections.length > 0 && (
-            <nav aria-label="On this page" className="hidden lg:block">
-              <div className="sticky top-24 space-y-1">
-                {sections.map((s) => (
-                  <a
-                    key={s.id}
-                    href={`#${s.id}`}
-                    className="block rounded-lg px-3 py-1.5 text-[13px] text-white/45 transition-colors hover:bg-white/[0.05] hover:text-white/85"
-                  >
-                    {s.label}
-                  </a>
-                ))}
-              </div>
-            </nav>
+            <>
+              <details className="lg:hidden rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
+                <summary className="cursor-pointer font-mono text-[11px] uppercase tracking-[0.18em] text-white/50">
+                  On this page
+                </summary>
+                <nav aria-label="On this page" className="mt-2 space-y-1 pb-1">
+                  {sections.map((s) => (
+                    <a
+                      key={s.id}
+                      href={`#${s.id}`}
+                      aria-current={activeId === s.id ? "location" : undefined}
+                      className={cn(
+                        "block rounded-lg px-3 py-1.5 text-[13px] transition-colors",
+                        activeId === s.id
+                          ? "bg-white/[0.07] text-white"
+                          : "text-white/45 hover:bg-white/[0.05] hover:text-white/85",
+                      )}
+                    >
+                      {s.label}
+                    </a>
+                  ))}
+                </nav>
+              </details>
+              <nav aria-label="On this page" className="hidden lg:block">
+                <div className="sticky top-24 space-y-1">
+                  {sections.map((s) => (
+                    <a
+                      key={s.id}
+                      href={`#${s.id}`}
+                      aria-current={activeId === s.id ? "location" : undefined}
+                      className={cn(
+                        "block rounded-lg px-3 py-1.5 text-[13px] transition-colors",
+                        activeId === s.id
+                          ? "bg-white/[0.07] text-white"
+                          : "text-white/45 hover:bg-white/[0.05] hover:text-white/85",
+                      )}
+                    >
+                      {s.label}
+                    </a>
+                  ))}
+                </div>
+              </nav>
+            </>
           )}
 
           <article className="static-prose min-w-0 max-w-3xl">
@@ -104,4 +136,27 @@ export function StaticPage({
       </div>
     </div>
   );
+}
+
+/** Tracks the section currently nearest the top of the viewport. */
+function useActiveSection(sections?: StaticSection[]): string | null {
+  const [active, setActive] = useState<string | null>(null);
+  useEffect(() => {
+    if (!sections || sections.length === 0) return;
+    const els = sections
+      .map((s) => document.getElementById(s.id))
+      .filter((el): el is HTMLElement => !!el);
+    if (els.length === 0) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          if (e.isIntersecting) setActive(e.target.id);
+        }
+      },
+      { rootMargin: "-20% 0px -70% 0px" },
+    );
+    els.forEach((el) => io.observe(el));
+    return () => io.disconnect();
+  }, [sections]);
+  return active;
 }
