@@ -1,6 +1,6 @@
 /* ─────────────────────────────────────────────────────────────
    WORKSPACE SETTINGS — identity, webhook secret, repositories,
-   GitHub App, danger zone. Same data, dark instrument.
+   GitHub App, danger zone. Same data, light instrument.
    ───────────────────────────────────────────────────────────── */
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";

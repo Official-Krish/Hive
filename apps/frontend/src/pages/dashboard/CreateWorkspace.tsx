@@ -1,6 +1,6 @@
 /* ─────────────────────────────────────────────────────────────
    CREATE WORKSPACE — step 1: identity. Step 2: connect GitHub.
-   Same flow, dark instrument.
+   Same flow, light instrument.
    ───────────────────────────────────────────────────────────── */
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";

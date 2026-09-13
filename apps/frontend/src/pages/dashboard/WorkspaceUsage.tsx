@@ -10,7 +10,9 @@ import {
   CardHead,
   Note,
   PageHead,
+  Spinner,
   Stat,
+  inputClass,
 } from "@/components/dashboard/kit";
 
 const RANGE_DAYS = [7, 30, 90] as const;
@@ -64,7 +66,7 @@ function DailyChart({ days }: { days: UsageDayPoint[] }) {
               width={w}
               height={Math.max(0, h - outH)}
               rx={2}
-              className="fill-sky-500/80"
+              className="fill-neutral-900/70"
             />
             <rect
               x={x}
@@ -72,7 +74,7 @@ function DailyChart({ days }: { days: UsageDayPoint[] }) {
               width={w}
               height={outH}
               rx={2}
-              className="fill-violet-500/90"
+              className="fill-emerald-600/90"
             />
           </g>
         );
@@ -209,7 +211,7 @@ export function WorkspaceUsage() {
   }, [throughput.data]);
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-5 py-6">
+    <div>
       <BackLink to={`/dashboard/w/${workspaceId}`}>Workspace</BackLink>
       <PageHead
         eyebrow="Admin"
@@ -222,20 +224,36 @@ export function WorkspaceUsage() {
           Only workspace admins can view usage data. Ask an admin for access.
         </Note>
       )}
+      {workspace.isError && (
+        <Note tone="error">
+          <span className="flex flex-wrap items-center gap-3">
+            <span>Couldn&apos;t load this workspace.</span>
+            <Btn variant="ghost" onClick={() => workspace.refetch()}>
+              Retry
+            </Btn>
+          </span>
+        </Note>
+      )}
 
       {isAdmin && (
         <>
           <div className="mt-4 flex flex-wrap items-center gap-2">
-            <div className="flex rounded-xl bg-white p-1 ring-1 ring-black/[0.07]">
+            <div
+              role="tablist"
+              aria-label="Usage sections"
+              className="flex rounded-xl bg-white p-1 ring-1 ring-black/[0.07]"
+            >
               {(["usage", "throughput", "keys"] as const).map((t) => (
                 <button
                   key={t}
                   type="button"
+                  role="tab"
+                  aria-selected={tab === t}
                   onClick={() => setTab(t)}
                   className={
                     tab === t
-                      ? "rounded-lg bg-neutral-900 px-3 py-1.5 text-[13px] font-semibold text-white"
-                      : "rounded-lg px-3 py-1.5 text-[13px] font-medium text-neutral-500 hover:text-neutral-900"
+                      ? "rounded-lg bg-neutral-900 px-3 py-1.5 text-[13px] font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900/40"
+                      : "rounded-lg px-3 py-1.5 text-[13px] font-medium text-neutral-500 hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900/30"
                   }
                 >
                   {t === "usage"
@@ -246,16 +264,21 @@ export function WorkspaceUsage() {
                 </button>
               ))}
             </div>
-            <div className="flex rounded-xl bg-white p-1 ring-1 ring-black/[0.07]">
+            <div
+              role="group"
+              aria-label="Date range"
+              className="flex rounded-xl bg-white p-1 ring-1 ring-black/[0.07]"
+            >
               {RANGE_DAYS.map((d) => (
                 <button
                   key={d}
                   type="button"
+                  aria-pressed={days === d}
                   onClick={() => setDays(d)}
                   className={
                     days === d
-                      ? "rounded-lg bg-neutral-900 px-3 py-1.5 text-[13px] font-semibold text-white"
-                      : "rounded-lg px-3 py-1.5 text-[13px] font-medium text-neutral-500 hover:text-neutral-900"
+                      ? "rounded-lg bg-neutral-900 px-3 py-1.5 text-[13px] font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900/40"
+                      : "rounded-lg px-3 py-1.5 text-[13px] font-medium text-neutral-500 hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900/30"
                   }
                 >
                   {d}d
@@ -282,6 +305,16 @@ export function WorkspaceUsage() {
 
           {tab === "usage" && (
             <div className="mt-4 flex flex-col gap-4">
+              {summary.isError && (
+                <Note tone="error">
+                  <span className="flex flex-wrap items-center gap-3">
+                    <span>Couldn&apos;t load usage for this range.</span>
+                    <Btn variant="ghost" onClick={() => summary.refetch()}>
+                      Retry
+                    </Btn>
+                  </span>
+                </Note>
+              )}
               <Card className="grid grid-cols-2 gap-6 p-5 lg:grid-cols-4">
                 <Stat
                   label={`Spend · month`}
@@ -355,11 +388,11 @@ export function WorkspaceUsage() {
                       <DailyChart days={data!.byDay} />
                       <div className="mt-1 flex gap-4 text-[11px] font-medium text-neutral-500">
                         <span className="flex items-center gap-1.5">
-                          <span className="size-2.5 rounded-sm bg-sky-500/80" />
+                          <span className="size-2.5 rounded-sm bg-neutral-900/70" />
                           Input
                         </span>
                         <span className="flex items-center gap-1.5">
-                          <span className="size-2.5 rounded-sm bg-violet-500/90" />
+                          <span className="size-2.5 rounded-sm bg-emerald-600/90" />
                           Output
                         </span>
                       </div>
@@ -387,7 +420,7 @@ export function WorkspaceUsage() {
                           </span>
                           <div className="h-2 flex-1 overflow-hidden rounded-full bg-neutral-900/[0.07]">
                             <div
-                              className="h-full rounded-full bg-gradient-to-r from-sky-500 to-violet-500"
+                              className="h-full rounded-full bg-neutral-900"
                               style={{ width: `${(total / max) * 100}%` }}
                             />
                           </div>
@@ -408,8 +441,22 @@ export function WorkspaceUsage() {
                 <CardHead title="By member" />
                 <div className="px-5 py-2">
                   {byMember.isLoading ? (
-                    <div className="py-4 text-sm text-neutral-400">
-                      Loading…
+                    <div className="flex items-center gap-2 py-4 text-sm text-neutral-500">
+                      <Spinner /> Loading members…
+                    </div>
+                  ) : byMember.isError ? (
+                    <div className="py-4">
+                      <Note tone="error">
+                        <span className="flex flex-wrap items-center gap-3">
+                          <span>Couldn&apos;t load member usage.</span>
+                          <Btn
+                            variant="ghost"
+                            onClick={() => byMember.refetch()}
+                          >
+                            Retry
+                          </Btn>
+                        </span>
+                      </Note>
                     </div>
                   ) : sortedMembers.length === 0 ? (
                     <div className="py-4 text-sm text-neutral-400">
@@ -418,19 +465,32 @@ export function WorkspaceUsage() {
                   ) : (
                     <div className="overflow-x-auto">
                       <table className="w-full text-left text-[13px]">
+                        <caption className="sr-only">
+                          Token usage by member, last {days} days
+                        </caption>
                         <thead>
                           <tr className="text-[11px] uppercase tracking-wide text-neutral-400">
-                            <th className="py-2 pr-3 font-semibold">Member</th>
-                            <th className="py-2 pr-3 font-semibold">
+                            <th scope="col" className="py-2 pr-3 font-semibold">
+                              Member
+                            </th>
+                            <th scope="col" className="py-2 pr-3 font-semibold">
                               Sessions
                             </th>
-                            <th className="py-2 pr-3 text-right font-semibold">
+                            <th
+                              scope="col"
+                              className="py-2 pr-3 text-right font-semibold"
+                            >
                               Tokens
                             </th>
-                            <th className="py-2 pr-3 text-right font-semibold">
+                            <th
+                              scope="col"
+                              className="py-2 pr-3 text-right font-semibold"
+                            >
                               Cost
                             </th>
-                            <th className="py-2 font-semibold">Top model</th>
+                            <th scope="col" className="py-2 font-semibold">
+                              Top model
+                            </th>
                           </tr>
                         </thead>
                         <tbody>
@@ -477,7 +537,7 @@ export function WorkspaceUsage() {
                         cap !== null ? `$${(cap / 100).toFixed(2)}` : "No cap"
                       }
                       inputMode="decimal"
-                      className="w-32 rounded-xl bg-white px-3 py-2 text-[13px] text-neutral-900 ring-1 ring-black/[0.1]"
+                      className={`${inputClass} w-32`}
                     />
                   </label>
                   <label className="flex flex-col gap-1 text-[12px] font-medium text-neutral-500">
@@ -486,7 +546,7 @@ export function WorkspaceUsage() {
                       value={alertInput}
                       onChange={(e) => setAlertInput(e.target.value)}
                       inputMode="numeric"
-                      className="w-20 rounded-xl bg-white px-3 py-2 text-[13px] text-neutral-900 ring-1 ring-black/[0.1]"
+                      className={`${inputClass} w-20`}
                     />
                   </label>
                   <Btn
@@ -540,8 +600,22 @@ export function WorkspaceUsage() {
                 <CardHead title={`Team throughput · ${days}d`} />
                 <div className="px-5 py-2">
                   {throughput.isLoading ? (
-                    <div className="py-4 text-sm text-neutral-400">
-                      Loading…
+                    <div className="flex items-center gap-2 py-4 text-sm text-neutral-500">
+                      <Spinner /> Loading throughput…
+                    </div>
+                  ) : throughput.isError ? (
+                    <div className="py-4">
+                      <Note tone="error">
+                        <span className="flex flex-wrap items-center gap-3">
+                          <span>Couldn&apos;t load throughput.</span>
+                          <Btn
+                            variant="ghost"
+                            onClick={() => throughput.refetch()}
+                          >
+                            Retry
+                          </Btn>
+                        </span>
+                      </Note>
                     </div>
                   ) : sortedThroughput.length === 0 ? (
                     <div className="py-4 text-sm text-neutral-400">
@@ -550,22 +624,42 @@ export function WorkspaceUsage() {
                   ) : (
                     <div className="overflow-x-auto">
                       <table className="w-full text-left text-[13px]">
+                        <caption className="sr-only">
+                          Team throughput, last {days} days
+                        </caption>
                         <thead>
                           <tr className="text-[11px] uppercase tracking-wide text-neutral-400">
-                            <th className="py-2 pr-3 font-semibold">Member</th>
-                            <th className="py-2 pr-3 text-right font-semibold">
+                            <th scope="col" className="py-2 pr-3 font-semibold">
+                              Member
+                            </th>
+                            <th
+                              scope="col"
+                              className="py-2 pr-3 text-right font-semibold"
+                            >
                               Tasks
                             </th>
-                            <th className="py-2 pr-3 text-right font-semibold">
+                            <th
+                              scope="col"
+                              className="py-2 pr-3 text-right font-semibold"
+                            >
                               PRs
                             </th>
-                            <th className="py-2 pr-3 text-right font-semibold">
+                            <th
+                              scope="col"
+                              className="py-2 pr-3 text-right font-semibold"
+                            >
                               Tests ✓/✗
                             </th>
-                            <th className="py-2 pr-3 text-right font-semibold">
+                            <th
+                              scope="col"
+                              className="py-2 pr-3 text-right font-semibold"
+                            >
                               Cost
                             </th>
-                            <th className="py-2 text-right font-semibold">
+                            <th
+                              scope="col"
+                              className="py-2 text-right font-semibold"
+                            >
                               $/task
                             </th>
                           </tr>
@@ -722,7 +816,7 @@ function KeysTab({
 
   return (
     <div className="mt-4 flex flex-col gap-4">
-      <Card className="grid grid-cols-3 gap-6 p-5">
+      <Card className="grid grid-cols-1 gap-6 p-5 sm:grid-cols-3">
         <Stat label="Total keys" value={String(total)} />
         <Stat label="Taken" value={String(taken)} />
         <Stat label="Untaken" value={String(untaken)} />
@@ -739,7 +833,7 @@ function KeysTab({
             <select
               value={stockProvider}
               onChange={(e) => setStockProvider(e.target.value)}
-              className="rounded-xl bg-white px-3 py-2 text-[13px] text-neutral-900 ring-1 ring-black/[0.1]"
+              className={inputClass}
             >
               <option value="claude">Claude</option>
               <option value="opencode">OpenCode</option>
@@ -752,7 +846,7 @@ function KeysTab({
               value={stockLabel}
               onChange={(e) => setStockLabel(e.target.value)}
               placeholder="team-key-1"
-              className="rounded-xl bg-white px-3 py-2 text-[13px] text-neutral-900 ring-1 ring-black/[0.1]"
+              className={inputClass}
             />
           </label>
           <label className="flex min-w-44 flex-[2] flex-col gap-1 text-[12px] font-medium text-neutral-500">
@@ -763,7 +857,7 @@ function KeysTab({
               placeholder="sk-…"
               autoComplete="off"
               spellCheck={false}
-              className="rounded-xl bg-white px-3 py-2 font-mono text-[13px] text-neutral-900 ring-1 ring-black/[0.1]"
+              className={`${inputClass} font-mono`}
             />
           </label>
           <label className="flex w-24 flex-col gap-1 text-[12px] font-medium text-neutral-500">
@@ -773,7 +867,7 @@ function KeysTab({
               onChange={(e) => setStockCap(e.target.value)}
               placeholder="∞"
               inputMode="numeric"
-              className="rounded-xl bg-white px-3 py-2 text-[13px] text-neutral-900 ring-1 ring-black/[0.1]"
+              className={inputClass}
             />
           </label>
           <Btn
@@ -805,7 +899,7 @@ function KeysTab({
             <select
               value={assignPool}
               onChange={(e) => setAssignPool(e.target.value)}
-              className="rounded-xl bg-white px-3 py-2 text-[13px] text-neutral-900 ring-1 ring-black/[0.1]"
+              className={inputClass}
             >
               <option value="">Select a stocked key…</option>
               {available.map((e) => (
@@ -821,7 +915,7 @@ function KeysTab({
             <select
               value={assignUser}
               onChange={(e) => setAssignUser(e.target.value)}
-              className="rounded-xl bg-white px-3 py-2 text-[13px] text-neutral-900 ring-1 ring-black/[0.1]"
+              className={inputClass}
             >
               <option value="">Select a member…</option>
               {members.map((m) => (
@@ -849,7 +943,9 @@ function KeysTab({
         <CardHead title="Taken keys" hint="Who holds what" />
         <div className="px-5 py-2">
           {loading ? (
-            <div className="py-4 text-sm text-neutral-400">Loading…</div>
+            <div className="flex items-center gap-2 py-4 text-sm text-neutral-500">
+              <Spinner /> Loading keys…
+            </div>
           ) : checkouts.length === 0 ? (
             <div className="py-4 text-sm text-neutral-400">
               No checkouts yet.
@@ -857,12 +953,21 @@ function KeysTab({
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-[13px]">
+                <caption className="sr-only">Checked-out API keys</caption>
                 <thead>
                   <tr className="text-[11px] uppercase tracking-wide text-neutral-400">
-                    <th className="py-2 pr-3 font-semibold">Key</th>
-                    <th className="py-2 pr-3 font-semibold">Holder</th>
-                    <th className="py-2 pr-3 font-semibold">Via</th>
-                    <th className="py-2 text-right font-semibold">Taken</th>
+                    <th scope="col" className="py-2 pr-3 font-semibold">
+                      Key
+                    </th>
+                    <th scope="col" className="py-2 pr-3 font-semibold">
+                      Holder
+                    </th>
+                    <th scope="col" className="py-2 pr-3 font-semibold">
+                      Via
+                    </th>
+                    <th scope="col" className="py-2 text-right font-semibold">
+                      Taken
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -896,19 +1001,28 @@ function KeysTab({
         <CardHead title="Stock" hint="Every stocked key + status" />
         <div className="px-5 py-2">
           {loading ? (
-            <div className="py-4 text-sm text-neutral-400">Loading…</div>
+            <div className="flex items-center gap-2 py-4 text-sm text-neutral-500">
+              <Spinner /> Loading stock…
+            </div>
           ) : pool.length === 0 ? (
             <div className="py-4 text-sm text-neutral-500">
-              Nothing stocked yet — stock keys from the API (admin endpoint).
+              Nothing stocked yet — use the form above to stock the first key.
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-[13px]">
+                <caption className="sr-only">Stocked API keys</caption>
                 <thead>
                   <tr className="text-[11px] uppercase tracking-wide text-neutral-400">
-                    <th className="py-2 pr-3 font-semibold">Key</th>
-                    <th className="py-2 pr-3 font-semibold">Status</th>
-                    <th className="py-2 text-right font-semibold">Checkouts</th>
+                    <th scope="col" className="py-2 pr-3 font-semibold">
+                      Key
+                    </th>
+                    <th scope="col" className="py-2 pr-3 font-semibold">
+                      Status
+                    </th>
+                    <th scope="col" className="py-2 text-right font-semibold">
+                      Checkouts
+                    </th>
                   </tr>
                 </thead>
                 <tbody>

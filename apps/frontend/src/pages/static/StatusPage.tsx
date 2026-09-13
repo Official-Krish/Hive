@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { StaticPage } from "@/components/layout/StaticPage";
 import { API_BASE_URL } from "@/lib/config";
 import { cn } from "@/lib/utils";
@@ -73,32 +74,47 @@ function ServiceRow({
 export function StatusPage() {
   const [health, setHealth] = useState<Health | null>(null);
   const [failed, setFailed] = useState(false);
+  const [checking, setChecking] = useState(true);
+  const [lastChecked, setLastChecked] = useState<Date | null>(null);
+
+  const check = useCallback(async () => {
+    setChecking(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/v1/health`);
+      if (!res.ok) throw new Error("bad status");
+      const json = (await res.json()) as { data: Health };
+      setHealth(json.data);
+      setFailed(false);
+    } catch {
+      setFailed(true);
+    } finally {
+      setLastChecked(new Date());
+      setChecking(false);
+    }
+  }, []);
 
   useEffect(() => {
     let alive = true;
-    async function check() {
-      try {
-        const res = await fetch(`${API_BASE_URL}/api/v1/health`);
-        if (!res.ok) throw new Error("bad status");
-        const json = (await res.json()) as { data: Health };
-        if (alive) {
-          setHealth(json.data);
-          setFailed(false);
-        }
-      } catch {
-        if (alive) setFailed(true);
-      }
-    }
-    void check();
-    const t = setInterval(check, 30_000);
+    const run = () => {
+      if (alive) void check();
+    };
+    run();
+    const t = setInterval(run, 30_000);
     return () => {
       alive = false;
       clearInterval(t);
     };
-  }, []);
+  }, [check]);
 
   const overall =
     failed || !health ? "unknown" : health.status === "ok" ? "ok" : "down";
+  // Backend rows respect the reported status: a non-ok health payload marks
+  // API + realtime down, not operational.
+  const apiState = failed || !health ? "unknown" : overall;
+  const dbState =
+    failed || !health ? "unknown" : health.db === "ok" ? "ok" : "down";
+  const redisState =
+    failed || !health ? "unknown" : health.redis === "ok" ? "ok" : "down";
 
   return (
     <StaticPage
@@ -107,52 +123,71 @@ export function StatusPage() {
       description="Live health of the Hive platform — API, realtime, and storage. Refreshes every 30 seconds."
       cta={false}
     >
-      <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03]">
+      <div
+        aria-live="polite"
+        className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03]"
+      >
         <div className="flex items-center justify-between gap-4 border-b border-white/[0.07] px-5 py-4">
           <span className="text-sm font-semibold text-white">
-            {overall === "ok"
-              ? "All systems operational"
-              : overall === "down"
-                ? "Partial outage"
-                : "Checking…"}
+            {checking && !health
+              ? "Checking…"
+              : overall === "ok"
+                ? "All systems operational"
+                : overall === "down"
+                  ? "Partial outage"
+                  : "Unreachable"}
           </span>
-          {health && (
-            <span className="font-mono text-[11px] tabular-nums text-white/35">
-              uptime {fmtUptime(health.uptime)}
-            </span>
-          )}
+          <span className="flex items-center gap-3">
+            {health && (
+              <span className="font-mono text-[11px] tabular-nums text-white/35">
+                uptime {fmtUptime(health.uptime)}
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={() => void check()}
+              disabled={checking}
+              className="rounded-full border border-white/10 px-3 py-1 font-mono text-[11px] text-white/60 transition hover:bg-white/[0.07] hover:text-white disabled:opacity-50"
+            >
+              {checking ? "Checking…" : "Retry"}
+            </button>
+          </span>
         </div>
         <ServiceRow
           name="API"
-          state={failed || !health ? "unknown" : "ok"}
+          state={apiState}
           detail={
-            health ? new Date(health.timestamp).toLocaleTimeString() : undefined
+            health
+              ? new Date(health.timestamp).toLocaleString(undefined, {
+                  month: "short",
+                  day: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  second: "2-digit",
+                })
+              : undefined
           }
         />
         <ServiceRow
           name="Realtime hub"
-          state={failed || !health ? "unknown" : "ok"}
-          detail={health ? `ws :${health.wsPort}` : undefined}
+          state={apiState}
+          detail={health ? `port ${health.wsPort}` : undefined}
         />
-        <ServiceRow
-          name="Postgres"
-          state={
-            failed || !health ? "unknown" : health.db === "ok" ? "ok" : "down"
-          }
-        />
-        <ServiceRow
-          name="Redis"
-          state={
-            failed || !health
-              ? "unknown"
-              : health.redis === "ok"
-                ? "ok"
-                : "down"
-          }
-        />
+        <ServiceRow name="Postgres" state={dbState} />
+        <ServiceRow name="Redis" state={redisState} />
       </div>
-      <p className="mt-6 text-sm text-neutral-500">
-        Seeing red? <a href="/contact">Tell us</a> — and check back shortly.
+      {lastChecked && (
+        <p className="mt-4 font-mono text-[11px] tabular-nums text-white/30">
+          Last checked{" "}
+          {lastChecked.toLocaleTimeString(undefined, {
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+          })}
+        </p>
+      )}
+      <p className="mt-4 text-sm text-neutral-500">
+        Seeing red? <Link to="/contact">Tell us</Link> — and check back shortly.
       </p>
     </StaticPage>
   );

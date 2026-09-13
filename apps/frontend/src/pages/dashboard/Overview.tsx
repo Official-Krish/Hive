@@ -1,6 +1,6 @@
 /* ─────────────────────────────────────────────────────────────
    OVERVIEW — console front page. Featured workspace with live
-   presence, workspace index, setup rail. Same data, dark instrument.
+   presence, workspace index, setup rail. Same data, light instrument.
    ───────────────────────────────────────────────────────────── */
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -56,6 +56,7 @@ export function Overview() {
     data: workspaces,
     isLoading,
     isError,
+    refetch,
   } = useQuery({
     queryKey: ["workspaces"],
     queryFn: http.workspaces.list,
@@ -97,7 +98,12 @@ export function Overview() {
       {isError && (
         <div className="mb-6">
           <Note tone="error">
-            We couldn't load your workspaces. Refresh to try again.
+            <span className="flex flex-wrap items-center gap-3">
+              <span>We couldn&apos;t load your workspaces.</span>
+              <Btn variant="ghost" onClick={() => refetch()}>
+                Retry
+              </Btn>
+            </span>
           </Note>
         </div>
       )}
@@ -214,10 +220,6 @@ function FeaturedWorkspace({ workspace: ws }: { workspace: Ws }) {
               className={btnGhostClass}
             >
               Invite people
-            </Link>
-            <Link to={`/dashboard/w/${ws.id}`} className={btnGhostClass}>
-              <FiArrowUpRight className="size-4" aria-hidden />
-              Open details
             </Link>
             {(ws.role === "owner" || ws.role === "admin") && (
               <Link

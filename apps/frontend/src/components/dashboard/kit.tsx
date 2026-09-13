@@ -135,13 +135,13 @@ export function Row({
 
 /* ── Buttons ───────────────────────────────────────────────── */
 const btnBase =
-  "inline-flex items-center justify-center gap-2 rounded-full text-[13px] font-medium transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-40";
+  "inline-flex items-center justify-center gap-2 rounded-full text-[13px] font-medium transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900/30";
 
 export const btnPrimaryClass =
-  "inline-flex items-center justify-center gap-2 rounded-full bg-neutral-950 px-4 py-2 text-[13px] font-medium text-white transition-all duration-200 hover:bg-neutral-800 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40";
+  "inline-flex items-center justify-center gap-2 rounded-full bg-neutral-950 px-4 py-2 text-[13px] font-medium text-white transition-all duration-200 hover:bg-neutral-800 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900/40";
 
 export const btnGhostClass =
-  "inline-flex items-center justify-center gap-2 rounded-full border border-neutral-900/15 bg-transparent px-4 py-2 text-[13px] font-medium text-neutral-700 transition-all duration-200 hover:border-neutral-900/30 hover:bg-neutral-900/[0.03] hover:text-neutral-900 active:scale-[0.98]";
+  "inline-flex items-center justify-center gap-2 rounded-full border border-neutral-900/15 bg-transparent px-4 py-2 text-[13px] font-medium text-neutral-700 transition-all duration-200 hover:border-neutral-900/30 hover:bg-neutral-900/[0.03] hover:text-neutral-900 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900/30";
 
 export function Btn({
   children,
@@ -163,7 +163,7 @@ export function Btn({
         variant === "ghost" &&
           "border border-neutral-900/15 bg-transparent px-4 py-2 text-neutral-700 hover:border-neutral-900/30 hover:bg-neutral-900/[0.03] hover:text-neutral-900 active:scale-[0.98]",
         variant === "danger" &&
-          "border border-rose-600/25 bg-rose-600/[0.06] px-4 py-2 text-rose-700 hover:bg-rose-600/[0.1] active:scale-[0.98]",
+          "border border-rose-600/25 bg-rose-600/[0.06] px-4 py-2 text-rose-700 hover:bg-rose-600/[0.1] active:scale-[0.98] focus-visible:ring-rose-600/30",
         variant === "quiet" &&
           "px-2 py-1 text-neutral-500 hover:text-neutral-900",
         className,
@@ -193,7 +193,7 @@ export function IconBtn({
       aria-label={label}
       title={label}
       className={cn(
-        "flex size-8 flex-shrink-0 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-900/[0.05] hover:text-neutral-900",
+        "flex size-8 flex-shrink-0 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-900/[0.05] hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900/30",
         className,
       )}
     >
@@ -397,12 +397,14 @@ export function Avatar({
 export function Spinner({ className }: { className?: string }) {
   return (
     <span
-      aria-hidden
+      role="status"
       className={cn(
         "inline-block size-4 animate-spin rounded-full border-2 border-neutral-900/15 border-t-neutral-900",
         className,
       )}
-    />
+    >
+      <span className="sr-only">Loading</span>
+    </span>
   );
 }
 

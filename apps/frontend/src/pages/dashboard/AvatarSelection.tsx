@@ -1,7 +1,7 @@
 /* ─────────────────────────────────────────────────────────────
    AVATAR SELECTION — pick a map avatar. 3D previews render on
    demand (no idle WebGL loops), save preserves the workspace
-   context. Same flow, dark instrument.
+   context. Same flow, light instrument.
    ───────────────────────────────────────────────────────────── */
 import { useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";

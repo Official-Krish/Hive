@@ -1,6 +1,7 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
-import { FiChevronDown } from "react-icons/fi";
+import { FiChevronDown, FiCopy, FiCheck } from "react-icons/fi";
 
 interface FaqItem {
   id: string;
@@ -13,55 +14,55 @@ const FAQ_ITEMS: FaqItem[] = [
     id: "q1",
     question: "What exactly does this platform do?",
     answer:
-      "Hive is a virtual office for engineering teams. It combines real-time developer presence with local agent tracking, showing live summaries of what your engineers and AI subagents are building in one unified workspace.",
+      "Hive turns raw AI-coding activity into a living team dashboard. A lightweight local collector observes your agents, terminal, git, and tests — then a cloud backend renders dashboards, token spend, alerts, and a spatial office your team walks around in.",
   },
   {
     id: "q2",
     question: "How does local AI agent tracking work?",
     answer:
-      "Our lightweight daemon runs locally alongside your CLI tools (Claude, Codex, Cursor, etc.). It synthesizes live telemetry into real-time activity updates displayed right above your avatar in the virtual workspace.",
+      "The hive daemon tails local session logs from Claude Code, Codex, and OpenCode (plus git, filesystem, and an optional shell hook for terminal commands), normalizes them into telemetry events, and ships batched, idempotent updates to your workspace. Stop scrolling the film and the story freezes — same idea: when agents stop, the floor goes quiet.",
   },
   {
     id: "q3",
     question: "How do you calculate token efficiency and spend?",
     answer:
-      "Hive aggregates token usage across all connected AI models and maps token burn directly to pull requests, tasks, and shipped code so team leads can measure real engineering output per dollar.",
+      "Every token event is priced against per-model rates and rolled up into daily charts, per-model and per-member splits, monthly budgets with alert thresholds, and throughput (tasks, PRs, tests, $/task). Watchdog goes further: it flags stuck agents, token burn with no output, failing test streaks, and budget breaches as actionable alerts.",
   },
   {
     id: "q4",
     question: "Can I connect this with my existing stack?",
     answer:
-      "Yes! Hive integrates natively with GitHub, GitLab, Slack, Notion, and your terminal environment to track commits, PR status, and live agent runs automatically.",
+      "Hive is GitHub-native: connect with a GitHub OAuth App, install it on your repos, and pushes and pull requests land on the floor in real time via webhooks. An ambient reviewer bot also reviews PRs — secret scans plus a model pass, comment-only — and logs its spend to your workspace budget.",
   },
   {
     id: "q5",
     question: "Is developer code or prompt data stored on your servers?",
     answer:
-      "No. Hive only processes agent metadata, token counters, and high-level activity summaries. Your raw source code and environment variables stay entirely on your local machine.",
+      "No. The collector ships metadata, token counters, and activity summaries — raw source code never leaves the machine. Per-workspace privacy switches gate token usage, summaries, git metadata, file paths, exact commands, and prompt metadata server-side, and role-ranked access controls who sees what.",
   },
   {
     id: "q6",
     question: "Does Hive work for hybrid and distributed teams?",
     answer:
-      "Absolutely. Hive gives remote and distributed teams the ambient presence of a shared physical office, making it effortless to see who is working on what without annoying status sync meetings.",
+      "That's the point. Presence, avatars, live agent summaries, voice, whiteboards, and pair sessions give distributed teams the ambient awareness of a shared floor — know what's happening without asking, and without another status meeting.",
   },
   {
     id: "q7",
     question: "How long does setup take for an engineering team?",
     answer:
-      "Setup takes under 2 minutes. Install the CLI daemon, sign in with your team credentials, and your active agent sessions automatically stream presence to the shared office map.",
+      "Under two minutes per machine: install the collector, run hive login (GitHub device flow, no passwords), then hive start to register the device and join a workspace. Joining a workspace requires an online collector — that gate keeps every seat live.",
   },
   {
     id: "q8",
     question: "Can I customize privacy settings for sensitive projects?",
     answer:
-      "Yes. You can configure granular privacy rules to redact specific file names, paths, or prompt parameters before telemetry is broadcasted to the team workspace.",
+      "Yes. Six per-workspace switches — activity summaries, agent status, token usage, git metadata, exact commands, file paths, prompt metadata — redact read responses server-side without changing their shape. Admins and owners manage them; viewers get a read-only surface.",
   },
   {
     id: "q9",
     question: "What AI models and CLI tools are supported?",
     answer:
-      "Hive supports all major AI models and tools out of the box, including Claude (Anthropic), Codex / Copilot (OpenAI), Gemini (Google), DeepSeek, Cursor, Aider, and custom local LLM servers.",
+      "Claude Code, Codex, and OpenCode are observed directly from their local session logs, plus git, filesystem, terminal, and test activity for any workflow. Token pricing is tracked per model, so new models just need a pricing row to light up the spend dashboard.",
   },
 ];
 
@@ -76,9 +77,9 @@ export const Faq = () => {
   return (
     <section
       id="faq"
-      className="relative bg-[#f0efec] text-neutral-900 py-16 sm:py-28 px-4 sm:px-6 lg:px-12 select-none border-t border-neutral-300/40 scroll-mt-16"
+      className="relative bg-[#f0efec] text-neutral-900 py-16 sm:py-28 px-4 sm:px-6 lg:px-12 select-none scroll-mt-16"
     >
-      <div className="relative max-w-8xl">
+      <div className="relative max-w-7xl mx-auto">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-16 items-start">
           {/* ── LEFT COLUMN: Title, Contact Email, & CTA Card ── */}
           <div className="lg:col-span-6 flex flex-col justify-between">
@@ -110,21 +111,25 @@ export const Faq = () => {
               </motion.p>
             </div>
 
-            {/* CTA Card (Matches reference card design) */}
+            {/* Install card — the 2-minute promise, copyable */}
             <motion.div
               initial={{ opacity: 0, y: 16 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ duration: 0.6, delay: 0.2 }}
-              className="rounded-[24px] bg-white p-7 sm:p-8 shadow-[0_4px_20px_rgba(0,0,0,0.04)] border border-neutral-200/80 max-w-md"
+              className="rounded-[24px] bg-neutral-950 p-7 sm:p-8 shadow-[0_4px_20px_rgba(0,0,0,0.04)] max-w-md"
             >
-              <h3 className="font-sans font-semibold text-xl sm:text-2xl text-neutral-950 tracking-tight leading-snug mb-3">
-                Need a fast moving team of engineers for your startup?
+              <h3 className="font-sans font-semibold text-xl sm:text-2xl text-white tracking-tight leading-snug mb-3">
+                Live on your floor in 2 minutes.
               </h3>
-              <p className="text-xs sm:text-sm text-neutral-500 leading-relaxed mb-6 font-normal">
-                Hive is your best bet, we have live presence, subagent tracking,
-                and intelligence to take your project from 0-1.
-              </p>
+              <InstallSnippet />
+              <Link
+                to="/install"
+                className="mt-5 inline-flex items-center gap-1.5 text-sm font-medium text-white/70 transition-colors hover:text-white"
+              >
+                Full install guide
+                <span aria-hidden>→</span>
+              </Link>
             </motion.div>
           </div>
 
@@ -143,10 +148,16 @@ export const Faq = () => {
                 >
                   <button
                     onClick={() => toggleFaq(item.id)}
-                    className="w-full flex items-center justify-between gap-4 text-left group focus:outline-none"
+                    className="w-full flex items-center gap-4 text-left group focus:outline-none"
                     aria-expanded={isOpen}
                   >
-                    <h3 className="font-semibold text-neutral-900 sm:text-lg transition-colors tracking-tight">
+                    <span
+                      aria-hidden
+                      className="font-mono text-[11px] tabular-nums text-neutral-400 shrink-0 w-6"
+                    >
+                      {String(index + 1).padStart(2, "0")}
+                    </span>
+                    <h3 className="flex-1 font-semibold text-neutral-900 sm:text-lg transition-colors tracking-tight">
                       {item.question}
                     </h3>
                     <FiChevronDown
@@ -182,3 +193,44 @@ export const Faq = () => {
 };
 
 export default Faq;
+
+const INSTALL_CMD =
+  "curl -fsSL https://cdn.krishlabs.tech/hive/collector/install.sh | bash";
+
+function InstallSnippet() {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(INSTALL_CMD);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1600);
+    } catch {
+      /* clipboard unavailable — selection still works */
+    }
+  };
+  return (
+    <div className="overflow-hidden rounded-xl border border-white/10 bg-black/60">
+      <div className="flex items-center justify-between gap-2 border-b border-white/[0.07] px-3.5 py-2">
+        <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-white/35">
+          terminal
+        </span>
+        <button
+          type="button"
+          onClick={copy}
+          aria-label={copied ? "Copied" : "Copy install command"}
+          className="flex items-center gap-1.5 font-mono text-[11px] text-white/50 transition-colors hover:text-white"
+        >
+          {copied ? (
+            <FiCheck className="size-3.5 text-emerald-400" />
+          ) : (
+            <FiCopy className="size-3.5" />
+          )}
+          {copied ? "copied" : "copy"}
+        </button>
+      </div>
+      <pre className="overflow-x-auto px-3.5 py-3 font-mono text-[12px] leading-relaxed text-emerald-200/90">
+        <code>{INSTALL_CMD}</code>
+      </pre>
+    </div>
+  );
+}

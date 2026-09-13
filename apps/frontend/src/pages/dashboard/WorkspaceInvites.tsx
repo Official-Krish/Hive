@@ -1,6 +1,6 @@
 /* ─────────────────────────────────────────────────────────────
    INVITES — your inbox. Accept stays on the page so you can work
-   through several. Same data, dark instrument.
+   through several. Same data, light instrument.
    ───────────────────────────────────────────────────────────── */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError, http, type ReceivedInvite } from "@/lib/http";

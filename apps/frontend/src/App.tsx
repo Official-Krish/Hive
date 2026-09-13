@@ -19,6 +19,8 @@ import { ContactPage } from "./pages/static/ContactPage";
 import { StatusPage } from "./pages/static/StatusPage";
 import { AppBar } from "./components/layout/AppBar";
 import { Footer } from "./components/layout/Footer";
+import { ScrollToTop } from "./components/layout/ScrollToTop";
+import { NotFound } from "./pages/NotFound";
 import { DashboardLayout } from "./components/dashboard/DashboardLayout";
 import { Overview } from "./pages/dashboard/Overview";
 import { CreateWorkspace } from "./pages/dashboard/CreateWorkspace";
@@ -49,6 +51,7 @@ const queryClient = new QueryClient({
 function PublicLayout() {
   return (
     <div className="flex min-h-screen flex-col">
+      <ScrollToTop />
       <AppBar />
       <main className="flex-1">
         <Outlet />
@@ -60,11 +63,11 @@ function PublicLayout() {
 
 function AuthLayout() {
   return (
-    <div className="flex min-h-screen flex-col">
+    <div className="flex min-h-screen flex-col bg-[#f0efec]">
       <main className="flex-1">
         <AuthPage />
       </main>
-      <Footer />
+      <Footer tone="light" />
     </div>
   );
 }
@@ -82,7 +85,7 @@ const router = createBrowserRouter([
       { path: "/about", element: <AboutPage /> },
       { path: "/contact", element: <ContactPage /> },
       { path: "/status", element: <StatusPage /> },
-      { path: "*", element: <Navigate to="/" replace /> },
+      { path: "*", element: <NotFound /> },
     ],
   },
   { path: "/auth", element: <AuthLayout /> },

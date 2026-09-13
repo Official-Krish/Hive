@@ -1,6 +1,6 @@
 /* ─────────────────────────────────────────────────────────────
    WORKSPACE DETAIL — one workspace, up close. Identity + actions,
-   member roster, live presence. Same data, dark instrument.
+   member roster, live presence. Same data, light instrument.
    ───────────────────────────────────────────────────────────── */
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -180,8 +180,10 @@ export function WorkspaceDetail() {
             }
           />
         </div>
+      </Card>
 
-        <div className="grid grid-cols-1 border-t border-neutral-900/[0.08] lg:grid-cols-[1.4fr_1fr] lg:divide-x lg:divide-neutral-900/[0.08]">
+      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[1.4fr_1fr]">
+        <Card>
           <div className="px-5 py-6">
             <div className="flex items-center justify-between">
               <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-neutral-400">
@@ -203,9 +205,14 @@ export function WorkspaceDetail() {
               </div>
             )}
             {members.isError && (
-              <p className="mt-4 text-[13px] text-neutral-500">
-                Couldn't load the roster right now.
-              </p>
+              <Note tone="error">
+                <span className="flex flex-wrap items-center gap-3">
+                  <span>Roster didn&apos;t load.</span>
+                  <Btn variant="ghost" onClick={() => members.refetch()}>
+                    Retry
+                  </Btn>
+                </span>
+              </Note>
             )}
             {members.isSuccess && (
               <ul className="mt-2 divide-y divide-neutral-900/[0.08]">
@@ -229,10 +236,12 @@ export function WorkspaceDetail() {
               </ul>
             )}
           </div>
+        </Card>
 
+        <Card>
           <PresencePanel workspaceId={workspaceId} />
-        </div>
-      </Card>
+        </Card>
+      </div>
     </div>
   );
 }
@@ -250,7 +259,7 @@ function PresencePanel({ workspaceId }: { workspaceId: string }) {
   const onlineCount = people.filter((p) => p.status === "online").length;
 
   return (
-    <div className="border-t border-neutral-900/[0.08] px-5 py-6 lg:border-t-0">
+    <div className="px-5 py-6">
       <div className="flex items-center justify-between">
         <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-neutral-400">
           In the office

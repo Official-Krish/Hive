@@ -1,6 +1,6 @@
 /* ─────────────────────────────────────────────────────────────
    INVITE A USER — by GitHub username. Workspace, username, role.
-   Same flow, dark instrument.
+   Same flow, light instrument.
    ───────────────────────────────────────────────────────────── */
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";

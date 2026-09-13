@@ -1,6 +1,6 @@
 import { FiAlertTriangle, FiCheck, FiXOctagon } from "react-icons/fi";
 import { useWatchdogAlerts, alertLabel } from "@/hooks/useWatchdogAlerts";
-import { Btn, Spinner } from "@/components/dashboard/kit";
+import { Btn, Note, Spinner } from "@/components/dashboard/kit";
 
 const WATCHDOG_TYPES = new Set([
   "agent.stuck",
@@ -28,7 +28,8 @@ export function AlertsInbox({
   workspaceId: string;
   canResolve: boolean;
 }) {
-  const { items, isLoading, isError, resolve } = useWatchdogAlerts(workspaceId);
+  const { items, isLoading, isError, resolve, refetch } =
+    useWatchdogAlerts(workspaceId);
   const open = items.filter((a) => WATCHDOG_TYPES.has(a.type));
   const critical = open.filter((a) => a.severity === "critical").length;
 
@@ -39,7 +40,21 @@ export function AlertsInbox({
       </div>
     );
   }
-  if (isError || open.length === 0) return null;
+  if (isError) {
+    return (
+      <div className="mt-5">
+        <Note tone="error">
+          <span className="flex flex-wrap items-center gap-3">
+            <span>Couldn&apos;t check for alerts.</span>
+            <Btn variant="ghost" onClick={() => refetch()}>
+              Retry
+            </Btn>
+          </span>
+        </Note>
+      </div>
+    );
+  }
+  if (open.length === 0) return null;
 
   return (
     <section aria-label="Needs attention" className="mt-5">
