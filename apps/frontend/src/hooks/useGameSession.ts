@@ -99,17 +99,19 @@ export function useGameSession({
     if (!client) return;
     const offState = client.on("game.state", (e) => {
       const incoming = e.session;
-      // Uno privacy: broadcasts carry no hand. Keep the last known hand so
-      // the UI never flickers, then pull the fresh private state.
+      // Hidden-info privacy (uno hands, battleship fleets): broadcasts carry
+      // no hand. Keep the last known hand so the UI never flickers, then
+      // pull the fresh private state.
+      const hidden = incoming.kind === "uno" || incoming.kind === "battleship";
       if (
-        incoming.kind === "uno" &&
+        hidden &&
         incoming.hand === undefined &&
         incoming.members.some((m) => m.userId === myUserId)
       ) {
         const kept = handsRef.current.get(incoming.id);
         if (kept) incoming.hand = kept;
         client.requestGameState(incoming.id);
-      } else if (incoming.kind === "uno" && incoming.hand !== undefined) {
+      } else if (hidden && incoming.hand !== undefined) {
         handsRef.current.set(incoming.id, incoming.hand);
       }
       setSessions((prev) => {

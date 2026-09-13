@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { unoPublicFromString, type UnoColor } from "@hive/games";
 import { cn } from "@/lib/utils";
 import { playBoardSound } from "./sound";
+import { SkipIcon, StarIcon } from "./GameIcons";
 
 const FACE: Record<string, string> = {
   R: "bg-rose-600",
@@ -26,10 +27,16 @@ const GLOW: Record<string, string> = {
 
 function rankLabel(card: string): string {
   const rank = card === "W" || card === "F" ? card : card.slice(1);
-  if (rank === "S") return "⊘";
   if (rank === "T") return "+2";
   if (rank === "F") return "+4";
-  return rank === "W" ? "★" : rank;
+  return rank;
+}
+
+function rankKind(card: string): "star" | "skip" | "text" {
+  const rank = card === "W" || card === "F" ? card : card.slice(1);
+  if (rank === "W") return "star";
+  if (rank === "S") return "skip";
+  return "text";
 }
 
 function isWild(card: string): boolean {
@@ -53,6 +60,9 @@ function UnoCardFace({
 }) {
   const wild = isWild(card);
   const color = cardColor(card);
+  const kind = rankKind(card);
+  const iconSize =
+    size === "lg" ? "size-10" : size === "md" ? "size-7" : "size-5";
   const dims =
     size === "lg"
       ? "h-28 w-20 text-[40px]"
@@ -96,7 +106,13 @@ function UnoCardFace({
           wild ? "text-white" : "text-white/95",
         )}
       >
-        {rankLabel(card)}
+        {kind === "star" ? (
+          <StarIcon className="size-3" />
+        ) : kind === "skip" ? (
+          <SkipIcon className="size-3" />
+        ) : (
+          rankLabel(card)
+        )}
       </span>
       <span
         className={cn(
@@ -104,7 +120,13 @@ function UnoCardFace({
           wild ? "text-white" : color ? FACE_TEXT[color] : "text-white",
         )}
       >
-        {rankLabel(card)}
+        {kind === "star" ? (
+          <StarIcon className={iconSize} />
+        ) : kind === "skip" ? (
+          <SkipIcon className={iconSize} />
+        ) : (
+          rankLabel(card)
+        )}
       </span>
     </span>
   );

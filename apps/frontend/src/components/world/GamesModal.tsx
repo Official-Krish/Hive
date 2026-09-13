@@ -23,9 +23,11 @@ import {
 import { cn } from "@/lib/utils";
 import { ChessBoard } from "./games/ChessBoard";
 import { Connect4Board } from "./games/Connect4Board";
+import { CheckersBoard } from "./games/CheckersBoard";
+import { BattleshipBoard } from "./games/BattleshipBoard";
 import { LudoBoard } from "./games/LudoBoard";
 import { UnoBoard } from "./games/UnoBoard";
-import { DieIcon } from "./games/GameIcons";
+import { AnchorIcon, CrownIcon, DieIcon } from "./games/GameIcons";
 import { isBoardMuted, setBoardMuted } from "./games/sound";
 
 interface GamesModalProps {
@@ -40,6 +42,8 @@ const KIND_LABEL: Record<GameKind, string> = {
   connect4: "Connect Four",
   ludo: "Ludo",
   uno: "Uno",
+  checkers: "Checkers",
+  battleship: "Battleship",
 };
 
 const KIND_BLURB: Record<GameKind, string> = {
@@ -47,6 +51,8 @@ const KIND_BLURB: Record<GameKind, string> = {
   connect4: "Quick · 2P",
   ludo: "Race · 2–4P",
   uno: "Cards · 2–4P",
+  checkers: "Jumps · 2P",
+  battleship: "Naval · 2P",
 };
 
 /** Human end-reason for the game-over overlay. */
@@ -64,6 +70,10 @@ function endReasonLabel(reason: string | null): string {
       return "last player standing";
     case "resign":
       return "by resignation";
+    case "no-moves":
+      return "with no moves left";
+    case "fleet-sunk":
+      return "sank the fleet";
     case "cancelled":
     case "declined":
       return "before it started";
@@ -83,6 +93,8 @@ const SEAT_DOT: Record<GameKind, string[]> = {
   connect4: ["bg-rose-600", "bg-amber-500"],
   ludo: ["bg-rose-500", "bg-amber-400", "bg-sky-500", "bg-violet-500"],
   uno: ["bg-rose-500", "bg-amber-400", "bg-sky-500", "bg-violet-500"],
+  checkers: ["bg-rose-600", "bg-neutral-900 ring-black/40"],
+  battleship: ["bg-sky-600", "bg-orange-600"],
 };
 
 type SeatName = "first" | "second" | "third" | "fourth";
@@ -124,7 +136,7 @@ function Eyebrow({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** Game glyph tile — knight, four-dot rack, die, card stack. */
+/** Game glyph tile — knight, four-dot rack, die, card stack, crown, anchor. */
 function GameGlyph({
   kind,
   size = "md",
@@ -144,7 +156,11 @@ function GameGlyph({
             ? "bg-gradient-to-br from-rose-600 to-amber-500"
             : kind === "ludo"
               ? "bg-gradient-to-br from-emerald-600 to-teal-800"
-              : "bg-gradient-to-br from-violet-600 to-fuchsia-600",
+              : kind === "checkers"
+                ? "bg-gradient-to-br from-red-700 to-neutral-900"
+                : kind === "battleship"
+                  ? "bg-gradient-to-br from-sky-600 to-indigo-900"
+                  : "bg-gradient-to-br from-violet-600 to-fuchsia-600",
       )}
       aria-hidden
     >
@@ -159,6 +175,14 @@ function GameGlyph({
       ) : kind === "ludo" ? (
         <span className="leading-none">
           <DieIcon value={5} className="size-6" />
+        </span>
+      ) : kind === "checkers" ? (
+        <span className="leading-none">
+          <CrownIcon className="size-6" />
+        </span>
+      ) : kind === "battleship" ? (
+        <span className="leading-none">
+          <AnchorIcon className="size-6" />
         </span>
       ) : (
         <span className="relative leading-none">
@@ -207,8 +231,9 @@ export function GamesModal({
     ? (games.sessions.find((s) => s.id === games.openId) ?? null)
     : null;
 
-  // Uno hands travel unicast — pull the private state when opening a table
-  // (move broadcasts refresh it automatically via the hook).
+  // Hidden-info hands (uno) and fleets (battleship) travel unicast — pull
+  // the private state when opening a table (move broadcasts refresh it
+  // automatically via the hook).
   const openSessionId = openSession?.id;
   const openSessionHand = openSession?.hand;
   const openSessionKind = openSession?.kind;
@@ -219,7 +244,7 @@ export function GamesModal({
   const requestState = games.requestState;
   useEffect(() => {
     if (
-      openSessionKind === "uno" &&
+      (openSessionKind === "uno" || openSessionKind === "battleship") &&
       openSessionStatus === "active" &&
       openSessionSeated &&
       !openSessionHand &&
@@ -468,6 +493,16 @@ export function GamesModal({
                           art: "from-violet-500 via-purple-700 to-fuchsia-800",
                           tag: "Shed every card",
                         },
+                        {
+                          k: "checkers",
+                          art: "from-red-700 via-red-900 to-neutral-900",
+                          tag: "Jump them all",
+                        },
+                        {
+                          k: "battleship",
+                          art: "from-sky-500 via-sky-700 to-indigo-900",
+                          tag: "Sink the fleet",
+                        },
                       ] as Array<{
                         k: GameKind;
                         art: string;
@@ -711,7 +746,7 @@ function MatchView({
         return session.members.map((_, i) => {
           const home = st.tokens[i]?.filter((t) => t >= 32).length ?? 0;
           const out = st.tokens[i]?.filter((t) => t >= 0 && t < 32).length ?? 0;
-          if (home === 4) return "All home ★";
+          if (home === 4) return "All home";
           if (out === 0) return "In base";
           return `${home}/4 home`;
         });
@@ -981,7 +1016,11 @@ function MatchView({
               ? "bg-[#123524]"
               : session.kind === "uno"
                 ? "bg-[#2a1650]"
-                : "bg-[#16283f]",
+                : session.kind === "checkers"
+                  ? "bg-[#4a2f1d]"
+                  : session.kind === "battleship"
+                    ? "bg-[#0e2a4a]"
+                    : "bg-[#16283f]",
         )}
       >
         {session.kind === "chess" ? (
@@ -1026,6 +1065,28 @@ function MatchView({
               onCallUno={() => onMove({ kind: "uno", callUno: true })}
               onCatch={(seat) => onMove({ kind: "uno", catch: seat })}
               onSync={onSync}
+            />
+          </div>
+        ) : session.kind === "checkers" ? (
+          <div className="aspect-square h-full max-h-full w-auto max-w-full">
+            <CheckersBoard
+              board={session.board}
+              myColor={
+                mySeat === "first" ? "R" : mySeat === "second" ? "B" : null
+              }
+              canMove={myTurn}
+              onMove={(from, to) => onMove({ kind: "checkers", from, to })}
+            />
+          </div>
+        ) : session.kind === "battleship" ? (
+          <div className="flex h-full max-h-full w-auto max-w-full items-center justify-center">
+            <BattleshipBoard
+              board={session.board}
+              fleet={session.hand?.[0] ?? null}
+              names={session.members.map((m) => m.name)}
+              mySeat={mySeatIdx >= 0 ? mySeatIdx : null}
+              canMove={myTurn}
+              onFire={(fire) => onMove({ kind: "battleship", fire })}
             />
           </div>
         ) : (
@@ -1181,7 +1242,15 @@ function PlayerChip({
         ? seat === "first"
           ? "Red"
           : "Yellow"
-        : `Seat ${idx + 1}`;
+        : kind === "checkers"
+          ? seat === "first"
+            ? "Red"
+            : "Black"
+          : kind === "battleship"
+            ? seat === "first"
+              ? "Admiral"
+              : "Commodore"
+            : `Seat ${idx + 1}`;
   return (
     <div
       className={cn(
