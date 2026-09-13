@@ -2,6 +2,7 @@ import type {
   ActivityDetail,
   ActivityEventRead,
   ActivitySummary,
+  AlertSummary,
   DeveloperStats,
   IssueDetail,
   IssueSummary,
@@ -160,6 +161,26 @@ export class PrivacyGate {
   static metric(m: MetricSummary, p: PrivacySetting): MetricSummary {
     if (p.allowTokenUsage) return m;
     return { ...m, tokensTotal: null, costTotalCents: null };
+  }
+
+  /**
+   * Watchdog alert metadata may carry exact commands (test streaks) or token
+   * costs (burn/budget). Strip them per workspace settings; ids and counts
+   * are never sensitive so the alert stays actionable.
+   */
+  static alert(a: AlertSummary, p: PrivacySetting): AlertSummary {
+    const metadata = (a.metadata ?? {}) as Record<string, unknown>;
+    const next: Record<string, unknown> = { ...metadata };
+    if (!p.allowExactCommands && typeof next.command === "string") {
+      next.command = null;
+    }
+    if (!p.allowTokenUsage) {
+      if (typeof next.windowCostCents === "number") next.windowCostCents = null;
+      if (typeof next.monthSpendCents === "number") next.monthSpendCents = null;
+      if (typeof next.monthlyCapCents === "number") next.monthlyCapCents = null;
+      if (typeof next.windowTokens === "number") next.windowTokens = 0;
+    }
+    return { ...a, metadata: next };
   }
 
   static developerStats(s: DeveloperStats, p: PrivacySetting): DeveloperStats {

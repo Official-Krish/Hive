@@ -486,18 +486,25 @@ export class ReadsService {
         take: filter.pageSize,
       }),
     ]);
+    const privacy = await this.privacyOf(workspaceId);
     return paginate(
-      alerts.map((a) => ({
-        id: a.id,
-        severity: lower(a.severity),
-        type: a.type,
-        message: a.message,
-        status: lower(a.status),
-        developerId: a.developerId,
-        agentSessionId: a.agentSessionId,
-        createdAt: a.createdAt.toISOString(),
-        resolvedAt: a.resolvedAt?.toISOString() ?? null,
-      })),
+      alerts.map((a) =>
+        PrivacyGate.alert(
+          {
+            id: a.id,
+            severity: lower(a.severity),
+            type: a.type,
+            message: a.message,
+            status: lower(a.status),
+            developerId: a.developerId,
+            agentSessionId: a.agentSessionId,
+            metadata: a.metadata,
+            createdAt: a.createdAt.toISOString(),
+            resolvedAt: a.resolvedAt?.toISOString() ?? null,
+          },
+          privacy,
+        ),
+      ),
       filter.page,
       filter.pageSize,
       total,

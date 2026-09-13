@@ -25,6 +25,7 @@ import {
   Spinner,
   btnGhostClass,
 } from "@/components/dashboard/kit";
+import { AlertsInbox } from "@/components/dashboard/AlertsInbox";
 
 export function WorkspaceDetail() {
   const { workspaceId = "" } = useParams();
@@ -168,6 +169,16 @@ export function WorkspaceDetail() {
               </Note>
             </div>
           )}
+
+          <AlertsInbox
+            workspaceId={workspaceId}
+            canResolve={
+              ws.role === "owner" ||
+              ws.role === "admin" ||
+              ws.role === "maintainer" ||
+              ws.role === "developer"
+            }
+          />
         </div>
 
         <div className="grid grid-cols-1 border-t border-neutral-900/[0.08] lg:grid-cols-[1.4fr_1fr] lg:divide-x lg:divide-neutral-900/[0.08]">

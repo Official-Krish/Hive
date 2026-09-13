@@ -96,6 +96,7 @@
         "@hive/db": "workspace:*",
         "@hive/queue": "workspace:*",
         "@hive/review": "workspace:*",
+        "@hive/types": "workspace:*",
         "jsonwebtoken": "^9.0.3",
         "openai": "^7.5.0",
         "pino": "^9.6.0",

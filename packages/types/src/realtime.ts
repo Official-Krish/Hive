@@ -425,6 +425,15 @@ export const realtimeEventSchema = z.discriminatedUnion("type", [
     reason: z.string().max(120),
     timestamp: z.number(),
   }),
+  z.object({
+    type: z.literal("alert.created"),
+    workspaceId: z.string(),
+    alertId: z.string(),
+    alertType: z.string(),
+    severity: z.enum(["info", "warning", "critical"]),
+    message: z.string(),
+    timestamp: z.number(),
+  }),
 ]);
 
 export type RealtimeEvent = z.infer<typeof realtimeEventSchema>;

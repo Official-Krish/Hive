@@ -459,10 +459,13 @@ export interface MetricSummary {
 
 export interface AlertSummary {
   id: string;
-  title: string;
-  status: string;
   severity: string;
-  message: string | null;
+  type: string;
+  message: string;
+  status: string;
+  developerId: string | null;
+  agentSessionId: string | null;
+  metadata: unknown;
   createdAt: string;
   resolvedAt: string | null;
 }

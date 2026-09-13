@@ -31,6 +31,17 @@ const envSchema = z.object({
     .int()
     .positive()
     .default(60 * 1000),
+  WATCHDOG_INTERVAL_MS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(60 * 1000),
+  /** Flag burn when a session exceeds this many tokens in the burn window. */
+  WATCHDOG_BURN_TOKENS: z.coerce.number().int().positive().default(200_000),
+  /** Escalate burn to CRITICAL above this session-window cost (cents). */
+  WATCHDOG_BURN_COST_CENTS: z.coerce.number().int().positive().default(500),
+  /** WARNING when a session is stuck (approval/blocked) this long (minutes). */
+  WATCHDOG_STUCK_MIN: z.coerce.number().int().positive().default(10),
   // PR reviewer teammate (empty = reviewer jobs fail gracefully).
   AI_PROVIDER: z.string().default(""),
   AI_API_KEY: z.string().default(""),

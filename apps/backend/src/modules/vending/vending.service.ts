@@ -21,6 +21,7 @@ import {
   NotFoundError,
   TooManyRequestsError,
 } from "../../core/errors";
+import { realtimeBus } from "../realtime/realtime.bus";
 import { decryptSecret, encryptSecret } from "../../lib/encryption";
 import { hashToken } from "../../lib/crypto";
 import { ROLE_RANK, type Role } from "../../middleware/workspace";
@@ -415,7 +416,7 @@ export class VendingService {
       select: { id: true },
     });
     if (!open) {
-      await prisma.alert.create({
+      const created = await prisma.alert.create({
         data: {
           workspaceId,
           severity: available === 0 ? "CRITICAL" : "WARNING",
@@ -426,6 +427,15 @@ export class VendingService {
               : `Vending machine low on ${provider} keys (${available} left)`,
           metadata: { provider, available } as Prisma.InputJsonValue,
         },
+      });
+      realtimeBus.publish(workspaceId, {
+        type: "alert.created",
+        workspaceId,
+        alertId: created.id,
+        alertType: "vending.low_stock",
+        severity: available === 0 ? "critical" : "warning",
+        message: created.message,
+        timestamp: Date.now(),
       });
     }
   }
