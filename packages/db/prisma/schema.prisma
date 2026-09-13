@@ -79,6 +79,8 @@ model Workspace {
   slug        String
   description String?
   webhookSecret String
+  thumbnailUrl String?
+  thumbnailUpdatedAt DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 

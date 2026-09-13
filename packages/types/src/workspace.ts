@@ -101,6 +101,9 @@ export interface WorkspaceSummary {
   role: z.infer<typeof userRoleSchema>;
   memberCount: number;
   createdAt: string;
+  /** Auto-captured world screenshot (S3 URL), null until first capture. */
+  thumbnailUrl: string | null;
+  thumbnailUpdatedAt: string | null;
   /** Full webhook secret, only present on create/rotate responses. */
   webhookSecret?: string;
 }

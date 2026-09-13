@@ -11,7 +11,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { http } from "@/lib/http";
 import { notifyError } from "@/lib/toast";
 import { cn } from "@/lib/utils";
-import { Avatar } from "./kit";
+import { Avatar, LiveDot } from "./kit";
 import { HiveMark } from "@/components/icons/HiveMark";
 
 export interface NavItem {
@@ -33,6 +33,18 @@ export const DASHBOARD_NAV: NavItem[] = [
     badge: true,
   },
 ];
+
+/** Collector link state for the rail status line. */
+function useDeviceOnline(): boolean | null {
+  const { data } = useQuery({
+    queryKey: ["devices", "me", "status"],
+    queryFn: http.devices.status,
+    retry: false,
+    staleTime: 30_000,
+  });
+  if (!data) return null;
+  return data.hasOnlineDevice;
+}
 
 /** Count of pending invites addressed to the current user. */
 export function useReceivedInviteCount(): number {
@@ -86,6 +98,9 @@ export function Sidebar() {
         aria-label="Console"
         className="dash-scroll flex-1 space-y-0.5 overflow-y-auto px-3 py-2"
       >
+        <p className="px-3 pb-1 pt-2 font-mono text-[9px] uppercase tracking-[0.18em] text-neutral-400">
+          Console
+        </p>
         {DASHBOARD_NAV.map((item) => (
           <RailLink
             key={item.href}
@@ -96,6 +111,7 @@ export function Sidebar() {
       </nav>
 
       <div className="border-t border-neutral-900/[0.08] p-3">
+        <StatusLine />
         {me?.organizations && me.organizations.length > 0 && (
           <div className="mb-2">
             <p className="px-2 pb-1 font-mono text-[9px] uppercase tracking-[0.18em] text-neutral-400">
@@ -164,6 +180,25 @@ export function Sidebar() {
   );
 }
 
+function StatusLine() {
+  const online = useDeviceOnline();
+  return (
+    <div className="mb-2 flex items-center justify-between px-2 py-1">
+      <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-neutral-400">
+        Collector
+      </span>
+      {online === null ? (
+        <span className="h-3 w-10 animate-pulse rounded bg-neutral-900/[0.06]" />
+      ) : (
+        <span className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-neutral-500">
+          <LiveDot tone={online ? "live" : "away"} />
+          {online ? "Live" : "Offline"}
+        </span>
+      )}
+    </div>
+  );
+}
+
 function RailLink({ item, count }: { item: NavItem; count: number }) {
   const { label, href, icon: Icon, end } = item;
   return (
@@ -172,15 +207,22 @@ function RailLink({ item, count }: { item: NavItem; count: number }) {
       end={end}
       className={({ isActive }) =>
         cn(
-          "flex items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] font-medium transition-colors",
+          "relative flex items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900/30",
           isActive
-            ? "bg-neutral-900/[0.06] text-neutral-900"
+            ? "text-neutral-900"
             : "text-neutral-500 hover:bg-neutral-900/[0.03] hover:text-neutral-800",
         )
       }
     >
       {({ isActive }) => (
         <>
+          <span
+            aria-hidden
+            className={cn(
+              "absolute left-0 top-1/2 h-4 w-[2.5px] -translate-y-1/2 rounded-full bg-neutral-900 transition-opacity",
+              isActive ? "opacity-100" : "opacity-0",
+            )}
+          />
           <Icon
             className={cn(
               "size-4 flex-shrink-0",

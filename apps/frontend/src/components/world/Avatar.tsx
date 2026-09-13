@@ -380,6 +380,7 @@ useGLTF.preload(`${ASSET_BASE_URL}/avatars/male/hive_male_01.glb`);
 useGLTF.preload(`${ASSET_BASE_URL}/avatars/male/hive_male_02.glb`);
 useGLTF.preload(`${ASSET_BASE_URL}/avatars/female/hive_female_01.glb`);
 useGLTF.preload(`${ASSET_BASE_URL}/avatars/female/hive_female_02.glb`);
+useGLTF.preload("https://cdn.krishlabs.tech/hive/avatars/robot.glb");
 // Animations stream on first spawn without these — preload to avoid the hitch.
 useFBX.preload(`${ASSET_BASE_URL}/Animations/idle.fbx`);
 useFBX.preload(`${ASSET_BASE_URL}/Animations/run.fbx`);

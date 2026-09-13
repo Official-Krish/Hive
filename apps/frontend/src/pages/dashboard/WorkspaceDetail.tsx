@@ -2,22 +2,15 @@
    WORKSPACE DETAIL — one workspace, up close. Identity + actions,
    member roster, live presence. Same data, light instrument.
    ───────────────────────────────────────────────────────────── */
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import {
-  FiActivity,
-  FiArrowUpRight,
-  FiMap,
-  FiSettings,
-  FiUserPlus,
-} from "react-icons/fi";
+import { FiActivity, FiArrowUpRight, FiSettings } from "react-icons/fi";
 import { ApiError, http } from "@/lib/http";
 import {
   Avatar,
   AvatarStack,
   BackLink,
   Btn,
-  Card,
   LiveDot,
   Note,
   PresenceRow,
@@ -26,10 +19,10 @@ import {
   btnGhostClass,
 } from "@/components/dashboard/kit";
 import { AlertsInbox } from "@/components/dashboard/AlertsInbox";
+import { WorkspaceBanner } from "@/components/dashboard/WorkspaceBanner";
 
 export function WorkspaceDetail() {
   const { workspaceId = "" } = useParams();
-  const navigate = useNavigate();
 
   const workspace = useQuery({
     queryKey: ["workspace", workspaceId],
@@ -57,8 +50,18 @@ export function WorkspaceDetail() {
     retry: false,
     staleTime: 30_000,
   });
+  // Shared cache key with PresencePanel below — one fetch, two readers.
+  const presence = useQuery({
+    queryKey: ["workspace", workspaceId, "map"],
+    queryFn: () => http.reads.map(workspaceId),
+    enabled: workspace.isSuccess,
+    staleTime: 15_000,
+  });
   const hasAvatar = !!me.data?.user?.mapAvatarModel;
   const hasDevice = device.data?.hasOnlineDevice ?? true;
+  const onlineCount = (presence.data?.members ?? []).filter(
+    (p) => p.status === "online",
+  ).length;
 
   if (workspace.isLoading) {
     return (
@@ -97,47 +100,17 @@ export function WorkspaceDetail() {
     <div>
       <BackLink to="/dashboard">Overview</BackLink>
 
-      <Card>
-        <div className="flex items-center justify-between gap-4 border-b border-neutral-900/[0.08] px-5 py-3">
-          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-neutral-400">
-            Workspace
-          </span>
-          <span className="font-mono text-[11px] tabular-nums text-neutral-400">
-            {ws.memberCount} member{ws.memberCount === 1 ? "" : "s"} · {created}
-          </span>
-        </div>
+      <section aria-label={`Workspace ${ws.name}`}>
+        <WorkspaceBanner
+          workspace={ws}
+          onlineCount={onlineCount}
+          hasAvatar={hasAvatar}
+          compact
+          inviteHref={`/dashboard/invite?workspaceId=${workspaceId}`}
+        />
 
-        <div className="px-5 py-6 sm:py-7">
-          <div className="flex flex-wrap items-center gap-2.5">
-            <h1 className="text-[24px] font-semibold leading-none tracking-[-0.02em] text-neutral-900">
-              {ws.name}
-            </h1>
-            <RoleBadge role={ws.role} />
-          </div>
-          {ws.description && (
-            <p className="mt-2.5 max-w-xl text-sm leading-relaxed text-neutral-500">
-              {ws.description}
-            </p>
-          )}
-
-          <div className="mt-5 flex flex-wrap items-center gap-2">
-            <Btn
-              onClick={() =>
-                hasAvatar
-                  ? navigate(`/world?workspaceId=${workspaceId}`)
-                  : navigate(`/dashboard/avatar?workspaceId=${workspaceId}`)
-              }
-            >
-              <FiMap className="size-4" aria-hidden />
-              {hasAvatar ? "Enter spatial office" : "Pick avatar & enter"}
-            </Btn>
-            <Link
-              to={`/dashboard/invite?workspaceId=${workspaceId}`}
-              className={btnGhostClass}
-            >
-              <FiUserPlus className="size-4" aria-hidden />
-              Invite people
-            </Link>
+        <div className="mt-5">
+          <div className="flex flex-wrap items-center gap-2">
             {(ws.role === "owner" || ws.role === "admin") && (
               <Link
                 to={`/dashboard/w/${workspaceId}/settings`}
@@ -156,6 +129,10 @@ export function WorkspaceDetail() {
                 Usage & throughput
               </Link>
             )}
+            <span className="data-mono text-[11px] tabular-nums text-neutral-400">
+              {ws.memberCount} member{ws.memberCount === 1 ? "" : "s"} ·{" "}
+              {created}
+            </span>
           </div>
 
           {!hasDevice && !device.isLoading && (
@@ -180,31 +157,30 @@ export function WorkspaceDetail() {
             }
           />
         </div>
-      </Card>
+      </section>
 
-      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[1.4fr_1fr]">
-        <Card>
-          <div className="px-5 py-6">
-            <div className="flex items-center justify-between">
-              <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-neutral-400">
-                Members
-              </p>
-              {members.data && members.data.length > 0 && (
-                <AvatarStack people={members.data} />
-              )}
-            </div>
-
-            {members.isLoading && (
-              <div className="mt-4 space-y-3">
-                {[0, 1].map((i) => (
-                  <div
-                    key={i}
-                    className="h-9 w-56 animate-pulse rounded-lg bg-neutral-900/[0.05]"
-                  />
-                ))}
-              </div>
+      <div className="mt-8 grid grid-cols-1 gap-10 lg:grid-cols-[1.4fr_1fr]">
+        <div>
+          <div className="flex items-center justify-between">
+            <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-neutral-400">
+              Members
+            </p>
+            {members.data && members.data.length > 0 && (
+              <AvatarStack people={members.data} />
             )}
-            {members.isError && (
+          </div>
+          {members.isLoading && (
+            <div className="space-y-3 py-2">
+              {[0, 1].map((i) => (
+                <div
+                  key={i}
+                  className="h-9 w-56 animate-pulse rounded-lg bg-neutral-900/[0.05]"
+                />
+              ))}
+            </div>
+          )}
+          {members.isError && (
+            <div className="py-2">
               <Note tone="error">
                 <span className="flex flex-wrap items-center gap-3">
                   <span>Roster didn&apos;t load.</span>
@@ -213,34 +189,29 @@ export function WorkspaceDetail() {
                   </Btn>
                 </span>
               </Note>
-            )}
-            {members.isSuccess && (
-              <ul className="mt-2 divide-y divide-neutral-900/[0.08]">
-                {members.data.map((m) => (
-                  <li
-                    key={m.userId}
-                    className="flex items-center gap-3 py-3 first:pt-1 last:pb-0"
-                  >
-                    <Avatar name={m.name} src={m.avatarUrl} size={28} />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium leading-tight text-neutral-800">
-                        {m.name}
-                      </p>
-                      <p className="truncate text-xs leading-tight text-neutral-500">
-                        {m.email}
-                      </p>
-                    </div>
-                    <RoleBadge role={m.role} />
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </Card>
+            </div>
+          )}
+          {members.isSuccess && (
+            <ul className="divide-y divide-neutral-900/[0.07] border-t border-neutral-900/10">
+              {members.data.map((m) => (
+                <li key={m.userId} className="flex items-center gap-3 py-3">
+                  <Avatar name={m.name} src={m.avatarUrl} size={28} />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium leading-tight text-neutral-800">
+                      {m.name}
+                    </p>
+                    <p className="truncate text-xs leading-tight text-neutral-500">
+                      {m.email}
+                    </p>
+                  </div>
+                  <RoleBadge role={m.role} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
 
-        <Card>
-          <PresencePanel workspaceId={workspaceId} />
-        </Card>
+        <PresencePanel workspaceId={workspaceId} />
       </div>
     </div>
   );
@@ -259,19 +230,19 @@ function PresencePanel({ workspaceId }: { workspaceId: string }) {
   const onlineCount = people.filter((p) => p.status === "online").length;
 
   return (
-    <div className="px-5 py-6">
+    <div>
       <div className="flex items-center justify-between">
         <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-neutral-400">
           In the office
         </p>
         <span className="flex items-center gap-1.5 font-mono text-[11px] text-neutral-500">
           <LiveDot tone={onlineCount > 0 ? "live" : "off"} />
-          <span className="tabular-nums">{onlineCount}</span> online
+          <span className="data-mono tabular-nums">{onlineCount}</span> online
         </span>
       </div>
 
       {presence.isLoading ? (
-        <div className="mt-4 space-y-2.5">
+        <div className="space-y-2.5 py-2">
           {[0, 1].map((i) => (
             <div
               key={i}
@@ -280,21 +251,22 @@ function PresencePanel({ workspaceId }: { workspaceId: string }) {
           ))}
         </div>
       ) : sorted.length === 0 ? (
-        <p className="mt-4 text-sm leading-relaxed text-neutral-500">
+        <p className="py-2 text-sm leading-relaxed text-neutral-500">
           The office is quiet — no one has arrived yet.
         </p>
       ) : (
-        <ul className="mt-4 space-y-2.5">
+        <ul className="divide-y divide-neutral-900/[0.07] border-t border-neutral-900/10 py-1">
           {sorted.slice(0, 6).map((p) => (
-            <PresenceRow
-              key={p.userId}
-              name={p.name}
-              avatarUrl={p.avatarUrl}
-              status={p.status}
-            />
+            <li key={p.userId} className="py-2 first:pt-1 last:pb-1">
+              <PresenceRow
+                name={p.name}
+                avatarUrl={p.avatarUrl}
+                status={p.status}
+              />
+            </li>
           ))}
           {sorted.length > 6 && (
-            <li className="pt-1 font-mono text-[11px] text-neutral-400">
+            <li className="py-1 font-mono text-[11px] text-neutral-400">
               +{sorted.length - 6} more
             </li>
           )}
@@ -303,7 +275,7 @@ function PresencePanel({ workspaceId }: { workspaceId: string }) {
 
       <Link
         to={`/world?workspaceId=${workspaceId}`}
-        className="group mt-4 inline-flex items-center gap-1.5 text-xs font-medium text-neutral-500 transition-colors hover:text-neutral-900"
+        className="group mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-neutral-500 transition-colors hover:text-neutral-900"
       >
         Join them on the floor
         <FiArrowUpRight className="size-3.5 transition-transform group-hover:-translate-y-px group-hover:translate-x-px" />

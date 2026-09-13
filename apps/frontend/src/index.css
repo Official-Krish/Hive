@@ -110,11 +110,11 @@
   background-size: 180px 180px;
 }
 
-/* ── Console: single page-enter motion, thin scrollbars ── */
+/* ── Console instrument panel: single page-enter motion, thin scrollbars ── */
 @keyframes dash-rise {
   from {
     opacity: 0;
-    transform: translateY(10px);
+    transform: translateY(6px);
   }
   to {
     opacity: 1;
@@ -123,7 +123,26 @@
 }
 
 .dash-rise {
-  animation: dash-rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: dash-rise 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Serif display — one title per page, brand continuity with the landing. */
+.console-display {
+  font-family: "Instrument Serif", "Source Serif Pro", ui-serif, Georgia, serif;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+
+/* Mono data — every number, timestamp, and status word in the console. */
+.data-mono {
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+/* Labeled hairline — section dividers for ledger layouts. */
+.console-rule {
+  border-top: 1px solid rgba(28, 25, 18, 0.1);
 }
 
 .dash-scroll {

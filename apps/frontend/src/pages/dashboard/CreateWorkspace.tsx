@@ -1,6 +1,6 @@
 /* ─────────────────────────────────────────────────────────────
-   CREATE WORKSPACE — step 1: identity. Step 2: connect GitHub.
-   Same flow, light instrument.
+   CREATE WORKSPACE — guided sequence. Step 1: identity with a live
+   preview. Step 2: connect GitHub. Quiet canvas, no boxes.
    ───────────────────────────────────────────────────────────── */
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -15,15 +15,15 @@ import {
 } from "@/lib/http";
 import { notifyError, notifyInfo, notifySuccess } from "@/lib/toast";
 import {
-  Badge,
+  BaselineField,
   Btn,
-  Card,
-  CardHead,
-  Field,
   LiveDot,
   PageHead,
+  PreviewPanel,
   Spinner,
-  inputClass,
+  Stepspine,
+  ToneZone,
+  baselineInputClass,
 } from "@/components/dashboard/kit";
 
 function generateSecret(): string {
@@ -139,12 +139,21 @@ export function CreateWorkspace() {
           sub="Install the Hive GitHub App to stream push, PR, issue, release and review events — or link a single repo manually."
         />
 
-        <div className="max-w-2xl">
-          <Card>
-            <CardHead
-              title="Install the Hive GitHub App"
-              hint="Recommended — every linked repo's webhooks flow in automatically."
-              right={
+        <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_300px]">
+          <div>
+            <Stepspine steps={["Identity", "Connect"]} current={1} />
+
+            <ToneZone className="mt-2">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-[15px] font-semibold text-neutral-900">
+                    Install the Hive GitHub App
+                  </p>
+                  <p className="mt-1 text-[13px] text-neutral-500">
+                    Recommended — every linked repo&apos;s webhooks flow in
+                    automatically.
+                  </p>
+                </div>
                 <Btn onClick={startInstall} disabled={installing}>
                   {installing ? (
                     <Spinner />
@@ -153,24 +162,27 @@ export function CreateWorkspace() {
                   )}
                   {installing ? "Redirecting…" : "Install"}
                 </Btn>
-              }
-            />
-            <div className="px-5 py-5">
+              </div>
+            </ToneZone>
+
+            <div className="mt-8">
               <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-neutral-400">
                 Or link a single repo
               </p>
 
               {linkedRepos.length > 0 && (
-                <ul className="mt-3 space-y-2">
+                <ul className="mt-3 divide-y divide-neutral-900/[0.07] border-t border-neutral-900/10">
                   {linkedRepos.map((r) => (
                     <li
                       key={r.id}
-                      className="flex items-center justify-between gap-3 rounded-lg border border-neutral-900/[0.08] bg-white px-3 py-2.5"
+                      className="flex items-center justify-between gap-3 py-2.5"
                     >
-                      <span className="truncate font-mono text-[13px] text-neutral-700">
+                      <span className="data-mono truncate text-[13px] text-neutral-700">
                         {r.fullName}
                       </span>
-                      <Badge tone="live">Linked</Badge>
+                      <span className="data-mono flex-shrink-0 text-[11px] uppercase tracking-[0.12em] text-emerald-700">
+                        Linked
+                      </span>
                     </li>
                   ))}
                 </ul>
@@ -178,9 +190,10 @@ export function CreateWorkspace() {
 
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <select
-                  className={`${inputClass} min-w-0 flex-1`}
+                  className={baselineInputClass}
                   value={repositoryId}
                   onChange={(e) => setRepositoryId(e.target.value)}
+                  aria-label="Choose a repository"
                 >
                   <option value="">Choose a repository…</option>
                   {repoOptions
@@ -208,21 +221,51 @@ export function CreateWorkspace() {
                 </p>
               )}
             </div>
-          </Card>
 
-          <div className="mt-5 flex items-center justify-between">
-            <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-neutral-400">
-              You're the owner
-            </span>
-            <button
-              type="button"
-              onClick={() => navigate(`/dashboard/w/${createdWs.id}`)}
-              className="group inline-flex items-center gap-1.5 text-[13px] font-medium text-neutral-500 transition-colors hover:text-neutral-900"
-            >
-              Enter workspace
-              <FiArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
-            </button>
+            <div className="mt-10 flex items-center justify-between border-t border-neutral-900/10 pt-5">
+              <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-neutral-400">
+                You&apos;re the owner
+              </span>
+              <button
+                type="button"
+                onClick={() => navigate(`/dashboard/w/${createdWs.id}`)}
+                className="group inline-flex items-center gap-1.5 text-[13px] font-medium text-neutral-500 transition-colors hover:text-neutral-900"
+              >
+                Enter workspace
+                <FiArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
+              </button>
+            </div>
           </div>
+
+          <PreviewPanel label="Taking shape">
+            <p className="truncate text-xl font-bold tracking-tight text-neutral-900">
+              {createdWs.name}
+            </p>
+            <p className="data-mono mt-2 text-[11px] uppercase tracking-[0.14em] text-neutral-500">
+              Owner · just created
+            </p>
+            <div className="mt-4 border-t border-neutral-900/10 pt-4">
+              <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-neutral-400">
+                Linked repos · {linkedRepos.length}
+              </p>
+              {linkedRepos.length === 0 ? (
+                <p className="mt-2 text-[13px] text-neutral-500">
+                  None yet — install the App or link one manually.
+                </p>
+              ) : (
+                <ul className="mt-2 space-y-1.5">
+                  {linkedRepos.map((r) => (
+                    <li
+                      key={r.id}
+                      className="data-mono truncate text-[12px] text-neutral-700"
+                    >
+                      {r.fullName}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </PreviewPanel>
         </div>
       </div>
     );
@@ -237,52 +280,45 @@ export function CreateWorkspace() {
         sub="A workspace is where your team's activity comes together. You'll be its owner."
       />
 
-      <div className="max-w-2xl">
-        <Card>
-          <CardHead
-            title="New workspace"
-            right={
-              <span className="flex items-center gap-1.5 font-mono text-[11px] text-neutral-500">
-                <LiveDot tone={hasDevice ? "live" : "away"} />
-                {hasDevice ? "Collector online" : "Collector offline"}
-              </span>
-            }
-          />
+      <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_300px]">
+        <div>
+          <Stepspine steps={["Identity", "Connect"]} current={0} />
+
           <form
-            className="space-y-4 px-5 py-5"
+            className="mt-2 space-y-7"
             onSubmit={(e) => {
               e.preventDefault();
               if (canSubmit) mutation.mutate();
             }}
           >
-            <Field label="Name">
+            <BaselineField label="Name">
               <input
-                className={inputClass}
+                className={baselineInputClass}
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="e.g. Engineering"
                 maxLength={100}
                 autoFocus
               />
-            </Field>
+            </BaselineField>
 
-            <Field
+            <BaselineField
               label="Description"
               hint="Optional — a short line on what this workspace is for."
             >
               <textarea
-                className={`${inputClass} h-auto min-h-[84px] resize-y py-2.5`}
+                className={`${baselineInputClass} min-h-[84px] resize-y`}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Product & platform engineering"
                 maxLength={500}
               />
-            </Field>
+            </BaselineField>
 
-            <Field label="Webhook secret" hint={secretHint}>
-              <div className="flex items-center gap-2">
+            <BaselineField label="Webhook secret" hint={secretHint}>
+              <div className="flex items-center gap-1">
                 <input
-                  className={`${inputClass} font-mono text-[13px]`}
+                  className={`${baselineInputClass} data-mono font-mono text-[13px]`}
                   value={webhookSecret}
                   onChange={(e) => setWebhookSecret(e.target.value)}
                   minLength={8}
@@ -290,16 +326,16 @@ export function CreateWorkspace() {
                   spellCheck={false}
                 />
                 <Btn
-                  variant="ghost"
-                  className="h-10 px-3"
+                  variant="quiet"
+                  className="px-2"
                   aria-label="Regenerate secret"
                   onClick={() => setWebhookSecret(generateSecret())}
                 >
                   <FiRefreshCw className="size-4" aria-hidden />
                 </Btn>
                 <Btn
-                  variant="ghost"
-                  className="h-10 px-3"
+                  variant="quiet"
+                  className="px-2"
                   aria-label="Copy secret"
                   onClick={() => {
                     void navigator.clipboard.writeText(webhookSecret);
@@ -309,16 +345,17 @@ export function CreateWorkspace() {
                   <FiCopy className="size-4" aria-hidden />
                 </Btn>
               </div>
-            </Field>
+            </BaselineField>
 
-            <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-neutral-900/10 pt-5">
               {!hasDevice && !device.isLoading ? (
                 <p className="font-mono text-[11px] text-amber-800">
                   Start your collector before entering the office.
                 </p>
               ) : (
-                <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-neutral-400">
-                  You'll be its owner
+                <span className="flex items-center gap-1.5 font-mono text-[11px] text-neutral-500">
+                  <LiveDot tone={hasDevice ? "live" : "away"} />
+                  {hasDevice ? "Collector online" : "Collector offline"}
                 </span>
               )}
               <Btn type="submit" disabled={!canSubmit}>
@@ -327,7 +364,19 @@ export function CreateWorkspace() {
               </Btn>
             </div>
           </form>
-        </Card>
+        </div>
+
+        <PreviewPanel label="Preview">
+          <p className="truncate text-xl font-bold tracking-tight text-neutral-900">
+            {name.trim() || "Untitled workspace"}
+          </p>
+          <p className="mt-2 line-clamp-2 text-[13px] leading-relaxed text-neutral-500">
+            {description.trim() || "No description yet."}
+          </p>
+          <p className="data-mono mt-4 border-t border-neutral-900/10 pt-4 text-[11px] uppercase tracking-[0.14em] text-neutral-500">
+            Owner · you
+          </p>
+        </PreviewPanel>
       </div>
     </div>
   );

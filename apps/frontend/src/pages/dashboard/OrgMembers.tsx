@@ -8,7 +8,7 @@ import {
   Note,
   RoleBadge,
   Spinner,
-  inputClass,
+  baselineInputClass,
 } from "@/components/dashboard/kit";
 import { notifyError, notifySuccess } from "@/lib/toast";
 import type { OrgOutletContext } from "./OrgDetail";
@@ -85,7 +85,7 @@ export function OrgMembers() {
       )}
 
       {list.length > 0 && (
-        <ul className="divide-y divide-neutral-900/[0.08] rounded-xl border border-neutral-900/[0.08] bg-white">
+        <ul className="divide-y divide-neutral-900/[0.07] border-t border-neutral-900/10">
           {list.map((m) => {
             const rowBusy =
               (changeRole.isPending &&
@@ -112,7 +112,7 @@ export function OrgMembers() {
                   {isOwner ? (
                     <>
                       <select
-                        className={`${inputClass} h-8 w-auto px-2 text-xs`}
+                        className={`${baselineInputClass} h-8 w-auto px-0 text-xs`}
                         value={m.role}
                         disabled={rowBusy}
                         onChange={(e) =>

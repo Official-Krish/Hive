@@ -2,17 +2,15 @@
    OVERVIEW — console front page. Featured workspace with live
    presence, workspace index, setup rail. Same data, light instrument.
    ───────────────────────────────────────────────────────────── */
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
   FiArrowRight,
   FiArrowUpRight,
   FiCheck,
   FiCopy,
-  FiDownload,
   FiGithub,
   FiInbox,
-  FiMap,
   FiSettings,
   FiTerminal,
   FiUser,
@@ -20,6 +18,10 @@ import {
 import { http } from "@/lib/http";
 import { notifyInfo } from "@/lib/toast";
 import { COLLECTOR_INSTALL_CMD } from "@/components/dashboard/primitives";
+import {
+  WorkspaceBanner,
+  thumbnailSrc,
+} from "@/components/dashboard/WorkspaceBanner";
 import {
   AvatarStack,
   Badge,
@@ -33,6 +35,7 @@ import {
   RoleBadge,
   Row,
   SkeletonRows,
+  ToneZone,
   btnGhostClass,
   btnPrimaryClass,
 } from "@/components/dashboard/kit";
@@ -43,6 +46,8 @@ type Ws = {
   description: string | null;
   role: string;
   memberCount: number;
+  thumbnailUrl: string | null;
+  thumbnailUpdatedAt: string | null;
   createdAt: string;
 };
 
@@ -77,7 +82,7 @@ export function Overview() {
         meta={
           <span className="flex items-center gap-1.5 font-mono text-[11px] text-neutral-400">
             <LiveDot tone="live" />
-            <span className="tabular-nums">{today}</span>
+            <span className="data-mono tabular-nums">{today}</span>
           </span>
         }
         title={`Good ${greeting()}, ${name}.`}
@@ -133,7 +138,6 @@ export function Overview() {
 
 /* ── Featured workspace ────────────────────────────────────── */
 function FeaturedWorkspace({ workspace: ws }: { workspace: Ws }) {
-  const navigate = useNavigate();
   const { data: me } = useQuery({
     queryKey: ["me"],
     queryFn: http.auth.me,
@@ -157,143 +161,88 @@ function FeaturedWorkspace({ workspace: ws }: { workspace: Ws }) {
   const rank = (s: string) => (s === "online" ? 0 : s === "away" ? 1 : 2);
   const sorted = [...people].sort((a, b) => rank(a.status) - rank(b.status));
   const onlineCount = people.filter((p) => p.status === "online").length;
-  const created = new Date(ws.createdAt).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
 
   return (
-    <Card>
-      <div className="flex items-center justify-between gap-4 border-b border-neutral-900/[0.08] px-5 py-3">
-        <span className="flex items-center gap-2 font-mono text-[11px] text-neutral-500">
-          <LiveDot tone={onlineCount > 0 ? "live" : "off"} />
-          {onlineCount > 0 ? (
-            <span>
-              <span className="tabular-nums text-neutral-700">
-                {onlineCount}
-              </span>{" "}
-              in the office
-            </span>
-          ) : (
-            "Office quiet"
-          )}
-        </span>
-        <span className="font-mono text-[11px] text-neutral-400">
-          {ws.memberCount} member{ws.memberCount === 1 ? "" : "s"} · {created}
-        </span>
+    <section aria-label={`Workspace ${ws.name}`}>
+      <WorkspaceBanner
+        workspace={ws}
+        onlineCount={onlineCount}
+        hasAvatar={hasAvatar}
+        inviteHref={`/dashboard/invite?workspaceId=${ws.id}`}
+      />
+
+      <div className="mt-5 flex flex-wrap items-center gap-2">
+        {(ws.role === "owner" || ws.role === "admin") && (
+          <Link
+            to={`/dashboard/w/${ws.id}/settings`}
+            className="inline-flex items-center gap-1.5 px-1 py-2 text-xs font-medium text-neutral-500 transition-colors hover:text-neutral-800"
+          >
+            <FiSettings className="size-3.5" aria-hidden />
+            Settings
+          </Link>
+        )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[1.4fr_1fr] lg:divide-x lg:divide-neutral-900/[0.08]">
-        <div className="px-5 py-6">
-          <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-neutral-400">
-            Workspace
-          </p>
-          <div className="mt-2 flex flex-wrap items-center gap-2.5">
-            <h2 className="text-[20px] font-semibold tracking-[-0.02em] text-neutral-900">
-              <Link
-                to={`/dashboard/w/${ws.id}`}
-                className="transition-colors hover:text-neutral-600"
-              >
-                {ws.name}
-              </Link>
-            </h2>
-            <RoleBadge role={ws.role} />
-          </div>
-          <p className="mt-2 max-w-md text-[13px] leading-relaxed text-neutral-500">
-            {ws.description || "No description yet — add one from settings."}
-          </p>
-
-          <div className="mt-5 flex flex-wrap items-center gap-2">
-            <Btn
-              onClick={() =>
-                hasAvatar
-                  ? navigate(`/world?workspaceId=${ws.id}`)
-                  : navigate(`/dashboard/avatar?workspaceId=${ws.id}`)
-              }
-            >
-              <FiMap className="size-4" aria-hidden />
-              {hasAvatar ? "Enter spatial office" : "Pick avatar & enter"}
-            </Btn>
-            <Link
-              to={`/dashboard/invite?workspaceId=${ws.id}`}
-              className={btnGhostClass}
-            >
-              Invite people
-            </Link>
-            {(ws.role === "owner" || ws.role === "admin") && (
-              <Link
-                to={`/dashboard/w/${ws.id}/settings`}
-                className="ml-1 inline-flex items-center gap-1.5 px-1 py-2 text-xs font-medium text-neutral-500 transition-colors hover:text-neutral-800"
-              >
-                <FiSettings className="size-3.5" aria-hidden />
-                Settings
-              </Link>
-            )}
-          </div>
-
-          {!hasDevice && !device.isLoading && (
-            <div className="mt-4 max-w-lg">
-              <Note tone="warn">
-                Collector offline — run{" "}
-                <code className="rounded bg-neutral-900/[0.06] px-1.5 py-0.5 font-mono text-[11px]">
-                  hive start
-                </code>{" "}
-                to go live in the office.
-              </Note>
-            </div>
-          )}
+      {!hasDevice && !device.isLoading && (
+        <div className="mt-2 max-w-lg">
+          <Note tone="warn">
+            Collector offline — run{" "}
+            <code className="rounded bg-neutral-900/[0.06] px-1.5 py-0.5 font-mono text-[11px]">
+              hive start
+            </code>{" "}
+            to go live in the office.
+          </Note>
         </div>
+      )}
 
-        <div className="border-t border-neutral-900/[0.08] px-5 py-6 lg:border-t-0">
-          <div className="flex items-center justify-between">
-            <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-neutral-400">
-              Presence
-            </p>
-            {people.length > 0 && <AvatarStack people={people} />}
+      <div className="mt-8 border-t border-neutral-900/10 pt-4">
+        <div className="flex items-center justify-between">
+          <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-neutral-400">
+            Presence
+          </p>
+          {people.length > 0 && <AvatarStack people={people} />}
+        </div>
+        {presence.isLoading ? (
+          <div className="space-y-2.5 py-2">
+            {[0, 1].map((i) => (
+              <div
+                key={i}
+                className="h-4 w-36 animate-pulse rounded bg-neutral-900/[0.05]"
+              />
+            ))}
           </div>
-
-          {presence.isLoading ? (
-            <div className="mt-4 space-y-2.5">
-              {[0, 1].map((i) => (
-                <div
-                  key={i}
-                  className="h-4 w-36 animate-pulse rounded bg-neutral-900/[0.05]"
-                />
-              ))}
-            </div>
-          ) : sorted.length === 0 ? (
-            <p className="mt-4 text-sm leading-relaxed text-neutral-500">
-              Nobody here yet — be the first to arrive.
-            </p>
-          ) : (
-            <ul className="mt-4 space-y-2.5">
-              {sorted.slice(0, 5).map((p) => (
+        ) : sorted.length === 0 ? (
+          <p className="py-2 text-sm leading-relaxed text-neutral-500">
+            Nobody here yet — be the first to arrive.
+          </p>
+        ) : (
+          <ul className="divide-y divide-neutral-900/[0.07] py-1">
+            {sorted.slice(0, 5).map((p) => (
+              <li key={p.userId} className="py-2 first:pt-1 last:pb-1">
                 <PresenceRow
-                  key={p.userId}
                   name={p.name}
                   avatarUrl={p.avatarUrl}
                   status={p.status}
                 />
-              ))}
-              {sorted.length > 5 && (
-                <li className="pt-1 font-mono text-[11px] text-neutral-400">
-                  +{sorted.length - 5} more
-                </li>
-              )}
-            </ul>
-          )}
-
-          <Link
-            to={`/world?workspaceId=${ws.id}`}
-            className="group mt-4 inline-flex items-center gap-1.5 text-xs font-medium text-neutral-500 transition-colors hover:text-neutral-900"
-          >
-            Walk the floor
-            <FiArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
-          </Link>
-        </div>
+              </li>
+            ))}
+            {sorted.length > 5 && (
+              <li className="py-1 font-mono text-[11px] text-neutral-400">
+                +{sorted.length - 5} more
+              </li>
+            )}
+          </ul>
+        )}
       </div>
-    </Card>
+
+      <Link
+        to={`/world?workspaceId=${ws.id}`}
+        className="group mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-neutral-500 transition-colors hover:text-neutral-900"
+      >
+        Walk the floor
+        <FiArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
+      </Link>
+    </section>
   );
 }
 
@@ -309,6 +258,20 @@ function WorkspaceIndex({ workspaces }: { workspaces: Ws[] }) {
           {workspaces.map((ws) => (
             <li key={ws.id}>
               <Row to={`/dashboard/w/${ws.id}`} className="gap-4">
+                {ws.thumbnailUrl ? (
+                  <img
+                    src={thumbnailSrc(ws.thumbnailUrl, ws.thumbnailUpdatedAt)}
+                    alt=""
+                    aria-hidden
+                    loading="lazy"
+                    className="size-14 flex-shrink-0 rounded-xl object-cover ring-1 ring-neutral-900/10"
+                  />
+                ) : (
+                  <span
+                    aria-hidden
+                    className="size-14 flex-shrink-0 rounded-xl bg-neutral-900/[0.05] ring-1 ring-neutral-900/10"
+                  />
+                )}
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <span className="truncate text-[15px] font-medium text-neutral-800">
@@ -446,35 +409,36 @@ function SetupRail() {
       </div>
 
       {!device.isLoading && !hasDevice && (
-        <Card className="space-y-3 p-4">
-          <p className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.18em] text-neutral-400">
-            <FiDownload className="size-3.5" aria-hidden />
+        <ToneZone>
+          <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-neutral-400">
             Install the collector
           </p>
-          <p className="text-xs leading-relaxed text-neutral-500">
-            One line in your terminal — installs{" "}
-            <code className="rounded bg-neutral-900/[0.06] px-1 py-px font-mono text-[11px] text-neutral-700">
-              hive
-            </code>{" "}
-            and walks you through login &amp; start.
-          </p>
-          <div className="flex items-center gap-2">
-            <code className="min-w-0 flex-1 truncate rounded-lg border border-neutral-900/10 bg-neutral-900/[0.04] px-2.5 py-2 font-mono text-[11px] text-neutral-700">
-              {COLLECTOR_INSTALL_CMD}
-            </code>
-            <Btn
-              variant="ghost"
-              className="h-9 px-3"
-              aria-label="Copy install command"
-              onClick={() => {
-                void navigator.clipboard.writeText(COLLECTOR_INSTALL_CMD);
-                notifyInfo("Install command copied");
-              }}
-            >
-              <FiCopy className="size-3.5" aria-hidden />
-            </Btn>
+          <div className="py-3">
+            <p className="text-xs leading-relaxed text-neutral-500">
+              One line in your terminal — installs{" "}
+              <code className="rounded bg-neutral-900/[0.06] px-1 py-px font-mono text-[11px] text-neutral-700">
+                hive
+              </code>{" "}
+              and walks you through login &amp; start.
+            </p>
+            <div className="mt-2.5 flex items-center gap-2">
+              <code className="data-mono min-w-0 flex-1 truncate rounded-lg border border-neutral-900/10 bg-neutral-900/[0.04] px-2.5 py-2 text-[11px] text-neutral-700">
+                {COLLECTOR_INSTALL_CMD}
+              </code>
+              <Btn
+                variant="ghost"
+                className="h-9 px-3"
+                aria-label="Copy install command"
+                onClick={() => {
+                  void navigator.clipboard.writeText(COLLECTOR_INSTALL_CMD);
+                  notifyInfo("Install command copied");
+                }}
+              >
+                <FiCopy className="size-3.5" aria-hidden />
+              </Btn>
+            </div>
           </div>
-        </Card>
+        </ToneZone>
       )}
 
       {pending.length > 0 && (

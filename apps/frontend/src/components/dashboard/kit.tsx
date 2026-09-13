@@ -340,8 +340,14 @@ export function Badge({
   );
 }
 
-export function RoleBadge({ role }: { role: string }) {
-  return <Badge>{role}</Badge>;
+export function RoleBadge({
+  role,
+  className,
+}: {
+  role: string;
+  className?: string;
+}) {
+  return <Badge className={className}>{role}</Badge>;
 }
 
 export function LiveDot({ tone = "live" }: { tone?: "live" | "away" | "off" }) {
@@ -570,7 +576,7 @@ export function PresenceRow({
   status: string;
 }) {
   return (
-    <li className="flex items-center gap-2.5">
+    <div className="flex items-center gap-2.5">
       <Avatar name={name} src={avatarUrl} size={26} />
       <span className="min-w-0 flex-1 truncate text-[13px] text-neutral-800">
         {name}
@@ -581,7 +587,230 @@ export function PresenceRow({
       <span className="w-[76px] flex-shrink-0 text-right text-[11px] text-neutral-500">
         {presenceText(status)}
       </span>
-    </li>
+    </div>
+  );
+}
+
+/* ── Instrument panel — ledger layouts for flagship pages ────
+   Ruled sections, tabular readouts, text-first status. No boxes.
+   Opt-in: legacy Card layouts elsewhere are untouched. */
+
+export function Ledger({
+  label,
+  right,
+  children,
+  className,
+}: {
+  label?: ReactNode;
+  right?: ReactNode;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <section className={cn("console-rule pt-4", className)}>
+      {(label || right) && (
+        <div className="mb-1 flex items-center justify-between gap-4">
+          {label && (
+            <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-neutral-400">
+              {label}
+            </p>
+          )}
+          {right}
+        </div>
+      )}
+      <div className="divide-y divide-neutral-900/[0.07]">{children}</div>
+    </section>
+  );
+}
+
+export function Readout({
+  value,
+  label,
+  hint,
+}: {
+  value: ReactNode;
+  label: string;
+  hint?: ReactNode;
+}) {
+  return (
+    <div className="min-w-0">
+      <div className="data-mono truncate text-[28px] leading-none text-neutral-900">
+        {value}
+      </div>
+      <div className="mt-2 font-mono text-[10px] uppercase tracking-[0.16em] text-neutral-500">
+        {label}
+      </div>
+      {hint && <div className="mt-1 text-xs text-neutral-500">{hint}</div>}
+    </div>
+  );
+}
+
+export function StatusWord({
+  tone = "quiet",
+  children,
+}: {
+  tone?: "live" | "quiet" | "action" | "down";
+  children: ReactNode;
+}) {
+  return (
+    <span
+      className={cn(
+        "data-mono inline-flex flex-shrink-0 items-center gap-1.5 text-[11px] uppercase",
+        tone === "live" && "text-emerald-700",
+        tone === "quiet" && "text-neutral-500",
+        tone === "action" && "text-amber-800",
+        tone === "down" && "text-rose-700",
+      )}
+    >
+      <span
+        aria-hidden
+        className={cn(
+          "size-1.5 rounded-full",
+          tone === "live" && "bg-emerald-500",
+          tone === "quiet" && "bg-neutral-400",
+          tone === "action" && "bg-amber-500",
+          tone === "down" && "bg-rose-500",
+        )}
+      />
+      {children}
+    </span>
+  );
+}
+
+/* ── Quiet canvas — borderless forms, tonal zones, stepped flows ──
+   The console's second language: no boxes, no serif. Baseline inputs,
+   space-separated sections, one live element per page. */
+
+export const baselineInputClass =
+  "w-full border-0 border-b border-neutral-900/15 bg-transparent px-0 py-2.5 text-[15px] text-neutral-900 placeholder:text-neutral-400 outline-none transition-colors focus:border-neutral-900/60";
+
+export function BaselineField({
+  label,
+  hint,
+  error,
+  children,
+  className,
+}: {
+  label: string;
+  hint?: ReactNode;
+  error?: ReactNode;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={cn("block", className)}>
+      <span className={labelClass}>{label}</span>
+      {children}
+      {error ? (
+        <span className="mt-1.5 block text-xs font-medium text-rose-700">
+          {error}
+        </span>
+      ) : hint ? (
+        <span className="mt-1.5 block text-xs text-neutral-500">{hint}</span>
+      ) : null}
+    </div>
+  );
+}
+
+/** Numbered vertical progress for stepped flows. */
+export function Stepspine({
+  steps,
+  current,
+}: {
+  steps: string[];
+  current: number;
+}) {
+  return (
+    <ol aria-label="Progress" className="flex gap-6 sm:flex-col sm:gap-0">
+      {steps.map((label, i) => {
+        const done = i < current;
+        const active = i === current;
+        return (
+          <li key={label} className="flex sm:gap-3">
+            <span aria-hidden className="hidden flex-col items-center sm:flex">
+              <span
+                className={cn(
+                  "data-mono flex size-6 items-center justify-center rounded-full text-[11px]",
+                  done || active
+                    ? "bg-neutral-900 text-white"
+                    : "bg-neutral-900/[0.06] text-neutral-500",
+                )}
+              >
+                {i + 1}
+              </span>
+              {i < steps.length - 1 && (
+                <span
+                  className={cn(
+                    "my-1 w-px flex-1",
+                    done ? "bg-neutral-900/40" : "bg-neutral-900/10",
+                  )}
+                />
+              )}
+            </span>
+            <span className="pb-5">
+              <span
+                className={cn(
+                  "block font-mono text-[10px] uppercase tracking-[0.16em]",
+                  active ? "text-neutral-900" : "text-neutral-400",
+                )}
+                aria-current={active ? "step" : undefined}
+              >
+                {label}
+              </span>
+            </span>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+/** Sticky tonal surface for live previews beside a form. */
+export function PreviewPanel({
+  label,
+  children,
+  className,
+}: {
+  label: string;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "rounded-2xl bg-neutral-900/[0.04] p-5 sm:p-6 lg:sticky lg:top-8",
+        className,
+      )}
+    >
+      <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-neutral-400">
+        {label}
+      </p>
+      <div className="mt-4">{children}</div>
+    </div>
+  );
+}
+
+/** Tinted section — space-separated zone, incl. danger tint. */
+export function ToneZone({
+  tone = "neutral",
+  children,
+  className,
+}: {
+  tone?: "neutral" | "danger";
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "rounded-2xl p-5 sm:p-7",
+        tone === "neutral" && "bg-neutral-900/[0.03]",
+        tone === "danger" && "bg-rose-600/[0.06]",
+        className,
+      )}
+    >
+      {children}
+    </div>
   );
 }
 

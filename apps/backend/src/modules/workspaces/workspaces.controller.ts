@@ -11,6 +11,7 @@ import type {
 } from "@hive/types";
 import { getAuth } from "../../middleware/authenticate";
 import { getMembership } from "../../middleware/workspace";
+import { BadRequestError } from "../../core/errors";
 import { WorkspaceService } from "./workspaces.service";
 
 export class WorkspaceController {
@@ -214,5 +215,18 @@ export class WorkspaceController {
       input.reviewEnabled,
     );
     res.json({ data: { repository: repo } });
+  };
+
+  setThumbnail = async (req: Request, res: Response): Promise<void> => {
+    const body = req.body as unknown;
+    if (!Buffer.isBuffer(body)) {
+      throw new BadRequestError("Body must be a PNG or JPEG image");
+    }
+    const summary = await this.service.setThumbnail(
+      WorkspaceController.param(req, "workspaceId"),
+      body,
+      req.headers["content-type"] ?? "",
+    );
+    res.json({ data: summary });
   };
 }

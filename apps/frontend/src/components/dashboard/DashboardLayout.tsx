@@ -11,6 +11,7 @@ import { useQuery } from "@tanstack/react-query";
 import { http } from "@/lib/http";
 import { DASHBOARD_NAV, Sidebar, useReceivedInviteCount } from "./Sidebar";
 import { ScrollToTop } from "../layout/ScrollToTop";
+import { LiveDot } from "./kit";
 import { cn } from "@/lib/utils";
 
 export function DashboardLayout() {
@@ -42,6 +43,12 @@ function MobileBar() {
     staleTime: 60_000,
   });
   const firstOrg = me?.organizations?.[0];
+  const { data: device } = useQuery({
+    queryKey: ["devices", "me", "status"],
+    queryFn: http.devices.status,
+    retry: false,
+    staleTime: 30_000,
+  });
   const pill = (isActive: boolean) =>
     cn(
       "flex flex-shrink-0 items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
@@ -60,6 +67,18 @@ function MobileBar() {
             Console
           </span>
         </Link>
+        {device &&
+          (device.hasOnlineDevice ? (
+            <span className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-neutral-500">
+              <LiveDot tone="live" />
+              Live
+            </span>
+          ) : (
+            <span className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-neutral-500">
+              <LiveDot tone="away" />
+              Offline
+            </span>
+          ))}
       </div>
       <nav
         aria-label="Console"

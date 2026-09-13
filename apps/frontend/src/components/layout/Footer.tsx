@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { FaGithub, FaLinkedin, FaSquareXTwitter } from "react-icons/fa6";
+import { HiveMark } from "../icons/HiveMark";
 
 const COLUMNS: { title: string; links: { label: string; to: string }[] }[] = [
   {
@@ -51,7 +52,7 @@ export const Footer = ({ tone = "dark" }: { tone?: "dark" | "light" }) => {
   return (
     <div
       data-slot="container"
-      className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 flex flex-col gap-20 sm:gap-30 pt-16 sm:pt-20 pb-10"
+      className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 flex flex-col gap-20 sm:gap-30 pt-16 sm:pt-20 pb-10 border-t border-neutral-900/10 dark:border-white/10"
     >
       <div className="relative z-10 flex flex-col items-center justify-center gap-12 sm:gap-18">
         <div className="grid w-full grid-cols-1 gap-10 lg:grid-cols-2 lg:gap-0">
@@ -60,6 +61,7 @@ export const Footer = ({ tone = "dark" }: { tone?: "dark" | "light" }) => {
               className={`flex items-center gap-2 font-bold text-xl ${brand}`}
               to="/"
             >
+              <HiveMark className="size-7 text-white transition-transform duration-300 group-hover:scale-105" />
               <span>Hive</span>
             </Link>
             <span className={`${muted} text-sm leading-5`}>
