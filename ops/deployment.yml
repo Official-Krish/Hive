@@ -137,7 +137,7 @@ spec:
     spec:
       containers:
         - name: hive-worker
-          image: krishanand01/hive-worker:v1.0.7
+          image: krishanand01/hive-worker:vdab3a8ff6b7ef0dc17b860a083cae5d2ca77ed79
           resources:
             requests:
               cpu: "5m"
