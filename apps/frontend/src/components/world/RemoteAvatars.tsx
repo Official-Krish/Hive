@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { AlertTriangle, Check, Waves, X, Zap } from "lucide-react";
@@ -49,13 +49,66 @@ export function RemoteAvatars({
   onAvatarClick,
 }: RemoteAvatarsProps) {
   const groupRefs = useRef<Map<string, THREE.Group>>(new Map());
+  // Smoothed per-remote transform: network positions arrive in jumps, the
+  // scene shows exponential glide + heading slerp + run-blend flips.
+  const smoothRef = useRef(
+    new Map<
+      string,
+      { x: number; z: number; heading: number; moving: boolean }
+    >(),
+  );
+  // Bumped only when a remote starts/stops moving (rare) so isMoving flips
+  // re-render without per-frame state.
+  const [, setMoveTick] = useState(0);
 
-  useFrame(() => {
+  useFrame((_, rawDelta) => {
+    const delta = Math.min(rawDelta, 0.05);
+    const k = 1 - Math.exp(-delta * 9);
+    let flipped = false;
     for (const [id, avatar] of avatars) {
       if (id === myUserId) continue;
       const g = groupRefs.current.get(id);
-      if (g) g.position.set(avatar.x, 0, avatar.y);
+      if (!g) continue;
+      let s = smoothRef.current.get(id);
+      if (!s) {
+        s = { x: avatar.x, z: avatar.y, heading: 0, moving: false };
+        smoothRef.current.set(id, s);
+        g.position.set(s.x, 0, s.z);
+        continue;
+      }
+      const dx = avatar.x - s.x;
+      const dz = avatar.y - s.z;
+      const dist = Math.hypot(dx, dz);
+      if (dist > 3) {
+        // Teleport (respawn) — snap, don't glide across the map.
+        s.x = avatar.x;
+        s.z = avatar.y;
+      } else {
+        s.x += dx * k;
+        s.z += dz * k;
+      }
+      const moving = dist / Math.max(delta, 1e-3) > 0.4;
+      if (moving !== s.moving) {
+        s.moving = moving;
+        flipped = true;
+      }
+      if (dist > 0.05) {
+        const target = Math.atan2(dx, dz);
+        let d = target - s.heading;
+        while (d < -Math.PI) d += Math.PI * 2;
+        while (d > Math.PI) d -= Math.PI * 2;
+        s.heading += d * Math.min(1, delta * 10);
+      }
+      g.position.set(s.x, 0, s.z);
+      g.rotation.y = s.heading;
     }
+    for (const id of [...smoothRef.current.keys()]) {
+      if (!avatars.has(id)) {
+        smoothRef.current.delete(id);
+        groupRefs.current.delete(id);
+      }
+    }
+    if (flipped) setMoveTick((t) => t + 1);
   });
 
   const now = Date.now();
@@ -70,6 +123,7 @@ export function RemoteAvatars({
     <>
       {entries.map(([id, avatar]) => {
         const modelUrl = safeModelUrl(avatar.mapAvatarModel);
+        const moving = smoothRef.current.get(id)?.moving ?? false;
         const needsYou =
           avatar.sessionStatus === "blocked" ||
           avatar.sessionStatus === "waiting_approval";
@@ -165,6 +219,7 @@ export function RemoteAvatars({
                   STATUS_COLOR[avatar.status ?? "online"] ?? "bg-emerald-400"
                 }
                 position={[0, 0, 0]}
+                isMoving={moving}
                 meta={meta}
               />
             </AvatarErrorBoundary>

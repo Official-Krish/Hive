@@ -6,6 +6,7 @@ import {
   type MutableRefObject,
   type ReactNode,
 } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useFBX, useGLTF, Html } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
@@ -53,6 +54,7 @@ const META_TONE: Record<string, string> = {
 };
 
 const _nameplateWorld = new THREE.Vector3();
+const _avatarPos = new THREE.Vector3();
 
 /** Range policy: full label under 10m, fades out by 14m, meta pills under 8m.
  *  Keeps tags off distant components instead of plastering the whole office. */
@@ -60,6 +62,8 @@ const TAG_FULL = 10;
 const TAG_FADE = 14;
 const TAG_META = 8;
 
+/** Max meta pills under a nameplate — the rest collapse into a +n pill. */
+const TAG_META_MAX = 2;
 /** Nameplate with wall occlusion + proximity fade (meta <8m, gone past 14m). */
 function Nameplate({
   labelY,
@@ -77,6 +81,9 @@ function Nameplate({
   const anchor = useRef<THREE.Group>(null);
   const wrap = useRef<HTMLDivElement>(null);
   const metaEl = useRef<HTMLDivElement>(null);
+  const reduce = useReducedMotion();
+  const visible = (meta ?? []).slice(0, TAG_META_MAX);
+  const overflow = (meta ?? []).length - visible.length;
 
   useFrame(({ camera }) => {
     if (document.hidden) return;
@@ -111,23 +118,43 @@ function Nameplate({
         <div ref={wrap} className="flex flex-col items-center gap-0.5">
           <div
             title={status}
-            className="flex items-center gap-1 whitespace-nowrap rounded-full bg-black/55 px-1.5 py-[2px] text-[8.5px] font-medium leading-none tracking-[0.01em] text-white/95 shadow-sm backdrop-blur-[2px] select-none"
+            className="flex items-center gap-1 whitespace-nowrap rounded-full bg-black/60 px-1.5 py-[2px] text-[9px] font-medium leading-none tracking-[0.01em] text-white/95 shadow-sm ring-1 ring-white/10 backdrop-blur-[2px] select-none"
           >
             <span className={`h-1 w-1 rounded-full ${badgeColor}`} />
             <span>{name}</span>
           </div>
           <div ref={metaEl} className="flex flex-col items-center gap-1">
-            {meta?.slice(0, 4).map((m, i) => (
-              <div
-                key={i}
-                className={`flex items-center gap-[3px] whitespace-nowrap rounded-full px-1.5 py-[1.5px] text-[8.5px] font-semibold leading-none tabular-nums shadow-sm select-none ${
-                  META_TONE[m.tone ?? "neutral"]
-                }`}
-              >
-                {m.icon}
-                <span>{m.text}</span>
-              </div>
-            ))}
+            <AnimatePresence initial={false}>
+              {visible.map((m) => (
+                <motion.div
+                  key={`${m.tone ?? "neutral"}-${m.text}`}
+                  className={`flex items-center gap-[3px] whitespace-nowrap rounded-full px-1.5 py-[1.5px] text-[8.5px] font-semibold leading-none tabular-nums shadow-sm ring-1 ring-black/20 select-none ${
+                    META_TONE[m.tone ?? "neutral"]
+                  }`}
+                  initial={
+                    reduce ? { opacity: 1 } : { opacity: 0, scale: 0.8, y: -3 }
+                  }
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={reduce ? { opacity: 1 } : { opacity: 0, scale: 0.85 }}
+                  transition={reduce ? { duration: 0 } : { duration: 0.18 }}
+                >
+                  {m.icon}
+                  <span>{m.text}</span>
+                </motion.div>
+              ))}
+              {overflow > 0 && (
+                <motion.div
+                  key="overflow"
+                  className="whitespace-nowrap rounded-full bg-black/40 px-1.5 py-[1.5px] text-[8.5px] font-bold leading-none tabular-nums text-white/80 shadow-sm ring-1 ring-white/10 select-none"
+                  initial={reduce ? { opacity: 1 } : { opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={reduce ? { opacity: 1 } : { opacity: 0, scale: 0.85 }}
+                  transition={reduce ? { duration: 0 } : { duration: 0.18 }}
+                >
+                  +{overflow}
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         </div>
       </Html>
@@ -305,9 +332,31 @@ export default function Avatar({
     }
   }, [isMoving, motionRef]);
 
-  useFrame((_, delta) => {
+  const reduceMotionRef = useRef(
+    typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+  );
+  const groupRef = useRef<THREE.Group>(null);
+  // Distant-avatar throttle accumulator (see useFrame below).
+  const farAccum = useRef(0);
+
+  useFrame(({ camera }, delta) => {
     const mixer = mixerRef.current;
     if (!mixer) return;
+    // Reduced motion: hold the first frame — presence without the performance.
+    if (reduceMotionRef.current) return;
+    // Beyond 16m, 15Hz animation is imperceptible and ~4x cheaper across
+    // a crowd of remotes. The local player is always near the lens.
+    const g = groupRef.current;
+    if (g) {
+      g.getWorldPosition(_avatarPos);
+      if (_avatarPos.distanceToSquared(camera.position) > 256) {
+        farAccum.current += delta;
+        if (farAccum.current < 1 / 15) return;
+        delta = farAccum.current;
+        farAccum.current = 0;
+      }
+    }
     mixer.update(delta);
 
     const actions = actionsRef.current;
@@ -356,7 +405,7 @@ export default function Avatar({
   const groupProps = motionRef ? {} : { position, rotation };
 
   return (
-    <group {...groupProps}>
+    <group {...groupProps} ref={groupRef}>
       <primitive object={clonedScene} scale={SCALE} />
 
       {/* Minimal nameplate floating just above the head. No distanceFactor:

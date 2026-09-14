@@ -1,10 +1,16 @@
 import { prisma } from "@hive/db";
-import { closeRedis, ensureConnected } from "@hive/queue";
+import {
+  closeRedis,
+  ensureConnected,
+  subscribeAlerts,
+  type AlertSubscription,
+} from "@hive/queue";
 import { createApp } from "./app";
 import { env } from "./config/env";
 import { queue } from "./lib/queue";
 import { IssueMatcherService } from "./modules/ai/issue-matcher.service";
 import { RealtimeHub } from "./modules/realtime/realtime.hub";
+import { realtimeBus } from "./modules/realtime/realtime.bus";
 
 async function main(): Promise<void> {
   await prisma.$connect();
@@ -21,6 +27,30 @@ async function main(): Promise<void> {
 
   const realtime = new RealtimeHub({ port: env.WS_PORT }).start();
 
+  // Cross-process fan-out: the worker publishes fresh alerts here so
+  // connected dashboards update instantly instead of waiting for a poll.
+  let alertsSub: AlertSubscription | null = null;
+  if (redisConnected) {
+    try {
+      alertsSub = await subscribeAlerts((event) => {
+        realtimeBus.publish(event.workspaceId, {
+          type: "alert.created",
+          workspaceId: event.workspaceId,
+          alertId: event.alertId,
+          alertType: event.alertType,
+          severity: event.severity,
+          message: event.message,
+          timestamp: Date.now(),
+        });
+      });
+    } catch (err) {
+      console.warn(
+        "Alert subscription failed, dashboards will poll instead:",
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
+
   const issueMatcher = new IssueMatcherService();
   void queue.start((job) => {
     if (job.name === "issue.match") {
@@ -34,6 +64,7 @@ async function main(): Promise<void> {
 
   const shutdown = async (): Promise<void> => {
     queue.stop();
+    alertsSub?.close();
     await realtime.stop();
     closeRedis();
     server.close(async () => {

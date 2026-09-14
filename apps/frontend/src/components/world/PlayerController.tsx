@@ -7,7 +7,8 @@ import type { AABB } from "./office/layout";
 import { ASSET_BASE_URL } from "../../lib/config";
 
 interface PlayerControllerProps {
-  cameraYaw: number;
+  /** Shared camera yaw (radians) — a ref so orbit never re-renders. */
+  yawRef: React.MutableRefObject<number>;
   obstacles: AABB[];
   spawn?: [number, number, number];
   modelUrl?: string;
@@ -52,7 +53,7 @@ const MODEL_YAW_OFFSET = 0; // flip to Math.PI if the avatar faces backwards
  * motion ref for the avatar's walk/run/jump blend and a throttled HUD callback.
  */
 export function PlayerController({
-  cameraYaw,
+  yawRef,
   obstacles,
   spawn = [0, 0, 38],
   modelUrl = `${ASSET_BASE_URL}/avatars/male/hive_male_01.glb`,
@@ -89,10 +90,6 @@ export function PlayerController({
     jumpSeq: 0,
   });
 
-  // Camera yaw kept in a ref so useFrame always sees the latest without re-subscribing.
-  const yawRef = useRef(cameraYaw);
-  yawRef.current = cameraYaw;
-
   // Modal-open lock: ref so useFrame sees the latest value without re-subscribing.
   const disabledRef = useRef(disabled);
   disabledRef.current = disabled;
@@ -100,6 +97,8 @@ export function PlayerController({
   // Keyboard state.
   const keys = useRef<Record<string, boolean>>({});
   const hudAccum = useRef(0);
+  const lastRoomRef = useRef<string | null>(null);
+  const jumpHeldRef = useRef(false);
 
   useEffect(() => {
     const inEditable = () => {
@@ -108,6 +107,8 @@ export function PlayerController({
       return (
         el.tagName === "INPUT" ||
         el.tagName === "TEXTAREA" ||
+        el.tagName === "SELECT" ||
+        el.tagName === "BUTTON" ||
         el.isContentEditable
       );
     };
@@ -115,17 +116,34 @@ export function PlayerController({
       if (inEditable()) return;
       keys.current[e.code] = true;
       if (e.code === "Space") e.preventDefault(); // don't scroll the page
+      if (e.code.startsWith("Arrow")) e.preventDefault();
     };
     const up = (e: KeyboardEvent) => {
       keys.current[e.code] = false;
+      if (e.code === "Space") jumpHeldRef.current = false;
+    };
+    // Alt-Tab (or any focus loss) with keys held must not stick movement.
+    const onBlur = () => {
+      keys.current = {};
+      jumpHeldRef.current = false;
     };
     window.addEventListener("keydown", down);
     window.addEventListener("keyup", up);
+    window.addEventListener("blur", onBlur);
     return () => {
       window.removeEventListener("keydown", down);
       window.removeEventListener("keyup", up);
+      window.removeEventListener("blur", onBlur);
     };
   }, []);
+
+  // Opening a modal with a key held must not lurch on close.
+  useEffect(() => {
+    if (disabled) {
+      keys.current = {};
+      jumpHeldRef.current = false;
+    }
+  }, [disabled]);
 
   /**
    * XZ overlap test, filtered by the vertical band each box blocks. `feetY` is
@@ -228,10 +246,11 @@ export function PlayerController({
     // the stair ramp tread-by-tread and the upper deck once they're on it.
     const support = groundAt ? groundAt(nextX, nextZ, feetY) : 0;
 
-    if (!blocked && groundedRef.current && k["Space"]) {
+    if (!blocked && groundedRef.current && k["Space"] && !jumpHeldRef.current) {
       vyRef.current = JUMP_V;
       groundedRef.current = false;
       jumpSeqRef.current += 1;
+      jumpHeldRef.current = true;
     }
 
     let nextY = feetY;
@@ -294,7 +313,8 @@ export function PlayerController({
         };
       }
       const room = roomAt ? roomAt(nextX, nextZ, nextY) : "";
-      if (onRoomChange) {
+      if (onRoomChange && room !== lastRoomRef.current) {
+        lastRoomRef.current = room;
         onRoomChange(room);
       }
       if (onPositionUpdate) {

@@ -182,6 +182,8 @@ function MarkerSpot({
 }) {
   const group = useRef<THREE.Group>(null);
   const tex = useMemo(() => iconTexture(spot.icon), [spot.icon]);
+  const visibleRef = useRef(false);
+  const enteredAt = useRef(0);
   const color = RING_COLOR[spot.icon] ?? "#e8eaf0";
   const phase = useMemo(
     () => (spot.x * 13.7 + spot.z * 7.3) % (Math.PI * 2),
@@ -193,13 +195,22 @@ function MarkerSpot({
     if (!g) return;
     const dx = playerPos[0] - spot.x;
     const dz = playerPos[2] - spot.z;
-    const inRange = dx * dx + dz * dz < RANGE * RANGE;
-    g.visible = inRange;
-    if (!inRange) return;
+    const d = Math.hypot(dx, dz);
+    // Hysteresis band: enter at RANGE, leave past RANGE + 0.6 — no flicker
+    // when straddling the boundary. Scale-in over 200ms kills the pop.
+    if (!visibleRef.current && d < RANGE) {
+      visibleRef.current = true;
+      enteredAt.current = clock.elapsedTime;
+    } else if (visibleRef.current && d > RANGE + 0.6) {
+      visibleRef.current = false;
+    }
+    g.visible = visibleRef.current;
+    if (!visibleRef.current) return;
     const pulse = reducedMotion
       ? 1
       : 1 + 0.07 * Math.sin(clock.elapsedTime * 2.4 + phase);
-    const s = (targeted ? 1.28 : 1) * pulse;
+    const grow = Math.min(1, (clock.elapsedTime - enteredAt.current) / 0.2);
+    const s = (targeted ? 1.28 : 1) * pulse * (0.6 + 0.4 * grow);
     g.scale.setScalar(s);
   });
 

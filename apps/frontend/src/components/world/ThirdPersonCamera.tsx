@@ -7,7 +7,9 @@ interface ThirdPersonCameraProps {
   targetPosition?: [number, number, number];
   targetRef?: React.RefObject<THREE.Object3D | null>;
   colliders?: Box3Spec[];
-  onYawChange?: (yaw: number) => void;
+  /** Shared yaw (radians). Written on orbit, read by the player controller —
+   *  a ref, so drag-look never triggers a React render. */
+  sharedYaw: React.MutableRefObject<number>;
   /** "first" puts the lens at eye height, looking along yaw/pitch. */
   mode?: "third" | "first";
   /** Eye height above the feet in first-person. */
@@ -41,7 +43,7 @@ export function ThirdPersonCamera({
   targetPosition,
   targetRef,
   colliders = [],
-  onYawChange,
+  sharedYaw,
   mode = "third",
   eyeHeight = 1.62,
   onPointerLockExit,
@@ -60,7 +62,14 @@ export function ThirdPersonCamera({
   useEffect(() => {
     draggingRef.current = false;
     if (mode === "first") {
-      gl.domElement.requestPointerLock?.();
+      // requestPointerLock returns a promise in modern browsers — a denial
+      // (e.g. iframe permissions) must not throw; drag-look still works.
+      try {
+        const p = gl.domElement.requestPointerLock?.() as unknown;
+        if (p instanceof Promise) p.catch(() => {});
+      } catch {
+        /* drag-look fallback stays available */
+      }
     } else if (document.pointerLockElement === gl.domElement) {
       document.exitPointerLock?.();
     }
@@ -113,7 +122,7 @@ export function ThirdPersonCamera({
         fp ? FPP_PITCH_MIN : 0.05,
         Math.min(fp ? FPP_PITCH_MAX : Math.PI / 2 - 0.08, pitchRef.current),
       );
-      onYawChange?.(yawRef.current);
+      sharedYaw.current = yawRef.current;
     };
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
@@ -137,7 +146,7 @@ export function ThirdPersonCamera({
       el.removeEventListener("wheel", onWheel);
       el.removeEventListener("contextmenu", onContext);
     };
-  }, [gl, onYawChange]);
+  }, [gl, sharedYaw]);
 
   // Nearest wall hit along a ray (slab method); returns maxDist if clear.
   const rayHit = (
@@ -222,9 +231,11 @@ export function ThirdPersonCamera({
     }
 
     // Collision: shrink distance if a wall is between target and desired camera.
+    // In tight corridors the wall can be closer than MIN_DIST — allow going
+    // under it (down to the near plane) rather than clipping inside the wall.
     const wanted = distanceRef.current;
     const clear = rayHit(target, dir, wanted + CAM_MARGIN);
-    const allowed = Math.max(MIN_DIST, Math.min(wanted, clear - CAM_MARGIN));
+    const allowed = Math.max(0.4, Math.min(wanted, clear - CAM_MARGIN));
     // Snap inward instantly (avoid clipping), ease back out.
     smoothDist.current =
       allowed < smoothDist.current

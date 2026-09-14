@@ -1,13 +1,30 @@
-# Hive
+# Hive — Engineering intelligence for AI-native teams
 
-Engineering intelligence platform that turns raw AI-coding activity into a team
-dashboard. A lightweight local collector observes agents (Claude Code, Codex,
-Cursor, OpenCode), the terminal, git, and tests, and ships normalized telemetry
-events to a cloud backend that provides dashboards, efficiency metrics, alerts,
-and a spatial "AI lab" office.
+Hive turns raw AI-coding activity into a living picture of what your team is
+building — developers, agents, and everything they ship, in one shared
+workspace.
+
+Software teams now ship with AI agents (Claude Code, Codex, Cursor, OpenCode)
+sitting next to humans, but managers and teammates can't see any of it. Hive is
+the missing instrument panel: a lightweight local collector observes agent and
+engineering activity, and the platform turns it into efficiency metrics, token
+spend, Watchdog alerts, PR reviews, and a spatial office you can walk around.
+
+What you get:
+
+- **Collector telemetry** — Rust daemon (`hive start`) watches agents, git,
+  terminal, files, and tests; batched, idempotent, device-authenticated ingest.
+- **Tokens → shipped** — token spend per model / member, tasks → PRs → shipped
+  throughput, budgets with alert thresholds.
+- **Watchdog** — stuck agents, token burn with no output, failing test streaks,
+  budget risk.
+- **Spatial office** — realtime 3D floor for humans + agents: presence,
+  avatars, chat, PR reviewer bot, arcade.
+- **GitHub-native** — OAuth App, per-repo webhooks, reviewer bot on every PR.
 
 > This repository contains the **cloud platform** (API, worker, dashboard), the
-> **event contracts**, and the **local collector daemon** (`apps/collector`).
+> **event contracts** (`packages/events`), and the **local collector daemon**
+> (`apps/collector`).
 
 ![alt text](hero.png)
 ---
