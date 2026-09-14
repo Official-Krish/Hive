@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { loadYouTubeApi } from "@/lib/youtube";
 import type { RealtimeClient } from "@/lib/realtime";
+import type { ChillQueueItem } from "@hive/types";
 import { chillScreenOverlay } from "@/components/world/ChillScreenProjection";
 
 export interface ChillMediaState {
@@ -11,6 +12,7 @@ export interface ChillMediaState {
   playheadMs: number;
   at: number;
   setByName?: string | null;
+  queueItemId?: string | null;
 }
 
 const VOLUME_KEY = "chill.volume";
@@ -28,6 +30,8 @@ function applyMuted(p: YT.Player, muted: boolean) {
  * onto the 3D chill-screen mesh by `ChillScreenProjection`. The server is the
  * source of truth: on `chill.media.state` we set the video id, seek to the
  * broadcast playhead, and reconcile play/pause with broadcast drift correction.
+ * `chill.queue.state` carries the ordered YouTube-like queue; when the player
+ * reports ENDED we emit `chill.queue.ended` so the server auto-advances.
  *
  * Audio is a per-client responsibility: it is audible only while the local user
  * is inside the Chill Space, and scaled by that user's local volume. Leaving the
@@ -44,7 +48,10 @@ export function useChillMedia(
     isPlaying: false,
     playheadMs: 0,
     at: 0,
+    queueItemId: null,
   });
+  const [queue, setQueue] = useState<ChillQueueItem[]>([]);
+  const [currentItemId, setCurrentItemId] = useState<string | null>(null);
   const [volume, setVolumeState] = useState<number>(() =>
     Number(localStorage.getItem(VOLUME_KEY) ?? 1),
   );
@@ -58,6 +65,10 @@ export function useChillMedia(
   inChillRef.current = inChillSpace;
   const volumeRef = useRef(volume);
   volumeRef.current = volume;
+  const clientRef = useRef(client);
+  clientRef.current = client;
+  // Guards duplicate ENDED reports for the same item (all peers report it).
+  const endedSentForRef = useRef<string | null>(null);
 
   const setVolume = useCallback((v: number) => {
     setVolumeState(v);
@@ -69,10 +80,13 @@ export function useChillMedia(
     }
   }, []);
 
-  // Subscribe to server media state.
+  // Subscribe to server media + queue state.
   useEffect(() => {
     if (!client) return;
-    const off = client.on("chill.media.state", (e) => {
+    const offMedia = client.on("chill.media.state", (e) => {
+      if (e.videoId !== stateRef.current.videoId) {
+        endedSentForRef.current = null;
+      }
       setState({
         videoUrl: e.videoUrl,
         videoId: e.videoId,
@@ -81,9 +95,17 @@ export function useChillMedia(
         playheadMs: e.playheadMs,
         at: e.at,
         setByName: e.setByName,
+        queueItemId: e.queueItemId ?? null,
       });
     });
-    return off;
+    const offQueue = client.on("chill.queue.state", (e) => {
+      setQueue(e.items);
+      setCurrentItemId(e.currentItemId ?? null);
+    });
+    return () => {
+      offMedia();
+      offQueue();
+    };
   }, [client]);
 
   // Mount the single YouTube player container + API once. The container is
@@ -130,6 +152,14 @@ export function useChillMedia(
             applyMuted(p, volumeRef.current === 0);
             setPlayerMounted(true);
           },
+          onStateChange: (ev) => {
+            if (ev.data !== YT.PlayerState.ENDED) return;
+            const current = stateRef.current;
+            const itemId = current.queueItemId;
+            if (!itemId || endedSentForRef.current === itemId) return;
+            endedSentForRef.current = itemId;
+            clientRef.current?.sendChillQueueEnded(itemId);
+          },
         },
       });
       playerRef.current = p;
@@ -159,6 +189,7 @@ export function useChillMedia(
         const videoChanged = player.getVideoData()?.video_id !== targetVideo;
 
         if (videoChanged) {
+          endedSentForRef.current = null;
           const video = {
             videoId: targetVideo,
             startSeconds: stateRef.current.playheadMs / 1000,
@@ -209,5 +240,42 @@ export function useChillMedia(
     [client],
   );
 
-  return { state, volume, setVolume, playerMounted, seek, containerRef };
+  const enqueue = useCallback(
+    (url: string) => client?.sendChillQueueAdd(url),
+    [client],
+  );
+  const playItem = useCallback(
+    (itemId: string) => client?.sendChillQueuePlay(itemId),
+    [client],
+  );
+  const next = useCallback(() => client?.sendChillQueueNext(), [client]);
+  const prev = useCallback(() => client?.sendChillQueuePrev(), [client]);
+  const removeItem = useCallback(
+    (itemId: string) => client?.sendChillQueueRemove(itemId),
+    [client],
+  );
+  const reorder = useCallback(
+    (itemId: string, toIndex: number) =>
+      client?.sendChillQueueReorder(itemId, toIndex),
+    [client],
+  );
+  const clearQueue = useCallback(() => client?.sendChillQueueClear(), [client]);
+
+  return {
+    state,
+    queue,
+    currentItemId: currentItemId ?? state.queueItemId ?? null,
+    volume,
+    setVolume,
+    playerMounted,
+    seek,
+    containerRef,
+    enqueue,
+    playItem,
+    next,
+    prev,
+    removeItem,
+    reorder,
+    clearQueue,
+  };
 }

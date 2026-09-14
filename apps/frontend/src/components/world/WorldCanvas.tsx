@@ -1756,6 +1756,8 @@ export function WorldCanvas({
           <ChillScreenModal
             client={client}
             state={chill.state}
+            queue={chill.queue}
+            currentItemId={chill.currentItemId}
             onClose={() => setChillScreenOpen(false)}
           />
         )}
