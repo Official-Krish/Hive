@@ -16,11 +16,22 @@ import { ASSET_BASE_URL } from "../../lib/config";
 /** Uniform scale applied to every avatar GLB. */
 const SCALE = 0.55;
 
+/**
+ * Stride matching (kills moonwalk foot-slide). The clips are in-place, so
+ * step frequency must be derived: cycles/sec needed = groundSpeed / stride.
+ * Strides are Mixamo-archetype estimates for an average humanoid — tune here,
+ * not at call sites. Durations are read off the actual clips at load.
+ */
+const RUN_STRIDE_M = 2.4; // one full run gait cycle
+/** Must match PlayerController RUN_SPEED — motion.speed is normalized by it. */
+const AV_RUN_SPEED = 7.4; // m/s
+
 /** Per-frame motion state the controller writes and the avatar reads. */
 export interface PlayerMotion {
   speed: number; // 0..1 (walk .. run)
   grounded: boolean;
   jumpSeq: number; // increments on each jump launch
+  sitting?: boolean; // seated on a chair — overrides locomotion blend
 }
 
 interface AvatarProps {
@@ -179,18 +190,48 @@ export default function Avatar({
   const runFBX = useFBX(`${ASSET_BASE_URL}/Animations/run.fbx`);
   const jumpFBX = useFBX(`${ASSET_BASE_URL}/Animations/jump.fbx`);
 
+  // Sitting is best-effort so a missing CDN file can never brick the avatar.
+  const [sitFBX, setSitFBX] = useState<THREE.Group | null>(null);
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const { FBXLoader } =
+          await import("three/examples/jsm/loaders/FBXLoader.js");
+        const loader = new FBXLoader();
+        const sit = await loader
+          .loadAsync(`${ASSET_BASE_URL}/Animations/Sitting.fbx`)
+          .catch(() => null);
+        if (!alive) return;
+        if (sit) setSitFBX(sit);
+      } catch {
+        // Loader itself failed — same fallback, already warned above.
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   const clonedScene = useMemo(() => SkeletonUtils.clone(scene), [scene]);
 
   const mixerRef = useRef<THREE.AnimationMixer | null>(null);
   const actionsRef = useRef<{
     idle?: THREE.AnimationAction;
+    walk?: THREE.AnimationAction;
     run?: THREE.AnimationAction;
     jump?: THREE.AnimationAction;
+    sit?: THREE.AnimationAction;
   }>({});
 
   // Blend state (driven per-frame).
-  const locoRef = useRef(0); // 0 idle .. 1 running
+  const idleWRef = useRef(1); // idle weight
+  const walkWRef = useRef(0); // walk weight
+  const runWRef = useRef(0); // run weight
   const jumpWRef = useRef(0); // jump overlay weight
+  const sitWRef = useRef(0); // seated weight (overrides locomotion)
+  // Gait-cycle duration read off the run clip.
+  const gaitRef = useRef({ runDur: 0 });
   const jumpingRef = useRef(false);
   const lastJumpSeq = useRef(0);
 
@@ -239,13 +280,113 @@ export default function Avatar({
 
     const targetBones = new Set(mesh.skeleton.bones.map((b) => b.name));
     const rootBoneName = mesh.skeleton.bones[0]?.name;
+    const bindMap = new Map(
+      mesh.skeleton.bones.map((b) => [b.name, b.quaternion.clone()] as const),
+    );
+    const IDENTITY_Q = new THREE.Quaternion();
+
+    // Mixamo rest pose ≠ avatar bind pose (avatar hips bind is 180° about Z,
+    // thighs ~180° about X). Fresh downloads therefore render upside-down.
+    // Fix: per-bone offset R = stance · rest⁻¹, applied as q' = R·q, which
+    // maps rest→stance and preserves motion deltas. Stance comes from the
+    // idle clip (relaxed standing — NOT the rigid bind, whose arms sit
+    // ~62° out in a half-raised pose that reads as a T-pose mid-stride).
+    // Rest is read off the FBX skeleton nodes (true rest preservals) —
+    // walk-cycle averaging was tried and biases high-variance bones (knees
+    // bend 0–60° mid-stride, dragging R ~35° off and flipping bend direction).
+    // Old clips already match stance/bind and must NEVER be rebound.
+    // Hemisphere-aware per-bone mean of quaternion tracks (bare names).
+    const meanQuats = (fbx: THREE.Group | null) => {
+      const out = new Map<string, THREE.Quaternion>();
+      if (!fbx) return out;
+      const source =
+        fbx.animations
+          .filter((c) => !/targeting\s*pose/i.test(c.name))
+          .reduce<THREE.AnimationClip | null>(
+            (best, c) => (!best || c.duration > best.duration ? c : best),
+            null,
+          ) ?? null;
+      const acc = new Map<string, { sum: THREE.Quaternion; n: number }>();
+      for (const track of source?.tracks ?? []) {
+        const dot = track.name.lastIndexOf(".");
+        if (dot < 0) continue;
+        const bonePart = track.name.slice(0, dot);
+        const bare = bonePart
+          .slice(bonePart.lastIndexOf(":") + 1)
+          .replace(/^mixamorig/i, "");
+        if (track.name.slice(dot + 1) !== "quaternion") continue;
+        let entry = acc.get(bare);
+        if (!entry) {
+          entry = { sum: new THREE.Quaternion(0, 0, 0, 0), n: 0 };
+          acc.set(bare, entry);
+        }
+        const q = new THREE.Quaternion();
+        const count = track.values.length / 4;
+        for (let i = 0; i < count; i++) {
+          q.set(
+            track.values[i * 4] ?? 0,
+            track.values[i * 4 + 1] ?? 0,
+            track.values[i * 4 + 2] ?? 0,
+            track.values[i * 4 + 3] ?? 0,
+          );
+          if (entry.sum.dot(q) < 0 && entry.n > 0) {
+            entry.sum.set(
+              entry.sum.x - q.x,
+              entry.sum.y - q.y,
+              entry.sum.z - q.z,
+              entry.sum.w - q.w,
+            );
+          } else {
+            entry.sum.set(
+              entry.sum.x + q.x,
+              entry.sum.y + q.y,
+              entry.sum.z + q.z,
+              entry.sum.w + q.w,
+            );
+          }
+          entry.n++;
+        }
+      }
+      for (const [bare, entry] of acc) {
+        if (entry.n > 0) out.set(bare, entry.sum.normalize());
+      }
+      return out;
+    };
+    const restMap = meanQuats(sitFBX);
+    const stanceMap = meanQuats(idleFBX);
+    // True Mixamo rest, straight from the FBX skeleton (Bone local quats).
+    // Preferred over the walk-cycle average above for high-variance bones.
+    const nodeRestMap = new Map<string, THREE.Quaternion>();
+    if (sitFBX) {
+      sitFBX.traverse((obj) => {
+        const bone = obj as THREE.Bone;
+        if (!bone.isBone || !bone.name) return;
+        const bare = bone.name
+          .slice(bone.name.lastIndexOf(":") + 1)
+          .replace(/^mixamorig/i, "");
+        if (!bare || nodeRestMap.has(bare)) return;
+        nodeRestMap.set(bare, bone.quaternion.clone());
+      });
+    }
 
     // Each FBX ships TWO clips: the real animation plus a static
     // "0.Targeting Pose" reference (the T-pose). Index 0 is NOT reliably the
     // real one — run.fbx has the pose first — so select by name and fall back
     // to the longest clip. Keep only non-root bone quaternions so all vertical
     // displacement comes from the controller, not the animation.
-    const prepareClip = (clipName: string, fbx: THREE.Group) => {
+    // Fresh Mixamo downloads namespace bones ("mixamorig:Hips") while the
+    // avatar GLB uses bare names ("Hips") — and three's FBXLoader additionally
+    // strips the colon ("mixamorigHips"). Normalize all three forms before
+    // matching, and rewrite the track name so the mixer binds correctly.
+    // `rebind` is ONLY for fresh downloads: their rest pose differs from the
+    // avatar bind (hips 180° about Z), so each keyframe is premultiplied by
+    // the per-bone offset R = bind · rest⁻¹. Old clips already match bind and
+    // must never be rebound (it would invert them).
+    const prepareClip = (
+      clipName: string,
+      fbx: THREE.Group,
+      rebind = false,
+    ) => {
       const usable = fbx.animations.filter(
         (c) => !/targeting\s*pose/i.test(c.name),
       );
@@ -257,15 +398,52 @@ export default function Avatar({
         );
       if (!sourceClip) return null;
 
-      const tracks = sourceClip.tracks.filter((track) => {
-        const [boneName, property] = track.name.split(".");
-        return (
-          boneName !== undefined &&
-          boneName !== rootBoneName &&
-          property === "quaternion" &&
-          targetBones.has(boneName)
+      const tracks: THREE.KeyframeTrack[] = [];
+      for (const track of sourceClip.tracks) {
+        const dot = track.name.lastIndexOf(".");
+        if (dot < 0) continue;
+        const boneName = track.name.slice(0, dot);
+        const property = track.name.slice(dot + 1);
+        const bare = boneName
+          .slice(boneName.lastIndexOf(":") + 1)
+          .replace(/^mixamorig/i, "");
+        if (
+          bare === rootBoneName ||
+          property !== "quaternion" ||
+          !targetBones.has(bare)
+        ) {
+          continue;
+        }
+        // New track instance every time — never mutate the cached FBX.
+        const count = track.values.length / 4;
+        const values = track.values.slice(0);
+        if (rebind) {
+          const rest = nodeRestMap.get(bare) ?? restMap.get(bare) ?? IDENTITY_Q;
+          const stance = stanceMap.get(bare) ?? bindMap.get(bare) ?? IDENTITY_Q;
+          const offset = stance.clone().multiply(rest.clone().invert());
+          const q = new THREE.Quaternion();
+          for (let i = 0; i < count; i++) {
+            q.set(
+              values[i * 4] ?? 0,
+              values[i * 4 + 1] ?? 0,
+              values[i * 4 + 2] ?? 0,
+              values[i * 4 + 3] ?? 0,
+            );
+            q.premultiply(offset);
+            values[i * 4] = q.x;
+            values[i * 4 + 1] = q.y;
+            values[i * 4 + 2] = q.z;
+            values[i * 4 + 3] = q.w;
+          }
+        }
+        tracks.push(
+          new THREE.QuaternionKeyframeTrack(
+            `${bare}.${property}`,
+            [...track.times],
+            values,
+          ),
         );
-      });
+      }
       if (tracks.length === 0) {
         console.warn(
           `[Avatar] no matching tracks for "${clipName}" (${sourceClip.name})`,
@@ -276,8 +454,15 @@ export default function Avatar({
     };
 
     const idleClip = prepareClip("Idle", idleFBX);
+    // Use the proven run clip at walking speed too. The separate walk FBX was
+    // authored for a different rig and made the limbs wobble after retargeting.
+    const walkClip = null;
     const runClip = prepareClip("Run", runFBX);
     const jumpClip = prepareClip("Jump", jumpFBX);
+    // Sitting.fbx ships a single "mixamo.com" take — longest-clip fallback
+    // picks it; rebind maps its rest pose onto the avatar stance.
+    const sitClip = sitFBX ? prepareClip("Sitting", sitFBX, true) : null;
+    gaitRef.current = { runDur: runClip?.duration ?? 0 };
 
     const mixer = new THREE.AnimationMixer(clonedScene);
     mixerRef.current = mixer;
@@ -287,6 +472,11 @@ export default function Avatar({
       actions.idle = mixer.clipAction(idleClip);
       actions.idle.setLoop(THREE.LoopRepeat, Infinity);
       actions.idle.play();
+    }
+    if (walkClip) {
+      actions.walk = mixer.clipAction(walkClip);
+      actions.walk.setLoop(THREE.LoopRepeat, Infinity);
+      actions.walk.play();
     }
     if (runClip) {
       actions.run = mixer.clipAction(runClip);
@@ -298,12 +488,19 @@ export default function Avatar({
       actions.jump.setLoop(THREE.LoopOnce, 1);
       actions.jump.clampWhenFinished = true;
     }
+    if (sitClip) {
+      actions.sit = mixer.clipAction(sitClip);
+      actions.sit.setLoop(THREE.LoopRepeat, Infinity);
+      actions.sit.play();
+    }
     actionsRef.current = actions;
     currentActionRef.current = actions.idle ?? null;
 
     // Start weights: full idle.
     actions.idle?.setEffectiveWeight(1);
+    actions.walk?.setEffectiveWeight(0);
     actions.run?.setEffectiveWeight(0);
+    actions.sit?.setEffectiveWeight(0);
 
     const onFinished = (e: { action: THREE.AnimationAction }) => {
       if (e.action === actions.jump) jumpingRef.current = false;
@@ -316,7 +513,7 @@ export default function Avatar({
       mixer.uncacheRoot(clonedScene);
       mixerRef.current = null;
     };
-  }, [clonedScene, idleFBX, runFBX, jumpFBX]);
+  }, [clonedScene, idleFBX, runFBX, jumpFBX, sitFBX]);
 
   // --- Legacy crossfade for static avatars (no motionRef) ----------------------
   useEffect(() => {
@@ -373,14 +570,21 @@ export default function Avatar({
       }
     }
 
-    // Smoothly approach targets.
-    const locoTarget = m.speed > 0.06 ? 1 : 0;
-    locoRef.current = THREE.MathUtils.damp(
-      locoRef.current,
-      locoTarget,
-      10,
-      delta,
-    );
+    // The run clip drives both walking and sprinting. Its playback speed is
+    // matched to ground speed below, so walking remains a calm version of the
+    // same stable arm-and-leg gait.
+    const s = THREE.MathUtils.clamp(m.speed, 0, 1);
+    const hasWalk = !!actions.walk;
+    const idleT = 1 - THREE.MathUtils.clamp(s / 0.15, 0, 1);
+    const runT = hasWalk
+      ? THREE.MathUtils.clamp((s - 0.45) / 0.25, 0, 1)
+      : s > 0.06
+        ? 1
+        : 0;
+    const walkT = hasWalk ? Math.max(0, 1 - idleT - runT) : 0;
+    idleWRef.current = THREE.MathUtils.damp(idleWRef.current, idleT, 10, delta);
+    walkWRef.current = THREE.MathUtils.damp(walkWRef.current, walkT, 10, delta);
+    runWRef.current = THREE.MathUtils.damp(runWRef.current, runT, 10, delta);
     jumpWRef.current = THREE.MathUtils.damp(
       jumpWRef.current,
       jumpingRef.current ? 1 : 0,
@@ -389,16 +593,35 @@ export default function Avatar({
     );
 
     const jw = jumpWRef.current;
-    const loco = locoRef.current;
+    // Seated overrides everything (no locomotion while on a chair). Without
+    // the sit clip this degrades to plain idle.
+    const sitT = m.sitting && actions.sit ? 1 : 0;
+    sitWRef.current = THREE.MathUtils.damp(sitWRef.current, sitT, 10, delta);
+    const sw = sitWRef.current;
+    // Damping can leave the three weights summing slightly off 1 — normalize.
+    const sum = idleWRef.current + walkWRef.current + runWRef.current || 1;
 
-    actions.idle.setEffectiveWeight((1 - jw) * (1 - loco));
-    actions.run.setEffectiveWeight((1 - jw) * loco);
-    if (actions.jump) actions.jump.setEffectiveWeight(jw);
-
-    // Walk feel at low speed, full run at high speed.
-    actions.run.setEffectiveTimeScale(
-      THREE.MathUtils.lerp(0.8, 1.45, THREE.MathUtils.clamp(m.speed, 0, 1)),
+    actions.idle.setEffectiveWeight(
+      ((1 - jw) * (1 - sw) * idleWRef.current) / sum,
     );
+    actions.walk?.setEffectiveWeight(
+      ((1 - jw) * (1 - sw) * walkWRef.current) / sum,
+    );
+    actions.run.setEffectiveWeight(
+      ((1 - jw) * (1 - sw) * runWRef.current) / sum,
+    );
+    if (actions.jump) actions.jump.setEffectiveWeight(jw * (1 - sw));
+    actions.sit?.setEffectiveWeight(sw);
+
+    // Stride-matched playback: step frequency follows ground speed so feet
+    // plant instead of glide. The same run gait is simply slower while walking.
+    const v = s * AV_RUN_SPEED;
+    const { runDur } = gaitRef.current;
+    if (runDur > 0) {
+      actions.run.setEffectiveTimeScale(
+        THREE.MathUtils.clamp((v * runDur) / RUN_STRIDE_M, 0.5, 2.6),
+      );
+    }
   });
 
   // When motionRef drives us, a parent group owns the transform (render at origin).

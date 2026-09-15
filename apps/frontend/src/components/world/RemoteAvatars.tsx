@@ -1,8 +1,8 @@
-import { useRef, useState } from "react";
+import { useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { AlertTriangle, Check, Waves, X, Zap } from "lucide-react";
-import Avatar from "./Avatar";
+import Avatar, { type PlayerMotion } from "./Avatar";
 import { AvatarErrorBoundary } from "./AvatarErrorBoundary";
 import type { MapAvatar } from "@/hooks/useRealtimeMap";
 import { type NearbyTokens } from "@/hooks/useNearbyTokens";
@@ -32,7 +32,18 @@ interface RemoteAvatarsProps {
   /** Short-lived speech bubbles: developerId → text (e.g. water-cooler bump). */
   bubbles?: Readonly<Record<string, string>>;
   onAvatarClick?: (developerId: string) => void;
+  /** Walkable-surface height, same sampler the local player uses. Without
+   *  it remotes hover at Y=0 on stairs and the upper deck. */
+  groundAt?: (x: number, z: number, feetY: number) => number;
 }
+
+// Matches PlayerController tuning so remote stride matches local stride.
+const RUN_SPEED = 7.4; // m/s
+/** Raw glide speed above this counts as started-moving. */
+const MOVE_START = 0.6; // m/s
+/** Below this for STOP_HOLD_MS the remote settles back to idle. */
+const MOVE_STOP = 0.3; // m/s
+const STOP_HOLD_MS = 150;
 
 /**
  * Renders every member who is actually in the workplace at their current 2D
@@ -47,33 +58,66 @@ export function RemoteAvatars({
   pills,
   bubbles,
   onAvatarClick,
+  groundAt,
 }: RemoteAvatarsProps) {
   const groupRefs = useRef<Map<string, THREE.Group>>(new Map());
   // Smoothed per-remote transform: network positions arrive in jumps, the
-  // scene shows exponential glide + heading slerp + run-blend flips.
+  // scene shows exponential glide + heading slerp + speed-matched walk blend.
   const smoothRef = useRef(
     new Map<
       string,
-      { x: number; z: number; heading: number; moving: boolean }
+      {
+        x: number;
+        z: number;
+        y: number;
+        heading: number;
+        speed: number;
+        moving: boolean;
+        stillSince: number;
+      }
     >(),
   );
-  // Bumped only when a remote starts/stops moving (rare) so isMoving flips
-  // re-render without per-frame state.
-  const [, setMoveTick] = useState(0);
+  // Per-remote motion objects fed to Avatar via motionRef (same path as the
+  // local player). Mutated in useFrame — never triggers React re-renders,
+  // so start/stop can never flicker the tree.
+  const motionRefs = useRef(
+    new Map<string, React.MutableRefObject<PlayerMotion>>(),
+  );
+  const motionRefFor = (id: string) => {
+    let r = motionRefs.current.get(id);
+    if (!r) {
+      r = { current: { speed: 0, grounded: true, jumpSeq: 0 } };
+      motionRefs.current.set(id, r);
+    }
+    return r;
+  };
+  const groundRef = useRef(groundAt);
+  groundRef.current = groundAt;
 
   useFrame((_, rawDelta) => {
     const delta = Math.min(rawDelta, 0.05);
-    const k = 1 - Math.exp(-delta * 9);
-    let flipped = false;
+    // Tighter glide while moving so glide speed matches the stride the
+    // walk/run blend plays — loose glide + in-place anim reads as floating.
+    const kMove = 1 - Math.exp(-delta * 13);
+    const kIdle = 1 - Math.exp(-delta * 9);
+    const now = performance.now();
     for (const [id, avatar] of avatars) {
       if (id === myUserId) continue;
       const g = groupRefs.current.get(id);
       if (!g) continue;
       let s = smoothRef.current.get(id);
       if (!s) {
-        s = { x: avatar.x, z: avatar.y, heading: 0, moving: false };
+        s = {
+          x: avatar.x,
+          z: avatar.y,
+          y: groundRef.current?.(avatar.x, avatar.y, 0) ?? 0,
+          heading: 0,
+          speed: 0,
+          moving: false,
+          stillSince: now,
+        };
         smoothRef.current.set(id, s);
-        g.position.set(s.x, 0, s.z);
+        g.position.set(s.x, s.y, s.z);
         continue;
       }
       const dx = avatar.x - s.x;
@@ -83,14 +127,33 @@ export function RemoteAvatars({
         // Teleport (respawn) — snap, don't glide across the map.
         s.x = avatar.x;
         s.z = avatar.y;
+        s.speed = 0;
+        s.moving = false;
       } else {
+        const k = s.moving ? kMove : kIdle;
         s.x += dx * k;
         s.z += dz * k;
       }
-      const moving = dist / Math.max(delta, 1e-3) > 0.4;
-      if (moving !== s.moving) {
-        s.moving = moving;
-        flipped = true;
+      // Hysteresis: start fast, stop only after holding still — 20Hz network
+      // updates straddling a single threshold flickered idle/run every tick.
+      const rawSpeed = dist / Math.max(delta, 1e-3);
+      if (rawSpeed > MOVE_START) {
+        s.moving = true;
+      } else if (rawSpeed < MOVE_STOP) {
+        if (s.moving && now - s.stillSince < STOP_HOLD_MS) {
+          // keep moving until the hold elapses
+        } else {
+          s.moving = false;
+        }
+      }
+      if (rawSpeed >= MOVE_STOP) s.stillSince = now;
+      // Smooth the speed itself so the walk blend eases instead of snapping.
+      const targetSpeed = s.moving ? Math.min(rawSpeed, RUN_SPEED) : 0;
+      s.speed = THREE.MathUtils.damp(s.speed, targetSpeed, 8, delta);
+      const motion = motionRefs.current.get(id);
+      if (motion) {
+        motion.current.speed = Math.min(1, s.speed / RUN_SPEED);
+        motion.current.grounded = true;
       }
       if (dist > 0.05) {
         const target = Math.atan2(dx, dz);
@@ -99,16 +162,20 @@ export function RemoteAvatars({
         while (d > Math.PI) d -= Math.PI * 2;
         s.heading += d * Math.min(1, delta * 10);
       }
-      g.position.set(s.x, 0, s.z);
+      // Ride the walkable surface like the local player (stairs, L2 deck).
+      const ground = groundRef.current?.(s.x, s.z, s.y) ?? 0;
+      s.y = THREE.MathUtils.damp(s.y, ground, 10, delta);
+      if (Math.abs(s.y - ground) < 0.01) s.y = ground;
+      g.position.set(s.x, s.y, s.z);
       g.rotation.y = s.heading;
     }
     for (const id of [...smoothRef.current.keys()]) {
       if (!avatars.has(id)) {
         smoothRef.current.delete(id);
         groupRefs.current.delete(id);
+        motionRefs.current.delete(id);
       }
     }
-    if (flipped) setMoveTick((t) => t + 1);
   });
 
   const now = Date.now();
@@ -123,7 +190,7 @@ export function RemoteAvatars({
     <>
       {entries.map(([id, avatar]) => {
         const modelUrl = safeModelUrl(avatar.mapAvatarModel);
-        const moving = smoothRef.current.get(id)?.moving ?? false;
+        const motionRef = motionRefFor(id);
         const needsYou =
           avatar.sessionStatus === "blocked" ||
           avatar.sessionStatus === "waiting_approval";
@@ -213,13 +280,13 @@ export function RemoteAvatars({
             >
               <Avatar
                 modelUrl={modelUrl}
+                motionRef={motionRef}
                 name={avatar.name || "Member"}
                 status={avatar.status ?? "online"}
                 badgeColor={
                   STATUS_COLOR[avatar.status ?? "online"] ?? "bg-emerald-400"
                 }
                 position={[0, 0, 0]}
-                isMoving={moving}
                 meta={meta}
               />
             </AvatarErrorBoundary>

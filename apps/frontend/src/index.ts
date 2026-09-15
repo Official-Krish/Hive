@@ -25,6 +25,22 @@ const server = serve({
       return new Response("Not found", { status: 404 });
     },
 
+    // Kenney furniture-kit GLBs (CC0, local in public/furniture-kit/models_glb)
+    "/furniture-kit/*": async (req) => {
+      const url = new URL(req.url);
+      const filePath = url.pathname.slice(1);
+      const file = Bun.file(`./public/${filePath}`);
+      if (await file.exists()) {
+        return new Response(file, {
+          headers: {
+            "Content-Type": "model/gltf-binary",
+            "Cache-Control": "public, max-age=2592000, immutable",
+          },
+        });
+      }
+      return new Response("Not found", { status: 404 });
+    },
+
     // Scroll-engine script (vanilla JS, not bundled — served as a plain file)
     "/scrub-engine.js": async () => {
       const file = Bun.file("./public/scrub-engine.js");

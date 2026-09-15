@@ -23,6 +23,7 @@ import {
   FiUsers,
 } from "react-icons/fi";
 import { OfficeBuilding } from "./office/OfficeBuilding";
+import { preloadKitFurniture } from "./InstancedFurniture";
 import { OfficeLighting } from "./lighting/OfficeLighting";
 import { PlayerController } from "./PlayerController";
 import { ThirdPersonCamera } from "./ThirdPersonCamera";
@@ -93,12 +94,16 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { Interactable, InteractableIcon } from "./interactions";
+import { CHAIR_SIT_SPOTS, SIT_RADIUS } from "./interactions";
 
 const DEFAULT_AVATAR =
   AVATARS.male[0]?.model ?? `${ASSET_BASE_URL}/avatars/male/hive_male_01.glb`;
 
 /** Reviewer bot — purpose-built robot, not a human avatar. */
 const BOT_MODEL = "https://cdn.krishlabs.tech/hive/avatars/robot.glb";
+
+// Kit furniture GLBs start streaming with the world (tracked by AssetGate).
+preloadKitFurniture();
 
 /* HUD material — warm bone paper floating over the 3D scene, same voice
    as the light dashboard. Shared tokens live in ./chrome; these two
@@ -156,16 +161,25 @@ function endReason(kind: string, reason: string | null, won: boolean): string {
  *  NOTE: timers run mount-only (callback via ref) so parent re-renders
  *  can never reset them — that was the stuck-on-loading bug. */
 function AssetGate({ onReady }: { onReady: () => void }) {
-  const progress = useProgress((s) => s.progress);
   const done = useRef(false);
   const readyRef = useRef(onReady);
   readyRef.current = onReady;
+  // NOTE: intentionally polls useProgress.getState() on an interval instead
+  // of subscribing via useProgress((s) => s.progress). The drei loading
+  // manager emits progress synchronously while suspenseful loaders (useGLTF
+  // in Avatar/KitPiece) resolve *during another component's render* — a
+  // subscription setStates AssetGate mid-render and React logs
+  // "Cannot update a component while rendering a different component".
+  // Polling fires outside render, so the warning can never trigger.
   useEffect(() => {
-    if (done.current || progress < 100) return;
-    done.current = true;
-    const t = window.setTimeout(() => readyRef.current(), 500);
-    return () => window.clearTimeout(t);
-  }, [progress]);
+    const id = window.setInterval(() => {
+      if (done.current || useProgress.getState().progress < 100) return;
+      done.current = true;
+      window.clearInterval(id);
+      window.setTimeout(() => readyRef.current(), 500);
+    }, 150);
+    return () => window.clearInterval(id);
+  }, []);
   useEffect(() => {
     const t = window.setTimeout(() => {
       if (!done.current) {
@@ -709,6 +723,19 @@ export function WorldCanvas({
     SPAWN[2],
   ]);
   const [coffeeActive, setCoffeeActive] = useState(false);
+  const [sitting, setSitting] = useState(false);
+  const sitToggleRef = useRef<(() => void) | null>(null);
+  // Nearest sittable chair (for the sit/stand hint) — recomputed from the
+  // throttled player position, never per-frame. While seated the player is
+  // on the chair, so the hint flips to "move to stand".
+  const nearChair = useMemo(() => {
+    const [x, feetY, z] = playerPos;
+    return CHAIR_SIT_SPOTS.some(
+      (s) =>
+        Math.abs(feetY - s.y) <= 0.9 &&
+        Math.hypot(x - s.x, z - s.z) <= SIT_RADIUS,
+    );
+  }, [playerPos]);
   const [waterActive, setWaterActive] = useState(false);
   interface WorldToast {
     key: string;
@@ -1244,7 +1271,7 @@ export function WorldCanvas({
       {!workspaceOpen &&
         !ciOpen &&
         !whiteboardId &&
-        (interaction.near || toasts.length > 0) && (
+        (interaction.near || nearChair || toasts.length > 0) && (
           <WToastStack>
             {interaction.near &&
               (() => {
@@ -1268,6 +1295,26 @@ export function WorldCanvas({
                   </WToast>
                 );
               })()}
+            {/* Sit pill shows alongside (not instead of) the E pill — every
+                chair sits inside a monitor spot's radius, so gating on
+                !interaction.near hid it exactly when it was relevant. */}
+            {nearChair && (
+              <WToast id="sit" tone="neutral">
+                <button
+                  type="button"
+                  onClick={() => sitToggleRef.current?.()}
+                  className="flex cursor-pointer items-center gap-2"
+                  aria-label={sitting ? "Stand up" : "Sit down"}
+                >
+                  <kbd className="rounded-md bg-white px-1.5 py-0.5 font-mono text-[10px] font-semibold text-neutral-800 ring-1 ring-black/[0.09]">
+                    F
+                  </kbd>
+                  <span className="text-[12px] font-semibold text-neutral-800">
+                    {sitting ? "Seated — stand up" : "Sit down"}
+                  </span>
+                </button>
+              </WToast>
+            )}
             {toasts.map((t) => (
               <WToast key={t.key} id={t.key} tone={t.tone}>
                 <span role="status">{t.node}</span>
@@ -1309,7 +1356,9 @@ export function WorldCanvas({
                   {k}
                 </kbd>
               ))}
-              <span className="ml-0.5">Move · Shift run · Space jump</span>
+              <span className="ml-0.5">
+                Move · Shift run · Space jump · F sit
+              </span>
               <span className="h-3.5 w-px bg-black/[0.09]" />
               {!interaction.near && (
                 <>
@@ -1658,6 +1707,12 @@ export function WorldCanvas({
           onRealtimeMove={handleRealtimeMove}
           coffee={coffeeActive}
           firstPerson={fpp}
+          sitSpots={CHAIR_SIT_SPOTS}
+          sitToggleRef={sitToggleRef}
+          onSitChange={(seated) => {
+            setSitting(seated);
+            if (seated) showToast("Seated — WASD, Space or F to stand up");
+          }}
         />
 
         <RemoteAvatars
@@ -1665,6 +1720,7 @@ export function WorldCanvas({
           myUserId={myUserId}
           pills={nearbyTokens}
           bubbles={bubblesWithBot}
+          groundAt={supportAt}
           onAvatarClick={(id) => {
             if (id !== REVIEWER_BOT_ID) setOpenMemberId(id);
           }}
