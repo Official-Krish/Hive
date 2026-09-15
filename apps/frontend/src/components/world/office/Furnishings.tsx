@@ -2,6 +2,7 @@ import { Instances, Instance } from "@react-three/drei";
 import { InstancedFurniture } from "../InstancedFurniture";
 import { KitInstances, KitPiece } from "./KitInstances";
 import { M } from "./materials";
+import { monumentTexture } from "./signage";
 import {
   DESKS,
   DESK_CHAIRS,
@@ -14,7 +15,6 @@ import {
   LOUNGE_SOFAS,
   LOUNGE_TABLES,
   SERVER_RACKS,
-  PLANTS,
   PHONE_BOOTHS,
   CREDENZAS,
   PRINTERS,
@@ -201,7 +201,6 @@ export function Furnishings() {
         chairs={DESK_CHAIRS}
         meetingChairs={MEETING_CHAIRS}
         monitors={MONITORS}
-        plants={PLANTS}
         sofas={LOUNGE_SOFAS}
         coffeeTables={LOUNGE_TABLES}
         cafeTables={CAFE_TABLES}
@@ -293,6 +292,19 @@ export function Furnishings() {
         <HexLogo x={9.1} y={3.35} z={17.88} s={0.26} />
         <HexLogo x={10.5} y={3.35} z={17.88} s={0.26} />
         <HexLogo x={11.9} y={3.35} z={17.88} s={0.26} />
+        {/* Brand lockups flanking the video wall — same Hive artwork as the
+            courtyard monument outside (face the lobby, rotation PI reads
+            correctly — same as the desk-kit screens) */}
+        {[6.03, 14.97].map((x) => (
+          <mesh key={x} position={[x, 1.9, 17.87]} rotation={[0, Math.PI, 0]}>
+            <planeGeometry args={[2.6, 0.65]} />
+            <meshBasicMaterial
+              map={monumentTexture()}
+              transparent
+              toneMapped={false}
+            />
+          </mesh>
+        ))}
         {/* Wall-wash strip at the base */}
         <mesh position={[10.5, 0.06, 17.84]}>
           <boxGeometry args={[11.2, 0.05, 0.06]} />

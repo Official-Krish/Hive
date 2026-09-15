@@ -8,6 +8,7 @@ import type { MapAvatar } from "@/hooks/useRealtimeMap";
 import { type NearbyTokens } from "@/hooks/useNearbyTokens";
 import { formatTokens } from "./MapHud";
 import { ASSET_BASE_URL } from "@/lib/config";
+import { CHAIR_SIT_SPOTS } from "./interactions";
 
 const DEFAULT_AVATAR = `${ASSET_BASE_URL}/avatars/male/hive_male_01.glb`;
 
@@ -74,6 +75,9 @@ export function RemoteAvatars({
         speed: number;
         moving: boolean;
         stillSince: number;
+        /** ms the remote has been stationary near a chair (sitting heuristic). */
+        stillAtChairMs: number;
+        sitting: boolean;
       }
     >(),
   );
@@ -115,6 +119,8 @@ export function RemoteAvatars({
           speed: 0,
           moving: false,
           stillSince: now,
+          stillAtChairMs: 0,
+          sitting: false,
         };
         smoothRef.current.set(id, s);
         g.position.set(s.x, s.y, s.z);
@@ -129,6 +135,8 @@ export function RemoteAvatars({
         s.z = avatar.y;
         s.speed = 0;
         s.moving = false;
+        s.stillAtChairMs = 0;
+        s.sitting = false;
       } else {
         const k = s.moving ? kMove : kIdle;
         s.x += dx * k;
@@ -154,6 +162,24 @@ export function RemoteAvatars({
       if (motion) {
         motion.current.speed = Math.min(1, s.speed / RUN_SPEED);
         motion.current.grounded = true;
+        // Infer sitting: stationary for >800ms within 0.6m of a chair spot.
+        // When moving, immediately clear (stand up).
+        if (s.moving) {
+          s.stillAtChairMs = 0;
+          s.sitting = false;
+        } else {
+          const nearChair = CHAIR_SIT_SPOTS.some(
+            (spot) => Math.hypot(s!.x - spot.x, s!.z - spot.z) < 0.6,
+          );
+          if (nearChair) {
+            s.stillAtChairMs += delta * 1000;
+            if (s.stillAtChairMs > 800) s.sitting = true;
+          } else {
+            s.stillAtChairMs = 0;
+            s.sitting = false;
+          }
+        }
+        motion.current.sitting = s.sitting;
       }
       if (dist > 0.05) {
         const target = Math.atan2(dx, dz);
@@ -255,10 +281,23 @@ export function RemoteAvatars({
           <group
             key={id}
             ref={(node) => {
-              if (node) groupRefs.current.set(id, node);
-              else groupRefs.current.delete(id);
+              if (node) {
+                groupRefs.current.set(id, node);
+                // Seed the position immediately so the avatar doesn't flash at
+                // origin for one frame before useFrame picks it up. groundAt
+                // may not be ready yet so Y starts at 0 — useFrame corrects it
+                // within a single tick, which is invisible.
+                const existing = smoothRef.current.get(id);
+                if (existing) {
+                  node.position.set(existing.x, existing.y, existing.z);
+                  node.rotation.y = existing.heading;
+                } else {
+                  node.position.set(avatar.x, 0, avatar.y);
+                }
+              } else {
+                groupRefs.current.delete(id);
+              }
             }}
-            position={[avatar.x, 0, avatar.y]}
             onClick={(e) => {
               e.stopPropagation();
               onAvatarClick?.(id);

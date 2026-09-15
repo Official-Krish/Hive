@@ -18,7 +18,6 @@ import {
   L2_MONITORS,
   L2_SOFAS,
   L2_TABLES,
-  L2_PLANTS,
   L2_Y,
   POD_H,
   MEZZ,
@@ -407,7 +406,6 @@ export function Level2() {
         desks={L2_DESKS}
         chairs={L2_DESK_CHAIRS}
         monitors={L2_MONITORS}
-        plants={L2_PLANTS}
         sofas={L2_SOFAS}
         coffeeTables={L2_TABLES}
       />

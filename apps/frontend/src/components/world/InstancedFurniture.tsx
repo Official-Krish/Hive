@@ -15,7 +15,6 @@ interface InstancedFurnitureProps {
   /** Boardroom / meeting chairs (nicer frame-cushion model). */
   meetingChairs?: TransformData[];
   monitors?: TransformData[];
-  plants?: TransformData[];
   sofas?: TransformData[];
   coffeeTables?: TransformData[];
   cafeTables?: TransformData[];
@@ -26,7 +25,7 @@ interface InstancedFurnitureProps {
  * Office furniture rendered from the Kenney Furniture Kit (CC0, local
  * `public/furniture-kit/models_glb/`). One `<Instances>` draw per kit mesh
  * part — same ultra-low draw-call budget as the old box primitives, but real
- * desks, task chairs, screens, sofas and plants.
+ * desks, task chairs, screens and sofas.
  *
  * Kit models auto-ground (feet at `position.y`) and auto-center, so layout
  * positions pass straight through. Desk-top props (screens, keyboards) ride
@@ -59,7 +58,7 @@ function jitterChairs(chairs: TransformData[]): TransformData[] {
   });
 }
 
-/** Split a list by index parity for two-model variety (plants, sofas). */
+/** Split a list by index parity for two-model variety (sofas, tables). */
 function splitParity<T>(list: T[]): [T[], T[]] {
   const even: T[] = [];
   const odd: T[] = [];
@@ -75,7 +74,6 @@ export function InstancedFurniture({
   chairs = [],
   meetingChairs = [],
   monitors = [],
-  plants = [],
   sofas = [],
   coffeeTables = [],
   cafeTables = [],
@@ -86,7 +84,6 @@ export function InstancedFurniture({
     () => jitterChairs(meetingChairs),
     [meetingChairs],
   );
-  const [plantsA, plantsB] = useMemo(() => splitParity(plants), [plants]);
   const [sofasA, sofasB] = useMemo(() => splitParity(sofas), [sofas]);
   const [tablesA, tablesB] = useMemo(
     () => splitParity(coffeeTables),
@@ -169,12 +166,6 @@ export function InstancedFurniture({
             name="kit-mice"
           />
         </>
-      )}
-      {plantsA.length > 0 && (
-        <KitInstances model="plant" items={plantsA} name="kit-plants" />
-      )}
-      {plantsB.length > 0 && (
-        <KitInstances model="plantSmall" items={plantsB} name="kit-plants-sm" />
       )}
       {sofasA.length > 0 && (
         <KitInstances model="sofa" items={sofasA} name="kit-sofas" />

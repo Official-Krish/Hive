@@ -1299,7 +1299,7 @@ export function WorldCanvas({
                 chair sits inside a monitor spot's radius, so gating on
                 !interaction.near hid it exactly when it was relevant. */}
             {nearChair && (
-              <WToast id="sit" tone="neutral">
+              <WToast key="sit" id="sit" tone="neutral">
                 <button
                   type="button"
                   onClick={() => sitToggleRef.current?.()}
@@ -1711,7 +1711,6 @@ export function WorldCanvas({
           sitToggleRef={sitToggleRef}
           onSitChange={(seated) => {
             setSitting(seated);
-            if (seated) showToast("Seated — WASD, Space or F to stand up");
           }}
         />
 

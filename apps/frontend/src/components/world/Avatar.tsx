@@ -54,6 +54,8 @@ interface AvatarProps {
   /** Hide the floating nameplate (used for the local player — you know who
    *  you are, and your own tag would sit on top of whatever you face). */
   hideNameplate?: boolean;
+  /** When true, the nameplate badge shows a chair icon to indicate seated. */
+  sitting?: boolean;
 }
 
 const META_TONE: Record<string, string> = {
@@ -82,16 +84,20 @@ function Nameplate({
   status,
   badgeColor,
   meta,
+  sittingRef,
 }: {
   labelY: number;
   name: string;
   status: string;
   badgeColor: string;
   meta: AvatarProps["meta"];
+  sittingRef?: React.MutableRefObject<boolean>;
 }) {
   const anchor = useRef<THREE.Group>(null);
   const wrap = useRef<HTMLDivElement>(null);
   const metaEl = useRef<HTMLDivElement>(null);
+  const dotEl = useRef<HTMLSpanElement>(null);
+  const chairEl = useRef<HTMLSpanElement>(null);
   const reduce = useReducedMotion();
   const visible = (meta ?? []).slice(0, TAG_META_MAX);
   const overflow = (meta ?? []).length - visible.length;
@@ -107,14 +113,21 @@ function Nameplate({
         wrap.current.style.display = "none";
       } else {
         wrap.current.style.display = "";
+        // Exponential fade: stays near-opaque until TAG_FULL then drops off
+        // quickly, so the label doesn't visibly dim while still readable.
         wrap.current.style.opacity =
           d <= TAG_FULL
             ? "1"
-            : String(1 - (d - TAG_FULL) / (TAG_FADE - TAG_FULL));
+            : String(Math.pow(1 - (d - TAG_FULL) / (TAG_FADE - TAG_FULL), 2.5));
       }
     }
     if (metaEl.current)
       metaEl.current.style.display = d < TAG_META ? "" : "none";
+
+    // Toggle seated indicator imperatively — no React re-render needed.
+    const seated = sittingRef?.current ?? false;
+    if (dotEl.current) dotEl.current.style.display = seated ? "none" : "";
+    if (chairEl.current) chairEl.current.style.display = seated ? "" : "none";
   });
 
   return (
@@ -131,15 +144,36 @@ function Nameplate({
             title={status}
             className="flex items-center gap-1 whitespace-nowrap rounded-full bg-black/60 px-1.5 py-[2px] text-[9px] font-medium leading-none tracking-[0.01em] text-white/95 shadow-sm ring-1 ring-white/10 backdrop-blur-[2px] select-none"
           >
-            <span className={`h-1 w-1 rounded-full ${badgeColor}`} />
+            {/* Status dot — hidden when seated */}
+            <span
+              ref={dotEl}
+              className={`h-1 w-1 rounded-full ${badgeColor}`}
+            />
+            {/* Chair icon — hidden when standing, shown when seated */}
+            <span ref={chairEl} style={{ display: "none" }}>
+              <svg
+                viewBox="0 0 12 12"
+                className="h-2.5 w-2.5 shrink-0 text-sky-300"
+                fill="currentColor"
+                aria-label="Seated"
+              >
+                {/* seat */}
+                <rect x="1" y="5" width="10" height="2" rx="0.5" />
+                {/* back */}
+                <rect x="1" y="1" width="2" height="5" rx="0.5" />
+                {/* front legs */}
+                <rect x="2" y="7" width="1.5" height="4" rx="0.5" />
+                <rect x="8.5" y="7" width="1.5" height="4" rx="0.5" />
+              </svg>
+            </span>
             <span>{name}</span>
           </div>
           <div ref={metaEl} className="flex flex-col items-center gap-1">
             <AnimatePresence initial={false}>
-              {visible.map((m) => (
+              {visible.map((m, i) => (
                 <motion.div
-                  key={`${m.tone ?? "neutral"}-${m.text}`}
-                  className={`flex items-center gap-[3px] whitespace-nowrap rounded-full px-1.5 py-[1.5px] text-[8.5px] font-semibold leading-none tabular-nums shadow-sm ring-1 ring-black/20 select-none ${
+                  key={`${m.tone ?? "neutral"}-${m.text}-${i}`}
+                  className={`flex max-w-[120px] items-center gap-[3px] rounded-full px-1.5 py-[1.5px] text-[8.5px] font-semibold leading-none tabular-nums shadow-sm ring-1 ring-black/20 select-none ${
                     META_TONE[m.tone ?? "neutral"]
                   }`}
                   initial={
@@ -149,8 +183,8 @@ function Nameplate({
                   exit={reduce ? { opacity: 1 } : { opacity: 0, scale: 0.85 }}
                   transition={reduce ? { duration: 0 } : { duration: 0.18 }}
                 >
-                  {m.icon}
-                  <span>{m.text}</span>
+                  {m.icon && <span className="shrink-0">{m.icon}</span>}
+                  <span className="truncate">{m.text}</span>
                 </motion.div>
               ))}
               {overflow > 0 && (
@@ -184,6 +218,7 @@ export default function Avatar({
   badgeColor = "bg-sky-500",
   meta,
   hideNameplate = false,
+  sitting: sittingProp = false,
 }: AvatarProps) {
   const { scene } = useGLTF(modelUrl);
   const idleFBX = useFBX(`${ASSET_BASE_URL}/Animations/idle.fbx`);
@@ -287,11 +322,13 @@ export default function Avatar({
 
     // Mixamo rest pose ≠ avatar bind pose (avatar hips bind is 180° about Z,
     // thighs ~180° about X). Fresh downloads therefore render upside-down.
-    // Fix: per-bone offset R = stance · rest⁻¹, applied as q' = R·q, which
-    // maps rest→stance and preserves motion deltas. Stance comes from the
-    // idle clip (relaxed standing — NOT the rigid bind, whose arms sit
-    // ~62° out in a half-raised pose that reads as a T-pose mid-stride).
-    // Rest is read off the FBX skeleton nodes (true rest preservals) —
+    // Fix per bone: q' = q · rest⁻¹ · stance — the source-relative motion
+    // (q·rest⁻¹) replayed onto the avatar stance. NOTE the multiplication
+    // ORDER: premultiplying (stance·rest⁻¹·q) mirrors bend direction whenever
+    // the offset is ~180° (thighs then bend backward = "legs behind body").
+    // Stance comes from the idle clip (relaxed standing — NOT the rigid bind,
+    // whose arms sit ~62° out in a half-raised pose that reads as a T-pose
+    // mid-stride). Rest is read off the FBX skeleton nodes (true rest preservals) —
     // walk-cycle averaging was tried and biases high-variance bones (knees
     // bend 0–60° mid-stride, dragging R ~35° off and flipping bend direction).
     // Old clips already match stance/bind and must NEVER be rebound.
@@ -382,6 +419,67 @@ export default function Avatar({
     // avatar bind (hips 180° about Z), so each keyframe is premultiplied by
     // the per-bone offset R = bind · rest⁻¹. Old clips already match bind and
     // must never be rebound (it would invert them).
+    //
+    // Upper-body / leg exemption for the sit clip:
+    //   The rebind offset uses the *idle* stance as the target, which maps
+    //   sitting-arm quaternions (arms angled down toward keyboard) onto the
+    //   standing-arm stance → arms end up raised. Arms/hands/feet are already
+    //   correct in Mixamo space for the sit clip; they only need the bare
+    //   name fix, not the idle-stance remap.
+    //   Bones that drive the hips 180° flip (Hips, Spine*, Neck, Head) still
+    //   need rebinding so the torso doesn't invert.
+    const SIT_REBIND_SKIP = new Set([
+      // Arms & hands
+      "LeftShoulder",
+      "RightShoulder",
+      "LeftArm",
+      "RightArm",
+      "LeftForeArm",
+      "RightForeArm",
+      "LeftHand",
+      "RightHand",
+      // Fingers (all variants)
+      "LeftHandIndex1",
+      "LeftHandIndex2",
+      "LeftHandIndex3",
+      "LeftHandMiddle1",
+      "LeftHandMiddle2",
+      "LeftHandMiddle3",
+      "LeftHandRing1",
+      "LeftHandRing2",
+      "LeftHandRing3",
+      "LeftHandPinky1",
+      "LeftHandPinky2",
+      "LeftHandPinky3",
+      "LeftHandThumb1",
+      "LeftHandThumb2",
+      "LeftHandThumb3",
+      "RightHandIndex1",
+      "RightHandIndex2",
+      "RightHandIndex3",
+      "RightHandMiddle1",
+      "RightHandMiddle2",
+      "RightHandMiddle3",
+      "RightHandRing1",
+      "RightHandRing2",
+      "RightHandRing3",
+      "RightHandPinky1",
+      "RightHandPinky2",
+      "RightHandPinky3",
+      "RightHandThumb1",
+      "RightHandThumb2",
+      "RightHandThumb3",
+      // Legs & feet (their sitting flex is already correct in Mixamo space)
+      "LeftUpLeg",
+      "RightUpLeg",
+      "LeftLeg",
+      "RightLeg",
+      "LeftFoot",
+      "RightFoot",
+      "LeftToeBase",
+      "RightToeBase",
+    ]);
+
     const prepareClip = (
       clipName: string,
       fbx: THREE.Group,
@@ -417,10 +515,10 @@ export default function Avatar({
         // New track instance every time — never mutate the cached FBX.
         const count = track.values.length / 4;
         const values = track.values.slice(0);
-        if (rebind) {
-          const rest = nodeRestMap.get(bare) ?? restMap.get(bare) ?? IDENTITY_Q;
+        if (rebind && !SIT_REBIND_SKIP.has(bare)) {
+          const rest = nodeRestMap.get(bare) ?? restMap.get(bare);
           const stance = stanceMap.get(bare) ?? bindMap.get(bare) ?? IDENTITY_Q;
-          const offset = stance.clone().multiply(rest.clone().invert());
+          const offset = rest ? { inv: rest.clone().invert(), stance } : null;
           const q = new THREE.Quaternion();
           for (let i = 0; i < count; i++) {
             q.set(
@@ -429,7 +527,9 @@ export default function Avatar({
               values[i * 4 + 2] ?? 0,
               values[i * 4 + 3] ?? 0,
             );
-            q.premultiply(offset);
+            // POST-multiply: replay source-relative motion onto the stance.
+            // (Premultiplying mirrors bend direction under ~180° offsets.)
+            if (offset) q.multiply(offset.inv).multiply(offset.stance);
             values[i * 4] = q.x;
             values[i * 4 + 1] = q.y;
             values[i * 4 + 2] = q.z;
@@ -627,6 +727,15 @@ export default function Avatar({
   // When motionRef drives us, a parent group owns the transform (render at origin).
   const groupProps = motionRef ? {} : { position, rotation };
 
+  // Track sitting state in a ref so Nameplate reads it each frame without
+  // React re-renders. Seeded from sittingProp for static avatars.
+  const sittingRef = useRef(sittingProp);
+  useFrame(() => {
+    sittingRef.current = motionRef
+      ? (motionRef.current.sitting ?? false)
+      : sittingProp;
+  });
+
   return (
     <group {...groupProps} ref={groupRef}>
       <primitive object={clonedScene} scale={SCALE} />
@@ -642,6 +751,7 @@ export default function Avatar({
           status={status}
           badgeColor={badgeColor}
           meta={meta}
+          sittingRef={sittingRef}
         />
       )}
     </group>

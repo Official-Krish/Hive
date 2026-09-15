@@ -157,10 +157,10 @@ function iconTexture(icon: Interactable["icon"]): THREE.CanvasTexture {
   const hit = iconCache.get(icon);
   if (hit) return hit;
   const el = document.createElement("canvas");
-  el.width = 256;
-  el.height = 256;
+  el.width = 400;
+  el.height = 400;
   const c = el.getContext("2d")!;
-  c.scale(2, 2); // glyph paths are authored in 128-space
+  c.scale(400 / 128, 400 / 128); // glyph paths are authored in 128-space
   drawGlyph(c, icon);
   const tex = new THREE.CanvasTexture(el);
   tex.colorSpace = THREE.SRGBColorSpace;

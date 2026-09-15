@@ -52,6 +52,13 @@ const PLAYER_HEIGHT = 1.75; // used to decide which storey's walls apply
 const TURN_RATE = 16; // heading smoothing
 const MODEL_YAW_OFFSET = 0; // flip to Math.PI if the avatar faces backwards
 
+/**
+ * Small upward offset applied when the avatar is seated so the feet mesh
+ * clears the exact floor plane. The sitting animation handles the leg and
+ * hip geometry — this is just floor-clipping insurance, not the seat height.
+ */
+const SIT_SEAT_HEIGHT = 0.01;
+
 /** Keys that stand the player up when seated. */
 const MOVE_KEYS = new Set([
   "KeyW",
@@ -379,9 +386,16 @@ export function PlayerController({
         12,
         delta,
       );
+      // Snap feet to the seat surface height.
+      // Use seated.y (the chair's recorded floor origin) as the base — never
+      // groundAt, because sampling the surface while the avatar is mid-air can
+      // return the desk top or a stair tread instead of the floor, causing a
+      // bounce. The sitting animation positions the hips; we only need a small
+      // lift so the feet clear the floor plane.
+      const seatBase = seated.y + SIT_SEAT_HEIGHT;
       posRef.current[1] = THREE.MathUtils.damp(
         posRef.current[1],
-        groundAt ? groundAt(seated.x, seated.z, nextY) : seated.y,
+        seatBase,
         12,
         delta,
       );

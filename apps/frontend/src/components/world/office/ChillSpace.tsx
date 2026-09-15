@@ -5,7 +5,6 @@ import {
   CHILL_RUG,
   CHILL_CONSOLE,
   CHILL_TABLES,
-  CHILL_PLANT,
   CHILL_PANELS,
 } from "./layout";
 import { M } from "./materials";
@@ -190,9 +189,6 @@ export function ChillSpace() {
       {CHILL_TABLES.map(([x, z], i) => (
         <SideTable key={`table${i}`} x={x} z={z} mug={i === 0} />
       ))}
-
-      {/* Corner plant (kit, CC0) */}
-      <KitPiece model="plant" position={[CHILL_PLANT[0], 0, CHILL_PLANT[1]]} />
 
       {/* Floor lamps flanking the screen (kit, CC0) */}
       {CHILL_LAMPS.map(([x, z], i) => (
