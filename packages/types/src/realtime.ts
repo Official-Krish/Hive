@@ -79,6 +79,23 @@ export const whiteboardStrokeSchema = z.object({
 export type WhiteboardStroke = z.infer<typeof whiteboardStrokeSchema>;
 
 // ---------------------------------------------------------------------------
+// Chill Space queue — YouTube-like shared playback queue. Postgres is the
+// source of truth (ChillQueueItem rows ordered by `position`); ChillMedia
+// holds the now-playing pointer. Clients advance via `chill.queue.ended`
+// when the YT player reports ENDED; the server guards de-dup with itemId.
+// ---------------------------------------------------------------------------
+
+export const chillQueueItemSchema = z.object({
+  id: z.string(),
+  videoId: z.string(),
+  videoUrl: z.string(),
+  title: z.string().nullable(),
+  position: z.number(),
+  addedByName: z.string().nullable(),
+});
+export type ChillQueueItem = z.infer<typeof chillQueueItemSchema>;
+
+// ---------------------------------------------------------------------------
 // Mini-games — server-authoritative Chess + Connect 4 (2 seats) and Ludo-lite
 // + Uno-lite (2–4 seats). HTTP owns match lifecycle (create/list/start/
 // resign); WS carries moves + state. Board payloads are engine strings: FEN
@@ -410,6 +427,15 @@ export const realtimeEventSchema = z.discriminatedUnion("type", [
     /** Server wall-clock ms when playhead was captured. Clients use this to compute live position. */
     at: z.number(),
     setByName: z.string().nullable().optional(),
+    /** Queue item id currently loaded — lets clients de-dupe ended events. */
+    queueItemId: z.string().nullable().optional(),
+    timestamp: z.number(),
+  }),
+  z.object({
+    type: z.literal("chill.queue.state"),
+    workspaceId: z.string(),
+    currentItemId: z.string().nullable(),
+    items: z.array(chillQueueItemSchema).max(200),
     timestamp: z.number(),
   }),
   z.object({
@@ -512,6 +538,37 @@ export const realtimeClientMessageSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("chill.media.seek"),
     playheadMs: z.number().min(0),
+  }),
+  z.object({
+    type: z.literal("chill.queue.add"),
+    url: z.string().min(1).max(512),
+  }),
+  z.object({
+    type: z.literal("chill.queue.play"),
+    itemId: z.string().min(1).max(80),
+  }),
+  z.object({
+    type: z.literal("chill.queue.next"),
+  }),
+  z.object({
+    type: z.literal("chill.queue.prev"),
+  }),
+  z.object({
+    type: z.literal("chill.queue.remove"),
+    itemId: z.string().min(1).max(80),
+  }),
+  z.object({
+    type: z.literal("chill.queue.reorder"),
+    itemId: z.string().min(1).max(80),
+    toIndex: z.number().int().min(0).max(199),
+  }),
+  z.object({
+    type: z.literal("chill.queue.clear"),
+  }),
+  z.object({
+    type: z.literal("chill.queue.ended"),
+    /** Item that just finished — server ignores stale/duplicate reports. */
+    itemId: z.string().min(1).max(80),
   }),
   z.object({
     type: z.literal("game.move"),

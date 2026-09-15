@@ -56,6 +56,7 @@ model User {
   githubNotifications     GitHubNotification[]
   pairSessionMembers      PairSessionMember[]
   chillMediaSet           ChillMedia[]
+  chillQueueAdded         ChillQueueItem[]
 }
 
 model Organization {
@@ -101,6 +102,7 @@ model Workspace {
   pairSessions      PairSession[]
   gameSessions      GameSession[]
   chillMedia        ChillMedia?
+  chillQueueItems   ChillQueueItem[]
   privacySetting    PrivacySetting?
   usageBudget       UsageBudget?
   apiKeyPools       ApiKeyPool[]
@@ -798,20 +800,37 @@ model PairSessionMember {
 }
 
 model ChillMedia {
-  id          String   @id @default(cuid())
-  workspaceId String   @unique
-  videoUrl    String?
-  videoId     String?
-  title       String?
-  isPlaying   Boolean  @default(false)
-  playheadMs  Float    @default(0)
-  setById     String?
-  updatedAt   DateTime @updatedAt
+  id            String   @id @default(cuid())
+  workspaceId   String   @unique
+  videoUrl      String?
+  videoId       String?
+  title         String?
+  isPlaying     Boolean  @default(false)
+  playheadMs    Float    @default(0)
+  setById       String?
+  currentItemId String?
+  updatedAt     DateTime @updatedAt
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   setBy     User?     @relation(fields: [setById], references: [id], onDelete: SetNull)
 
   @@index([workspaceId])
+}
+
+model ChillQueueItem {
+  id          String   @id @default(cuid())
+  workspaceId String
+  videoUrl    String
+  videoId     String
+  title       String?
+  position    Float    @default(0)
+  addedById   String?
+  createdAt   DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  addedBy   User?     @relation(fields: [addedById], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, position])
 }
 
 model PrivacySetting {

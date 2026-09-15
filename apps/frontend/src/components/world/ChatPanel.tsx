@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FiArrowLeft, FiSend, FiUsers } from "react-icons/fi";
 import { X } from "lucide-react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { cn } from "@/lib/utils";
 import { useChat } from "@/hooks/useChat";
 import type { MapAvatar } from "@/hooks/useRealtimeMap";
@@ -13,8 +14,15 @@ const STATUS_DOT: Record<string, string> = {
   away: "bg-amber-500",
   on_call: "bg-sky-500",
   busy: "bg-rose-500",
+  focusing: "bg-violet-500",
   offline: "bg-neutral-300",
 };
+
+const EASE = [0.22, 1, 0.36, 1] as const;
+/** Consecutive messages merge into one group within this window. */
+const GROUP_WINDOW_MS = 5 * 60_000;
+const COMPOSER_LIMIT = 4000;
+const COMPOSER_WARN_AT = 3600;
 
 interface ChatPanelProps {
   workspaceId: string;
@@ -42,9 +50,7 @@ export function ChatPanel({
   const [opening, setOpening] = useState<string | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const coarsePointer =
-    typeof window !== "undefined" &&
-    window.matchMedia("(pointer: coarse)").matches;
+  const reduce = useReducedMotion();
 
   const active = chat.conversations.find((c) => c.id === activeId) ?? null;
   const messages = activeId ? (chat.threads[activeId] ?? []) : [];
@@ -58,18 +64,47 @@ export function ChatPanel({
     });
   }, [chat.typing, chat.conversations, activeId]);
 
-  // Autoscroll to newest (instant on thread switch, smooth on new message).
+  // Autoscroll to newest (instant on thread switch, smooth on new message)
+  // — but never yank the user away from history they're reading. A "new
+  // messages" pill appears instead; tapping it jumps to the bottom.
   const prevLen = useRef(0);
+  const stuckToBottomRef = useRef(true);
+  const [hasNewBelow, setHasNewBelow] = useState(false);
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
     const jump = messages.length < prevLen.current;
     prevLen.current = messages.length;
+    if (jump) {
+      stuckToBottomRef.current = true;
+      setHasNewBelow(false);
+      el.scrollTo({ top: el.scrollHeight, behavior: "auto" });
+      return;
+    }
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+    if (nearBottom) {
+      stuckToBottomRef.current = true;
+      setHasNewBelow(false);
+      el.scrollTo({
+        top: el.scrollHeight,
+        behavior: reduce ? "auto" : "smooth",
+      });
+    } else {
+      stuckToBottomRef.current = false;
+      setHasNewBelow(true);
+    }
+  }, [messages.length, activeId, reduce]);
+
+  const jumpToLatest = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    stuckToBottomRef.current = true;
+    setHasNewBelow(false);
     el.scrollTo({
       top: el.scrollHeight,
-      behavior: jump ? "auto" : "smooth",
+      behavior: reduce ? "auto" : "smooth",
     });
-  }, [messages.length, activeId]);
+  };
 
   useEffect(() => {
     if (!newGroupOpen || !client) return;
@@ -111,7 +146,7 @@ export function ChatPanel({
       await chat.refreshList();
       openConversation(conv.id);
     } catch {
-      setFailed("Couldn't start that conversation. Try again.");
+      setFailed("Couldn't start that conversation — try again.");
     } finally {
       setOpening(null);
     }
@@ -185,31 +220,43 @@ export function ChatPanel({
     [chat.conversations],
   );
 
+  const threadTitle = active
+    ? active.isGroup
+      ? (active.title ?? "Group")
+      : (active.members.find((m) => m.userId !== myUserId)?.name ??
+        "Direct message")
+    : "Messages";
+
   return (
-    <div className="pointer-events-auto flex h-[520px] max-h-[70vh] w-[360px] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl bg-[#f4f2ed]/97 ring-1 ring-black/[0.08] backdrop-blur-md">
+    <motion.div
+      className="pointer-events-auto flex h-[520px] max-h-[70vh] w-[360px] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl bg-[#f4f2ed]/97 ring-1 ring-black/[0.08] backdrop-blur-md shadow-[0_24px_60px_-16px_rgba(0,0,0,0.45)]"
+      initial={reduce ? { opacity: 1 } : { opacity: 0, y: 16, scale: 0.97 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={reduce ? { opacity: 1 } : { opacity: 0, y: 10, scale: 0.98 }}
+      transition={
+        reduce
+          ? { duration: 0 }
+          : { type: "spring", stiffness: 380, damping: 34 }
+      }
+    >
       {/* header */}
-      <div className="flex items-center justify-between border-b border-black/[0.07] px-4 py-2.5 text-[10px] font-medium uppercase tracking-[0.18em] text-neutral-500">
-        <span className="flex min-w-0 items-center gap-2">
+      <div className="flex items-center justify-between border-b border-black/[0.07] px-4 py-2.5">
+        <span className="flex min-w-0 items-center gap-1.5">
           {activeId && (
             <button
               type="button"
               onClick={() => setActiveId(null)}
-              className="rounded p-0.5 text-neutral-500 transition-colors hover:text-neutral-950"
+              className="rounded-md p-1 text-neutral-500 transition-colors hover:bg-black/[0.05] hover:text-neutral-950"
               aria-label="Back to conversations"
             >
               <FiArrowLeft className="size-3.5" />
             </button>
           )}
-          <span className="truncate">
-            {activeId
-              ? active?.isGroup
-                ? (active.title ?? "Group")
-                : (active?.members.find((m) => m.userId !== myUserId)?.name ??
-                  "Direct message")
-              : "Messages"}
+          <span className="truncate text-[10px] font-medium uppercase tracking-[0.18em] text-neutral-500">
+            {threadTitle}
           </span>
         </span>
-        <span className="flex flex-shrink-0 items-center gap-2">
+        <span className="flex flex-shrink-0 items-center gap-1.5">
           {!activeId && (
             <button
               type="button"
@@ -217,7 +264,12 @@ export function ChatPanel({
               title="New group"
               aria-label="New group"
               aria-expanded={newGroupOpen}
-              className="rounded p-0.5 text-neutral-500 transition-colors hover:text-neutral-950"
+              className={cn(
+                "rounded-md p-1 transition-colors",
+                newGroupOpen
+                  ? "bg-neutral-950 text-white"
+                  : "text-neutral-500 hover:bg-black/[0.05] hover:text-neutral-950",
+              )}
             >
               <FiUsers className="size-3.5" />
             </button>
@@ -226,7 +278,7 @@ export function ChatPanel({
             type="button"
             onClick={onClose}
             aria-label="Close chat"
-            className="rounded p-0.5 text-neutral-500 transition-colors hover:text-neutral-950"
+            className="rounded-md p-1 text-neutral-500 transition-colors hover:bg-black/[0.05] hover:text-neutral-950"
           >
             <X className="size-3.5" />
           </button>
@@ -234,207 +286,504 @@ export function ChatPanel({
       </div>
 
       {/* new group form */}
-      {newGroupOpen && (
-        <div className="space-y-2 border-b border-black/[0.07] px-4 py-3">
-          <input
-            value={groupName}
-            onChange={(e) => setGroupName(e.target.value)}
-            placeholder="Group name…"
-            aria-label="Group name"
-            className="w-full rounded-lg border border-black/[0.09] bg-white px-2.5 py-1.5 text-[12.5px] text-neutral-700 outline-none placeholder:text-neutral-400 focus:border-neutral-900/40"
-          />
-          <div className="max-h-32 space-y-1 overflow-y-auto">
-            {directory.map((m) => (
-              <label
-                key={m.userId}
-                className="flex cursor-pointer items-center gap-2 rounded-lg px-1.5 py-1 text-[12.5px] hover:bg-black/[0.04]"
-              >
-                <input
-                  type="checkbox"
-                  checked={selectedMembers.has(m.userId)}
-                  onChange={(e) => {
-                    const next = new Set(selectedMembers);
-                    if (e.target.checked) next.add(m.userId);
-                    else next.delete(m.userId);
-                    setSelectedMembers(next);
-                  }}
-                  className="accent-neutral-900"
-                />
-                <span className="truncate text-neutral-700">{m.name}</span>
-              </label>
-            ))}
-            {directory.length === 0 && (
-              <p className="px-1 text-[11.5px] text-neutral-500">
-                No other members in this workspace yet.
-              </p>
-            )}
-          </div>
+      <AnimatePresence initial={false}>
+        {newGroupOpen && !activeId && (
+          <motion.div
+            key="new-group"
+            className="space-y-2 overflow-hidden border-b border-black/[0.07] px-4 py-3"
+            initial={
+              reduce
+                ? { opacity: 1, height: "auto" }
+                : { opacity: 0, height: 0, paddingTop: 0, paddingBottom: 0 }
+            }
+            animate={{
+              opacity: 1,
+              height: "auto",
+              paddingTop: 12,
+              paddingBottom: 12,
+            }}
+            exit={
+              reduce
+                ? { opacity: 1, height: "auto" }
+                : { opacity: 0, height: 0, paddingTop: 0, paddingBottom: 0 }
+            }
+            transition={
+              reduce ? { duration: 0 } : { duration: 0.22, ease: EASE }
+            }
+          >
+            <input
+              value={groupName}
+              onChange={(e) => setGroupName(e.target.value)}
+              placeholder="Group name…"
+              aria-label="Group name"
+              className="w-full rounded-lg border border-black/[0.09] bg-white px-2.5 py-1.5 text-[12.5px] text-neutral-700 outline-none placeholder:text-neutral-400 focus:border-neutral-900/40"
+            />
+            <div className="max-h-32 space-y-0.5 overflow-y-auto">
+              {directory.map((m) => (
+                <label
+                  key={m.userId}
+                  className="flex cursor-pointer items-center gap-2 rounded-lg px-1.5 py-1 text-[12.5px] transition-colors hover:bg-black/[0.04]"
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedMembers.has(m.userId)}
+                    onChange={(e) => {
+                      const next = new Set(selectedMembers);
+                      if (e.target.checked) next.add(m.userId);
+                      else next.delete(m.userId);
+                      setSelectedMembers(next);
+                    }}
+                    className="accent-neutral-900"
+                  />
+                  <span className="truncate text-neutral-700">{m.name}</span>
+                </label>
+              ))}
+              {directory.length === 0 && (
+                <p className="px-1 text-[11.5px] text-neutral-500">
+                  No other members in this workspace yet.
+                </p>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => void createGroup()}
+              disabled={!groupName.trim() || selectedMembers.size === 0}
+              className="w-full rounded-lg bg-neutral-950 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-neutral-800 disabled:opacity-40"
+            >
+              Create group ({selectedMembers.size})
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {failed && !activeId && (
+        <div className="flex items-center justify-between gap-2 border-b border-black/[0.07] bg-rose-50/70 px-4 py-2 text-[12px] font-medium text-rose-700">
+          <span>{failed}</span>
           <button
             type="button"
-            onClick={() => void createGroup()}
-            disabled={!groupName.trim() || selectedMembers.size === 0}
-            className="w-full rounded-lg bg-neutral-950 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-neutral-800 disabled:opacity-40"
+            onClick={() => setFailed(null)}
+            className="shrink-0 font-semibold underline underline-offset-2 hover:text-rose-900"
           >
-            Create group ({selectedMembers.size})
+            Dismiss
           </button>
         </div>
       )}
 
-      {failed && !activeId && (
-        <div className="border-b border-black/[0.07] px-4 py-2 text-[12px] text-rose-700">
-          {failed}
-        </div>
-      )}
-
-      {/* body */}
-      {!activeId ? (
-        <ul className="flex-1 divide-y divide-black/[0.05] overflow-y-auto">
-          {roster.length === 0 && groups.length === 0 && (
-            <li className="px-4 py-6 text-center text-[12.5px] text-neutral-500">
-              No other members in this workspace yet.
-            </li>
-          )}
-          {roster.map((row) => {
-            const typing = row.conv
-              ? Object.keys(chat.typing[row.conv.id] ?? {}).length > 0
-              : false;
-            const busy = opening === row.userId;
-            return (
-              <ConversationListItem
-                key={row.userId}
-                name={row.name}
-                avatarUrl={row.avatarUrl}
-                dotColor={STATUS_DOT[row.status] ?? "bg-neutral-300"}
-                time={
-                  row.conv?.lastMessage
-                    ? timeLabel(row.conv.lastMessage.createdAt)
-                    : undefined
-                }
-                preview={
-                  busy
-                    ? "Opening…"
-                    : typing
-                      ? "typing…"
-                      : (row.conv?.lastMessage?.body ?? "Say hello")
-                }
-                unread={row.conv?.unreadCount ?? 0}
-                isTyping={typing && !busy}
-                onClick={() => void openDirect(row.userId)}
-              />
-            );
-          })}
-          {groups.length > 0 && (
-            <li className="px-4 pb-1 pt-3 text-[9px] font-medium uppercase tracking-[0.18em] text-neutral-400">
-              Groups
-            </li>
-          )}
-          {groups.map((c) => {
-            const typing = Object.keys(chat.typing[c.id] ?? {}).length > 0;
-            return (
-              <ConversationListItem
-                key={c.id}
-                name={c.title ?? "Group"}
-                avatarUrl={null}
-                group
-                time={
-                  c.lastMessage ? timeLabel(c.lastMessage.createdAt) : undefined
-                }
-                preview={
-                  typing ? "typing…" : (c.lastMessage?.body ?? "Say hello")
-                }
-                unread={c.unreadCount}
-                isTyping={typing}
-                onClick={() => openConversation(c.id)}
-              />
-            );
-          })}
-        </ul>
-      ) : (
-        <>
-          <div
-            ref={scrollRef}
-            className="flex-1 space-y-2 overflow-y-auto px-4 py-3"
-            aria-live="polite"
+      {/* body — list ↔ thread slide */}
+      <AnimatePresence mode="wait" initial={false}>
+        {!activeId ? (
+          <motion.ul
+            key="list"
+            className="flex-1 divide-y divide-black/[0.05] overflow-y-auto"
+            initial={reduce ? { opacity: 1, x: 0 } : { opacity: 0, x: -24 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={reduce ? { opacity: 1, x: 0 } : { opacity: 0, x: -16 }}
+            transition={
+              reduce ? { duration: 0 } : { duration: 0.2, ease: EASE }
+            }
           >
-            {messages.map((m) => {
-              const mine = m.senderId === myUserId;
-              const sender = active?.members.find(
-                (mm) => mm.userId === m.senderId,
-              );
+            {roster.length === 0 && groups.length === 0 && (
+              <li className="flex flex-col items-center px-6 py-10 text-center">
+                <span className="flex size-11 items-center justify-center rounded-full bg-black/[0.04] text-neutral-400 ring-1 ring-black/[0.06]">
+                  <FiUsers className="size-5" />
+                </span>
+                <p className="mt-3 text-[13px] font-semibold text-neutral-800">
+                  No conversations yet
+                </p>
+                <p className="mt-1 max-w-[240px] text-[12px] leading-relaxed text-neutral-500">
+                  When teammates join this workspace they will show up here —
+                  say hello.
+                </p>
+              </li>
+            )}
+            {roster.map((row) => {
+              const typing = row.conv
+                ? Object.keys(chat.typing[row.conv.id] ?? {}).length > 0
+                : false;
+              const busy = opening === row.userId;
               return (
-                <div
-                  key={m.id}
-                  className={cn("flex", mine ? "justify-end" : "justify-start")}
-                >
-                  <div
-                    className={cn(
-                      "max-w-[78%] rounded-2xl px-3 py-2 text-[13px] leading-snug",
-                      mine
-                        ? "bg-neutral-950 text-white"
-                        : "bg-black/[0.04] text-neutral-700 ring-1 ring-black/[0.08]",
-                    )}
-                  >
-                    {!mine && active?.isGroup && (
-                      <div className="mb-0.5 text-[10px] font-semibold text-neutral-500">
-                        {sender?.name ?? "Member"}
-                      </div>
-                    )}
-                    <div className="whitespace-pre-wrap break-words">
-                      {m.body}
-                    </div>
-                    <div
-                      className={cn(
-                        "mt-1 text-right text-[9.5px] tabular-nums",
-                        mine ? "text-neutral-500" : "text-neutral-400",
-                      )}
-                    >
-                      {timeLabel(m.createdAt)}
-                    </div>
-                  </div>
-                </div>
+                <ConversationListItem
+                  key={row.userId}
+                  name={row.name}
+                  avatarUrl={row.avatarUrl}
+                  dotColor={STATUS_DOT[row.status] ?? "bg-neutral-300"}
+                  time={
+                    row.conv?.lastMessage
+                      ? timeLabel(row.conv.lastMessage.createdAt)
+                      : undefined
+                  }
+                  preview={
+                    busy
+                      ? "Opening…"
+                      : typing
+                        ? "typing…"
+                        : (row.conv?.lastMessage?.body ?? "Say hello")
+                  }
+                  unread={row.conv?.unreadCount ?? 0}
+                  isTyping={typing && !busy}
+                  onClick={() => void openDirect(row.userId)}
+                />
               );
             })}
-            {typingUsers.length > 0 && (
-              <div className="flex justify-start">
-                <div className="rounded-2xl bg-black/[0.04] px-3 py-2 text-[11.5px] italic text-neutral-500 ring-1 ring-black/[0.08]">
-                  {typingUsers.map((t) => t.name).join(", ")} typing…
-                </div>
-              </div>
+            {groups.length > 0 && (
+              <li className="px-4 pb-1 pt-3 text-[9px] font-medium uppercase tracking-[0.18em] text-neutral-400">
+                Groups · {groups.length}
+              </li>
             )}
-          </div>
-
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              send();
-            }}
-            className="flex items-center gap-2 border-t border-black/[0.07] px-3 py-2.5"
+            {groups.map((c) => {
+              const typing = Object.keys(chat.typing[c.id] ?? {}).length > 0;
+              return (
+                <ConversationListItem
+                  key={c.id}
+                  name={c.title ?? "Group"}
+                  avatarUrl={null}
+                  group
+                  time={
+                    c.lastMessage
+                      ? timeLabel(c.lastMessage.createdAt)
+                      : undefined
+                  }
+                  preview={
+                    typing ? "typing…" : (c.lastMessage?.body ?? "Say hello")
+                  }
+                  unread={c.unreadCount}
+                  isTyping={typing}
+                  onClick={() => openConversation(c.id)}
+                />
+              );
+            })}
+          </motion.ul>
+        ) : (
+          <motion.div
+            key={activeId}
+            className="flex min-h-0 flex-1 flex-col"
+            initial={reduce ? { opacity: 1, x: 0 } : { opacity: 0, x: 32 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={reduce ? { opacity: 1, x: 0 } : { opacity: 0, x: 20 }}
+            transition={
+              reduce ? { duration: 0 } : { duration: 0.2, ease: EASE }
+            }
           >
-            <input
-              value={draft}
-              onChange={(e) => {
-                setDraft(e.target.value);
+            <div className="relative flex min-h-0 flex-1 flex-col">
+              <div
+                ref={scrollRef}
+                className="flex-1 space-y-3 overflow-y-auto px-4 py-3"
+                aria-live="polite"
+              >
+                {messages.length === 0 ? (
+                  <div className="flex h-full flex-col items-center justify-center px-6 py-10 text-center">
+                    <p className="text-[13px] font-semibold text-neutral-800">
+                      Start the conversation
+                    </p>
+                    <p className="mt-1 max-w-[230px] text-[12px] leading-relaxed text-neutral-500">
+                      Nothing here yet — your message lands instantly for
+                      everyone online.
+                    </p>
+                  </div>
+                ) : (
+                  <MessageGroups
+                    messages={messages}
+                    myUserId={myUserId}
+                    isGroup={active?.isGroup ?? false}
+                    members={active?.members ?? []}
+                  />
+                )}
+                <AnimatePresence initial={false}>
+                  {typingUsers.length > 0 && (
+                    <motion.div
+                      key="typing"
+                      className="flex justify-start"
+                      initial={reduce ? { opacity: 1 } : { opacity: 0, y: 6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={reduce ? { opacity: 1 } : { opacity: 0 }}
+                      transition={reduce ? { duration: 0 } : { duration: 0.18 }}
+                    >
+                      <div className="flex items-center gap-1.5 rounded-2xl rounded-bl-md bg-white px-3.5 py-2.5 ring-1 ring-black/[0.08]">
+                        <TypingDots />
+                        <span className="text-[11.5px] font-medium italic text-neutral-500">
+                          {typingUsers.map((t) => t.name).join(", ")}
+                        </span>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+              <AnimatePresence>
+                {hasNewBelow && (
+                  <motion.button
+                    key="new-below"
+                    type="button"
+                    onClick={jumpToLatest}
+                    className="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1.5 whitespace-nowrap rounded-full bg-neutral-950 py-1.5 pl-3.5 pr-4 text-[11.5px] font-semibold tabular-nums text-white shadow-lg"
+                    initial={
+                      reduce
+                        ? { opacity: 1 }
+                        : { opacity: 0, y: 8, scale: 0.95 }
+                    }
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={
+                      reduce
+                        ? { opacity: 1 }
+                        : { opacity: 0, y: 4, scale: 0.97 }
+                    }
+                    transition={reduce ? { duration: 0 } : { duration: 0.18 }}
+                  >
+                    ↓ New messages
+                  </motion.button>
+                )}
+              </AnimatePresence>
+            </div>
+
+            <ChatComposer
+              draft={draft}
+              setDraft={setDraft}
+              onSend={send}
+              onTyping={() => {
                 if (activeId) chat.notifyTyping(activeId);
               }}
-              placeholder="Type a message…"
-              autoFocus={!coarsePointer}
-              maxLength={4000}
-              aria-label="Type a message"
-              className="min-w-0 flex-1 rounded-xl border border-black/[0.09] bg-white px-3 py-2 text-[13px] text-neutral-700 outline-none placeholder:text-neutral-400 focus:border-neutral-900/40"
             />
-            <button
-              type="submit"
-              disabled={!draft.trim()}
-              aria-label="Send message"
-              className="flex size-9 flex-shrink-0 items-center justify-center rounded-full bg-neutral-950 text-white transition-colors hover:bg-neutral-800 disabled:opacity-30"
-            >
-              <FiSend className="size-4" />
-            </button>
-          </form>
-        </>
-      )}
-    </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
   );
+}
+
+/* ── Message grouping: consecutive same-sender messages within the window
+   merge — one name, one timestamp per group, day dividers between dates. ── */
+interface ThreadMessage {
+  id: string;
+  senderId: string;
+  body: string;
+  createdAt: string;
+}
+
+function MessageGroups({
+  messages,
+  myUserId,
+  isGroup,
+  members,
+}: {
+  messages: ThreadMessage[];
+  myUserId: string;
+  isGroup: boolean;
+  members: Array<{ userId: string; name: string }>;
+}) {
+  const reduce = useReducedMotion();
+  const blocks: Array<{ day: string } | { group: ThreadMessage[] }> = [];
+  let lastDay = "";
+  let current: ThreadMessage[] = [];
+  const flush = () => {
+    if (current.length) blocks.push({ group: current });
+    current = [];
+  };
+  for (const m of messages) {
+    const day = dayLabel(m.createdAt);
+    if (day !== lastDay) {
+      flush();
+      blocks.push({ day });
+      lastDay = day;
+    }
+    const prev = current[current.length - 1];
+    if (
+      prev &&
+      prev.senderId === m.senderId &&
+      new Date(m.createdAt).getTime() - new Date(prev.createdAt).getTime() <
+        GROUP_WINDOW_MS
+    ) {
+      current.push(m);
+    } else {
+      flush();
+      current = [m];
+    }
+  }
+  flush();
+
+  return (
+    <>
+      {blocks.map((b, i) => {
+        if ("day" in b) {
+          return (
+            <div key={`day-${i}`} className="flex items-center gap-2 pt-1">
+              <span className="h-px flex-1 bg-black/[0.07]" />
+              <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-neutral-400">
+                {b.day}
+              </span>
+              <span className="h-px flex-1 bg-black/[0.07]" />
+            </div>
+          );
+        }
+        const first = b.group[0]!;
+        const mine = first.senderId === myUserId;
+        const sender = members.find((mm) => mm.userId === first.senderId);
+        return (
+          <motion.div
+            key={first.id}
+            className={cn("group flex", mine ? "justify-end" : "justify-start")}
+            initial={reduce ? { opacity: 1, y: 0 } : { opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={
+              reduce ? { duration: 0 } : { duration: 0.22, ease: EASE }
+            }
+          >
+            <div
+              className={cn("max-w-[78%]", mine ? "items-end" : "items-start")}
+            >
+              {!mine && isGroup && (
+                <div className="mb-1 ml-1 text-[10.5px] font-semibold text-neutral-500">
+                  {sender?.name ?? "Member"}
+                </div>
+              )}
+              <div className="flex flex-col gap-1">
+                {b.group.map((m, gi) => {
+                  const lastInGroup = gi === b.group.length - 1;
+                  return (
+                    <div
+                      key={m.id}
+                      className={cn(
+                        "w-fit max-w-full px-3 py-2 text-[13px] leading-snug",
+                        mine
+                          ? cn(
+                              "ml-auto bg-neutral-950 text-white",
+                              gi === 0 && "rounded-2xl rounded-br-md",
+                              gi > 0 &&
+                                !lastInGroup &&
+                                "rounded-2xl rounded-br-md rounded-tr-md",
+                              lastInGroup &&
+                                gi > 0 &&
+                                "rounded-2xl rounded-tr-md",
+                              b.group.length === 1 &&
+                                "rounded-2xl rounded-br-md",
+                            )
+                          : cn(
+                              "bg-white text-neutral-700 ring-1 ring-black/[0.08]",
+                              gi === 0 && "rounded-2xl rounded-bl-md",
+                              gi > 0 &&
+                                !lastInGroup &&
+                                "rounded-2xl rounded-bl-md rounded-tl-md",
+                              lastInGroup &&
+                                gi > 0 &&
+                                "rounded-2xl rounded-tl-md",
+                              b.group.length === 1 &&
+                                "rounded-2xl rounded-bl-md",
+                            ),
+                      )}
+                    >
+                      <div className="whitespace-pre-wrap break-words">
+                        {m.body}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div
+                className={cn(
+                  "mt-1 text-[9.5px] tabular-nums transition-opacity",
+                  mine
+                    ? "text-right text-neutral-400 opacity-0 group-hover:opacity-100"
+                    : "ml-1 text-neutral-400 opacity-0 group-hover:opacity-100",
+                )}
+              >
+                {timeLabel(b.group[b.group.length - 1]!.createdAt)}
+              </div>
+            </div>
+          </motion.div>
+        );
+      })}
+    </>
+  );
+}
+
+function TypingDots() {
+  const reduce = useReducedMotion();
+  return (
+    <span className="flex items-center gap-1" aria-hidden>
+      {[0, 1, 2].map((d) => (
+        <motion.span
+          key={d}
+          className="size-1.5 rounded-full bg-neutral-400"
+          animate={
+            reduce ? undefined : { opacity: [0.3, 1, 0.3], y: [0, -2, 0] }
+          }
+          transition={
+            reduce
+              ? undefined
+              : {
+                  duration: 1.1,
+                  repeat: Infinity,
+                  delay: d * 0.18,
+                  ease: "easeInOut",
+                }
+          }
+        />
+      ))}
+    </span>
+  );
+}
+
+function ChatComposer({
+  draft,
+  setDraft,
+  onSend,
+  onTyping,
+}: {
+  draft: string;
+  setDraft: (v: string) => void;
+  onSend: () => void;
+  onTyping: () => void;
+}) {
+  const coarse =
+    typeof window !== "undefined" &&
+    window.matchMedia("(pointer: coarse)").matches;
+  const nearLimit = draft.length > COMPOSER_WARN_AT;
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        onSend();
+      }}
+      className="border-t border-black/[0.07] px-3 py-2.5"
+    >
+      <div className="flex items-center gap-2">
+        <input
+          value={draft}
+          onChange={(e) => {
+            setDraft(e.target.value);
+            onTyping();
+          }}
+          placeholder="Type a message…"
+          autoFocus={!coarse}
+          maxLength={COMPOSER_LIMIT}
+          aria-label="Type a message"
+          className="min-w-0 flex-1 rounded-full border border-black/[0.09] bg-white px-4 py-2 text-[13px] text-neutral-700 outline-none placeholder:text-neutral-400 focus:border-neutral-900/40"
+        />
+        <motion.button
+          type="submit"
+          disabled={!draft.trim()}
+          aria-label="Send message"
+          className="flex size-9 flex-shrink-0 items-center justify-center rounded-full bg-neutral-950 text-white transition-colors hover:bg-neutral-800 disabled:opacity-30"
+          whileTap={draft.trim() ? { scale: 0.88 } : undefined}
+        >
+          <FiSend className="size-4" />
+        </motion.button>
+      </div>
+      {nearLimit && (
+        <div className="mt-1 text-right text-[10px] tabular-nums text-neutral-400">
+          {draft.length.toLocaleString()} / {COMPOSER_LIMIT.toLocaleString()}
+        </div>
+      )}
+    </form>
+  );
+}
+
+function dayLabel(iso: string): string {
+  const d = new Date(iso);
+  const now = new Date();
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (d.toDateString() === now.toDateString()) return "Today";
+  if (d.toDateString() === yesterday.toDateString()) return "Yesterday";
+  return d.toLocaleDateString([], { month: "short", day: "numeric" });
 }
 
 function timeLabel(iso: string): string {
@@ -472,7 +821,7 @@ function ConversationListItem({
       <button
         type="button"
         onClick={onClick}
-        className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-black/[0.04]"
+        className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-black/[0.04] active:bg-black/[0.06]"
       >
         <span className="relative flex-shrink-0">
           {avatarUrl ? (
@@ -496,7 +845,7 @@ function ConversationListItem({
           )}
         </span>
         <span className="min-w-0 flex-1">
-          <span className="flex items-center justify-between gap-2">
+          <span className="flex items-baseline justify-between gap-2">
             <span
               className={cn(
                 "truncate text-[13px]",
@@ -508,7 +857,14 @@ function ConversationListItem({
               {name}
             </span>
             {time && (
-              <span className="flex-shrink-0 text-[10px] tabular-nums text-neutral-400">
+              <span
+                className={cn(
+                  "flex-shrink-0 tabular-nums",
+                  unread > 0
+                    ? "text-[10px] font-bold text-emerald-700"
+                    : "text-[10px] text-neutral-400",
+                )}
+              >
                 {time}
               </span>
             )}
@@ -516,7 +872,7 @@ function ConversationListItem({
           <span className="mt-0.5 flex items-center justify-between gap-2">
             <span
               className={cn(
-                "truncate text-[11.5px]",
+                "flex min-w-0 items-center gap-1 truncate text-[11.5px]",
                 isTyping
                   ? "italic text-emerald-700"
                   : unread > 0
@@ -524,12 +880,19 @@ function ConversationListItem({
                     : "text-neutral-500",
               )}
             >
-              {preview}
+              {isTyping && <TypingDots />}
+              <span className="truncate">{preview}</span>
             </span>
             {unread > 0 && (
-              <span className="flex h-4 min-w-4 flex-shrink-0 items-center justify-center rounded-full bg-emerald-600 px-1 text-[9.5px] font-bold text-white">
+              <motion.span
+                key={unread}
+                initial={{ scale: 0.6, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={{ type: "spring", stiffness: 500, damping: 22 }}
+                className="flex h-4 min-w-4 flex-shrink-0 items-center justify-center rounded-full bg-emerald-600 px-1 text-[9.5px] font-bold tabular-nums text-white"
+              >
                 {unread > 99 ? "99+" : unread}
-              </span>
+              </motion.span>
             )}
           </span>
         </span>

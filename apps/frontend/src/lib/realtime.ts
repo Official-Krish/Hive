@@ -38,6 +38,7 @@ export type RealtimeEventMap = {
   "pair.session": Extract<RealtimeEvent, { type: "pair.session" }>;
   "pair.cursor": Extract<RealtimeEvent, { type: "pair.cursor" }>;
   "chill.media.state": Extract<RealtimeEvent, { type: "chill.media.state" }>;
+  "chill.queue.state": Extract<RealtimeEvent, { type: "chill.queue.state" }>;
   "game.state": Extract<RealtimeEvent, { type: "game.state" }>;
   "game.move.rejected": Extract<RealtimeEvent, { type: "game.move.rejected" }>;
   "alert.created": Extract<RealtimeEvent, { type: "alert.created" }>;
@@ -223,6 +224,38 @@ export class RealtimeClient {
 
   sendChillSeek(playheadMs: number): boolean {
     return this.send({ type: "chill.media.seek", playheadMs });
+  }
+
+  sendChillQueueAdd(url: string): boolean {
+    return this.send({ type: "chill.queue.add", url });
+  }
+
+  sendChillQueuePlay(itemId: string): boolean {
+    return this.send({ type: "chill.queue.play", itemId });
+  }
+
+  sendChillQueueNext(): boolean {
+    return this.send({ type: "chill.queue.next" });
+  }
+
+  sendChillQueuePrev(): boolean {
+    return this.send({ type: "chill.queue.prev" });
+  }
+
+  sendChillQueueRemove(itemId: string): boolean {
+    return this.send({ type: "chill.queue.remove", itemId });
+  }
+
+  sendChillQueueReorder(itemId: string, toIndex: number): boolean {
+    return this.send({ type: "chill.queue.reorder", itemId, toIndex });
+  }
+
+  sendChillQueueClear(): boolean {
+    return this.send({ type: "chill.queue.clear" });
+  }
+
+  sendChillQueueEnded(itemId: string): boolean {
+    return this.send({ type: "chill.queue.ended", itemId });
   }
 
   sendGameMove(gameId: string, move: GameMove): boolean {

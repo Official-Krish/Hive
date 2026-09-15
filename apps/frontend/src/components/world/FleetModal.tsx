@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { http, type AgentSessionSummary } from "@/lib/http";
 import type { RealtimeClient } from "@/lib/realtime";
+import { WModal, WModalHeader } from "./motion";
 
 interface FleetModalProps {
   workspaceId: string;
@@ -109,50 +110,36 @@ export function FleetModal({ workspaceId, client, onClose }: FleetModalProps) {
   const sessions: AgentSessionSummary[] = live.data ?? [];
 
   return (
-    <div className="pointer-events-auto fixed inset-0 z-40 grid place-items-center bg-black/30 p-4 backdrop-blur-[2px]">
-      <div className="flex max-h-[min(86vh,620px)] w-[min(480px,96vw)] flex-col overflow-hidden rounded-2xl bg-[#f4f2ed] shadow-[0_28px_70px_-24px_rgba(0,0,0,0.35)] ring-1 ring-black/[0.09]">
-        <div className="flex items-center justify-between border-b border-black/[0.07] px-4 py-3">
-          <div>
-            <div className="text-[10px] font-medium uppercase tracking-[0.18em] text-neutral-500">
-              AI Lab · live
-            </div>
-            <div className="text-[15px] font-semibold tracking-tight text-neutral-900">
-              Agent fleet
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close agent fleet"
-            className="rounded-lg px-2 py-1 text-[13px] font-semibold text-neutral-500 transition-colors hover:bg-black/[0.05] hover:text-neutral-900"
-          >
-            Close
-          </button>
-        </div>
+    <WModal label="Agent fleet" onClose={onClose}>
+      <WModalHeader
+        eyebrow="AI Lab · live"
+        title="Agent fleet"
+        onClose={onClose}
+        closeLabel="Close agent fleet"
+      />
 
-        <div className="flex-1 overflow-y-auto p-4">
-          {live.isLoading ? (
-            <div className="py-6 text-center text-[13px] text-neutral-500">
-              Scanning the lab…
+      <div className="flex-1 overflow-y-auto p-4">
+        {live.isLoading ? (
+          <div className="py-6 text-center text-[13px] text-neutral-500">
+            Scanning the lab…
+          </div>
+        ) : sessions.length === 0 ? (
+          <div className="rounded-2xl bg-white px-4 py-8 text-center ring-1 ring-black/[0.07]">
+            <div className="text-[14px] font-semibold text-neutral-900">
+              Fleet idle
             </div>
-          ) : sessions.length === 0 ? (
-            <div className="rounded-2xl bg-white px-4 py-8 text-center ring-1 ring-black/[0.07]">
-              <div className="text-[14px] font-semibold text-neutral-900">
-                Fleet idle
-              </div>
-              <p className="mx-auto mt-1 max-w-[280px] text-[12.5px] text-neutral-500">
-                No running, blocked, or waiting sessions right now.
-              </p>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-2">
-              {sessions.map((s) => (
-                <SessionRow key={s.id} s={s} />
-              ))}
-            </div>
-          )}
-        </div>
+            <p className="mx-auto mt-1 max-w-[280px] text-[12.5px] text-neutral-500">
+              No running, blocked, or waiting sessions right now.
+            </p>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {sessions.map((s) => (
+              <SessionRow key={s.id} s={s} />
+            ))}
+          </div>
+        )}
       </div>
-    </div>
+    </WModal>
   );
 }

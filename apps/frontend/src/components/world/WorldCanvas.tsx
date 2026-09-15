@@ -11,7 +11,7 @@ import {
   events as createPointerEvents,
   useThree,
 } from "@react-three/fiber";
-import { Preload } from "@react-three/drei";
+import { Preload, useProgress } from "@react-three/drei";
 import * as THREE from "three";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -23,6 +23,7 @@ import {
   FiUsers,
 } from "react-icons/fi";
 import { OfficeBuilding } from "./office/OfficeBuilding";
+import { preloadKitFurniture } from "./InstancedFurniture";
 import { OfficeLighting } from "./lighting/OfficeLighting";
 import { PlayerController } from "./PlayerController";
 import { ThirdPersonCamera } from "./ThirdPersonCamera";
@@ -75,6 +76,7 @@ import { useVending } from "@/hooks/useVending";
 import { useChat } from "@/hooks/useChat";
 import { useWatchdogAlerts } from "@/hooks/useWatchdogAlerts";
 import { ThumbnailCapture } from "@/hooks/useWorldThumbnail";
+import { AnimatePresence, WPopover, WToast, WToastStack } from "./motion";
 import {
   Coffee,
   Clapperboard,
@@ -92,12 +94,16 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { Interactable, InteractableIcon } from "./interactions";
+import { CHAIR_SIT_SPOTS, SIT_RADIUS } from "./interactions";
 
 const DEFAULT_AVATAR =
   AVATARS.male[0]?.model ?? `${ASSET_BASE_URL}/avatars/male/hive_male_01.glb`;
 
 /** Reviewer bot — purpose-built robot, not a human avatar. */
 const BOT_MODEL = "https://cdn.krishlabs.tech/hive/avatars/robot.glb";
+
+// Kit furniture GLBs start streaming with the world (tracked by AssetGate).
+preloadKitFurniture();
 
 /* HUD material — warm bone paper floating over the 3D scene, same voice
    as the light dashboard. Shared tokens live in ./chrome; these two
@@ -149,11 +155,49 @@ function endReason(kind: string, reason: string | null, won: boolean): string {
       return reason ?? game;
   }
 }
-/** Members directory popup — Escape or outside click dismisses. */
+/** Inside-Canvas gate: releases the loading overlay once every tracked
+ *  asset (GLBs, textures) has resolved, plus a short settle beat — with a
+ *  hard timeout so a hung fetch can never trap the player.
+ *  NOTE: timers run mount-only (callback via ref) so parent re-renders
+ *  can never reset them — that was the stuck-on-loading bug. */
+function AssetGate({ onReady }: { onReady: () => void }) {
+  const done = useRef(false);
+  const readyRef = useRef(onReady);
+  readyRef.current = onReady;
+  // NOTE: intentionally polls useProgress.getState() on an interval instead
+  // of subscribing via useProgress((s) => s.progress). The drei loading
+  // manager emits progress synchronously while suspenseful loaders (useGLTF
+  // in Avatar/KitPiece) resolve *during another component's render* — a
+  // subscription setStates AssetGate mid-render and React logs
+  // "Cannot update a component while rendering a different component".
+  // Polling fires outside render, so the warning can never trigger.
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      if (done.current || useProgress.getState().progress < 100) return;
+      done.current = true;
+      window.clearInterval(id);
+      window.setTimeout(() => readyRef.current(), 500);
+    }, 150);
+    return () => window.clearInterval(id);
+  }, []);
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      if (!done.current) {
+        done.current = true;
+        readyRef.current();
+      }
+    }, 12000);
+    return () => window.clearTimeout(t);
+  }, []);
+  return null;
+}
+
+/** Members directory popup — rows open the member card. Escape or outside click dismisses. */
 function MembersPopup({
   roster,
   onlineCount,
   onClose,
+  onOpenMember,
 }: {
   roster: Array<{
     userId: string;
@@ -165,6 +209,7 @@ function MembersPopup({
   }>;
   onlineCount: number;
   onClose: () => void;
+  onOpenMember: (userId: string) => void;
 }) {
   const ref = useDismiss<HTMLDivElement>(onClose);
   return (
@@ -172,44 +217,52 @@ function MembersPopup({
       ref={ref}
       role="dialog"
       aria-label="Members"
-      className="fixed top-16 right-4 z-30 flex max-h-[calc(100vh-6rem)] w-80 flex-col overflow-hidden rounded-2xl bg-[#f4f2ed]/97 ring-1 ring-black/[0.09] backdrop-blur-md"
+      className="fixed top-16 right-4 z-30 w-80"
     >
-      <div className="flex items-end justify-between border-b border-black/[0.07] px-4 pb-2 pt-3">
-        <span className={EYEBROW}>Members</span>
-        <span className="font-mono text-[10.5px] tabular-nums text-neutral-500">
-          {onlineCount} online · {roster.length} total
-        </span>
-      </div>
-      <div className="flex flex-col overflow-y-auto p-2">
-        {roster.map((row) => (
-          <div
-            key={row.userId}
-            className="flex items-center gap-2.5 rounded-lg px-2.5 py-1.5"
-          >
-            <span
-              className={cn(
-                "h-2 w-2 shrink-0 rounded-full",
-                STATUS_DOT[row.status] ?? "bg-neutral-300",
-              )}
-            />
-            <div className="min-w-0 flex-1">
-              <span className="block truncate text-[12.5px] font-medium text-neutral-900">
-                {row.name}
-                {row.isMe && (
-                  <span className="ml-1.5 font-normal text-neutral-400">
-                    (you)
-                  </span>
+      <WPopover className="flex max-h-[calc(100vh-6rem)] flex-col">
+        <div className="flex items-end justify-between border-b border-black/[0.07] px-4 pb-2 pt-3">
+          <span className={EYEBROW}>Members</span>
+          <span className="font-mono text-[10.5px] tabular-nums text-neutral-500">
+            {onlineCount} online · {roster.length} total
+          </span>
+        </div>
+        <div className="flex flex-col overflow-y-auto p-2">
+          {roster.map((row) => (
+            <button
+              key={row.userId}
+              type="button"
+              onClick={() => {
+                onOpenMember(row.userId);
+                onClose();
+              }}
+              className="flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left transition-colors hover:bg-black/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900/30"
+              aria-label={`Open ${row.name}'s card`}
+            >
+              <span
+                className={cn(
+                  "h-2 w-2 shrink-0 rounded-full",
+                  STATUS_DOT[row.status] ?? "bg-neutral-300",
                 )}
-              </span>
-              <span className="block truncate text-[10.5px] text-neutral-500">
-                {row.label && row.workingOn
-                  ? `${row.label} · ${row.workingOn}`
-                  : (row.workingOn ?? row.label ?? statusLabel(row.status))}
-              </span>
-            </div>
-          </div>
-        ))}
-      </div>
+              />
+              <div className="min-w-0 flex-1">
+                <span className="block truncate text-[12.5px] font-medium text-neutral-900">
+                  {row.name}
+                  {row.isMe && (
+                    <span className="ml-1.5 font-normal text-neutral-400">
+                      (you)
+                    </span>
+                  )}
+                </span>
+                <span className="block truncate text-[10.5px] text-neutral-500">
+                  {row.label && row.workingOn
+                    ? `${row.label} · ${row.workingOn}`
+                    : (row.workingOn ?? row.label ?? statusLabel(row.status))}
+                </span>
+              </div>
+            </button>
+          ))}
+        </div>
+      </WPopover>
     </div>
   );
 }
@@ -219,6 +272,8 @@ type PresenceValue = "online" | "away" | "on_call" | "busy" | "focusing";
 /** Status picker menu — Escape or outside click dismisses. */
 function StatusMenu({
   status,
+  currentLabel,
+  currentWorkingOn,
   onPick,
   onLabel,
   onWorkingOn,
@@ -227,6 +282,8 @@ function StatusMenu({
   onClose,
 }: {
   status: string;
+  currentLabel?: string | null;
+  currentWorkingOn?: string | null;
   onPick: (value: PresenceValue) => void;
   onLabel: (label: string) => void;
   onWorkingOn: (workingOn: string) => void;
@@ -240,57 +297,62 @@ function StatusMenu({
       ref={ref}
       role="menu"
       aria-label="Change status"
-      className="absolute right-0 top-full z-20 mt-2 flex w-60 flex-col items-stretch gap-0.5 rounded-xl bg-[#f4f2ed]/97 p-2 ring-1 ring-black/[0.09] backdrop-blur-md"
+      className="absolute right-0 top-full z-20 mt-2 w-60"
     >
-      {(
-        [
-          ["online", "Online"],
-          ["away", "Away"],
-          ["on_call", "On call"],
-          ["busy", "Busy"],
-          ["focusing", "Focusing"],
-        ] as const
-      ).map(([value, label]) => (
-        <button
-          key={value}
-          type="button"
-          role="menuitemradio"
-          aria-checked={status === value}
-          onClick={() => onPick(value)}
-          className={cn(
-            "flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-[12.5px] transition-colors hover:bg-black/[0.05]",
-            status === value
-              ? "font-semibold text-neutral-900"
-              : "text-neutral-700",
-          )}
-        >
-          <span className={cn("h-2 w-2 rounded-full", STATUS_DOT[value])} />
-          {label}
-        </button>
-      ))}
-      <InlineTextRow
-        placeholder="Custom status…"
-        action="Set status"
-        onFocusChange={onFocusChange}
-        onApply={onLabel}
-      />
-      <InlineTextRow
-        placeholder="Working on…"
-        action="Set focus"
-        onFocusChange={onFocusChange}
-        onApply={onWorkingOn}
-        onClear={onClearWorkingOn}
-        showClear
-      />
+      <WPopover className="flex flex-col items-stretch gap-0.5 rounded-xl p-2">
+        {(
+          [
+            ["online", "Online"],
+            ["away", "Away"],
+            ["on_call", "On call"],
+            ["busy", "Busy"],
+            ["focusing", "Focusing"],
+          ] as const
+        ).map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            role="menuitemradio"
+            aria-checked={status === value}
+            onClick={() => onPick(value)}
+            className={cn(
+              "flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-[12.5px] transition-colors hover:bg-black/[0.05]",
+              status === value
+                ? "font-semibold text-neutral-900"
+                : "text-neutral-700",
+            )}
+          >
+            <span className={cn("h-2 w-2 rounded-full", STATUS_DOT[value])} />
+            {label}
+          </button>
+        ))}
+        <InlineTextRow
+          placeholder="Custom status…"
+          action="Set status"
+          initialValue={currentLabel ?? ""}
+          onFocusChange={onFocusChange}
+          onApply={onLabel}
+        />
+        <InlineTextRow
+          placeholder="Working on…"
+          action="Set focus"
+          initialValue={currentWorkingOn ?? ""}
+          onFocusChange={onFocusChange}
+          onApply={onWorkingOn}
+          onClear={onClearWorkingOn}
+          showClear
+        />
+      </WPopover>
     </div>
   );
 }
 
-/** Inline "set a value" row: type + Set; Clear sits beside it whenever
- *  a value is currently set. Input resets after applying. */
+/** Inline "set a value" row: prefilled with the current value when there is
+ *  one; type + Set to change, Clear to remove. Input resets after applying. */
 function InlineTextRow({
   placeholder,
   action,
+  initialValue = "",
   onApply,
   onFocusChange,
   onClear,
@@ -298,12 +360,13 @@ function InlineTextRow({
 }: {
   placeholder: string;
   action: string;
+  initialValue?: string;
   onApply: (value: string) => void;
   onFocusChange?: (focused: boolean) => void;
   onClear?: () => void;
   showClear?: boolean;
 }) {
-  const [value, setValue] = useState("");
+  const [value, setValue] = useState(initialValue);
   const apply = () => {
     const v = value.trim();
     if (!v) return;
@@ -384,7 +447,9 @@ export function WorldCanvas({
 }: WorldCanvasProps) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const [cameraYaw, setCameraYaw] = useState(0);
+  // Shared camera yaw (radians): written by ThirdPersonCamera on orbit, read
+  // by PlayerController for movement. A ref — drag-look never re-renders.
+  const sharedYaw = useRef(0);
   const [fpp, setFpp] = useState(false);
   const [currentRoom, setCurrentRoom] = useState("Courtyard");
   const [openMemberId, setOpenMemberId] = useState<string | null>(null);
@@ -658,11 +723,46 @@ export function WorldCanvas({
     SPAWN[2],
   ]);
   const [coffeeActive, setCoffeeActive] = useState(false);
+  const [sitting, setSitting] = useState(false);
+  const sitToggleRef = useRef<(() => void) | null>(null);
+  // Nearest sittable chair (for the sit/stand hint) — recomputed from the
+  // throttled player position, never per-frame. While seated the player is
+  // on the chair, so the hint flips to "move to stand".
+  const nearChair = useMemo(() => {
+    const [x, feetY, z] = playerPos;
+    return CHAIR_SIT_SPOTS.some(
+      (s) =>
+        Math.abs(feetY - s.y) <= 0.9 &&
+        Math.hypot(x - s.x, z - s.z) <= SIT_RADIUS,
+    );
+  }, [playerPos]);
   const [waterActive, setWaterActive] = useState(false);
-  const [toast, setToast] = useState<React.ReactNode | null>(null);
-  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  interface WorldToast {
+    key: string;
+    node: React.ReactNode;
+    tone: "neutral" | "warn";
+  }
+  const [toasts, setToasts] = useState<WorldToast[]>([]);
+  const toastSeq = useRef(0);
+
+  const showToast = useCallback(
+    (node: React.ReactNode, tone: WorldToast["tone"] = "neutral") => {
+      const key = `${Date.now()}-${++toastSeq.current}`;
+      setToasts((prev) => [...prev.slice(-2), { key, node, tone }]);
+      window.setTimeout(() => {
+        setToasts((prev) => prev.filter((t) => t.key !== key));
+      }, 3500);
+    },
+    [],
+  );
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
   const [ciOpen, setCiOpen] = useState(false);
+  // Touch devices get an honest hint instead of WASD fiction.
+  const [isCoarsePointer] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      window.matchMedia("(pointer: coarse)").matches,
+  );
   const [whiteboardId, setWhiteboardId] = useState<string | null>(null);
   const [chillScreenOpen, setChillScreenOpen] = useState(false);
   const [gamesOpen, setGamesOpen] = useState(false);
@@ -674,6 +774,16 @@ export function WorldCanvas({
   const [spawnFaded, setSpawnFaded] = useState(false);
   const [tourOpen, setTourOpen] = useState(() => shouldShowTour());
   const [loadingTip, setLoadingTip] = useState(0);
+  // Stable callback so the in-Canvas gate's timers never reset on re-render.
+  const handleWorldReady = useCallback(() => setWorldReady(true), []);
+
+  // DOM-level escape hatch: if the Canvas never mounts (WebGL unavailable,
+  // 3D tree error), the in-Canvas gate never runs — never trap the player.
+  useEffect(() => {
+    if (worldReady) return;
+    const t = window.setTimeout(() => setWorldReady(true), 15000);
+    return () => window.clearTimeout(t);
+  }, [worldReady]);
 
   useEffect(() => {
     if (worldReady) return;
@@ -687,16 +797,12 @@ export function WorldCanvas({
     return () => window.clearTimeout(t);
   }, [worldReady, spawnFaded]);
 
-  const showToast = useCallback((node: React.ReactNode) => {
-    setToast(node);
-    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-    toastTimerRef.current = setTimeout(() => setToast(null), 3000);
-  }, []);
-
   // First-person toggle (V) — same guards as E so typing never toggles it.
-  const fppBlocked =
+  // Single source of truth: any open overlay blocks world input. Adding a
+  // new modal means adding it here once — not in three parallel lists.
+  // (The tour is deliberately absent: it's a non-blocking coachmark.)
+  const anyOverlayOpen =
     !worldReady ||
-    tourOpen ||
     chatOpen ||
     statusInputFocused ||
     membersOpen ||
@@ -709,9 +815,10 @@ export function WorldCanvas({
     vendingOpen ||
     reviewerOpen ||
     fleetOpen ||
-    whiteboardId !== null;
-  const fppBlockedRef = useRef(fppBlocked);
-  fppBlockedRef.current = fppBlocked;
+    whiteboardId !== null ||
+    pair.open;
+  const fppBlockedRef = useRef(anyOverlayOpen);
+  fppBlockedRef.current = anyOverlayOpen;
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.code !== "KeyV") return;
@@ -726,13 +833,6 @@ export function WorldCanvas({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [showToast]);
-
-  useEffect(
-    () => () => {
-      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-    },
-    [],
-  );
 
   // Agents waiting on a human — click cycles through them.
   const [attentionIdx, setAttentionIdx] = useState(0);
@@ -797,23 +897,7 @@ export function WorldCanvas({
 
   const interaction = useInteractions({
     pos: playerPos,
-    blocked:
-      !worldReady ||
-      tourOpen ||
-      chatOpen ||
-      statusInputFocused ||
-      membersOpen ||
-      statusMenu ||
-      openMemberId !== null ||
-      workspaceOpen ||
-      ciOpen ||
-      chillScreenOpen ||
-      gamesOpen ||
-      vendingOpen ||
-      reviewerOpen ||
-      fleetOpen ||
-      whiteboardId !== null ||
-      pair.open,
+    blocked: anyOverlayOpen,
     onPress: handleInteract,
   });
 
@@ -881,6 +965,12 @@ export function WorldCanvas({
       }),
       client.on("presence.changed", (e) => {
         if (e.developerId === myUserId) return;
+        if (e.status === "offline") {
+          // Departed members take their "working on" with them — otherwise
+          // it re-fires stale when they reconnect.
+          workingOnSeenRef.current.delete(e.developerId);
+          return;
+        }
         if (e.status === "focusing") {
           push(`${nameOf(e.developerId)} is focusing`, "focusing");
         }
@@ -923,7 +1013,9 @@ export function WorldCanvas({
 
   return (
     <div className="relative w-full h-screen overflow-hidden font-sans select-none">
-      {/* Loading overlay — covers the flat background while GLBs stream in */}
+      {/* Loading overlay — lifts only once the office assets are actually
+          ready (not just renderer creation), with a timeout fallback so a
+          hung fetch can never trap the player. */}
       {!worldReady && (
         <div className="absolute inset-0 z-40 flex flex-col items-center justify-center gap-3 bg-[#14171d]">
           <div className="text-[11px] font-medium uppercase tracking-[0.22em] text-neutral-400">
@@ -943,11 +1035,16 @@ export function WorldCanvas({
           </div>
         </div>
       )}
-      {/* Spawn fade — eases in over the first second in-world */}
-      {worldReady && !spawnFaded && (
-        <div className="pointer-events-none absolute inset-0 z-30 animate-pulse bg-black/30" />
+      {/* Spawn fade — eases out over the first second in-world */}
+      {worldReady && (
+        <div
+          aria-hidden
+          className={`pointer-events-none absolute inset-0 z-30 bg-black/30 transition-opacity duration-700 motion-reduce:hidden ${
+            spawnFaded ? "opacity-0" : "opacity-100"
+          }`}
+        />
       )}
-      {/* Top bar: back · workspace · location · you */}
+      {/* Top bar: back · breadcrumb · you */}
       <div className="absolute top-4 left-4 right-4 z-10 flex flex-wrap items-center gap-2 pointer-events-none">
         <button
           type="button"
@@ -955,22 +1052,15 @@ export function WorldCanvas({
             const back = searchParams.get("from") ?? "/dashboard";
             navigate(back);
           }}
-          className={`${CHIP} pointer-events-auto px-3.5 py-2 text-[12px] font-medium text-neutral-700 transition-colors hover:text-neutral-950 hover:bg-white/70`}
+          aria-label="Back to dashboard"
+          className={`${CHIP} pointer-events-auto px-3 py-2 text-[12px] font-medium text-neutral-700 transition-colors hover:text-neutral-950 hover:bg-white/70`}
         >
           <FiArrowLeft className="size-3.5" aria-hidden />
-          Dashboard
         </button>
 
-        <div className={`${CHIP} px-4 py-2`}>
-          <span className={EYEBROW}>Workspace</span>
-          <span className="max-w-[180px] truncate text-[13px] font-medium leading-none text-neutral-900">
-            {workspaceName}
-          </span>
-        </div>
-
-        <div className={`${CHIP} px-4 py-2`}>
+        <div className={`${CHIP} min-w-0 px-4 py-2`}>
           <span
-            className={`h-1.5 w-1.5 rounded-full ${
+            className={`h-1.5 w-1.5 shrink-0 rounded-full ${
               connectionStatus === "open"
                 ? "bg-emerald-500"
                 : connectionStatus === "connecting" ||
@@ -978,9 +1068,18 @@ export function WorldCanvas({
                   ? "bg-amber-500"
                   : "bg-rose-500"
             }`}
+            aria-label={`Connection: ${connectionStatus}`}
           />
-          <span className={EYEBROW}>Location</span>
-          <span className="max-w-[160px] truncate text-[13px] font-medium leading-none text-neutral-900">
+          <span className="max-w-[140px] truncate text-[13px] font-medium leading-none text-neutral-500">
+            {workspaceName}
+          </span>
+          <span
+            aria-hidden
+            className="text-[13px] leading-none text-neutral-300"
+          >
+            /
+          </span>
+          <span className="max-w-[140px] truncate text-[13px] font-semibold leading-none text-neutral-900">
             {currentRoom}
           </span>
           <span className="rounded bg-white px-1 py-px font-mono text-[9px] font-semibold text-neutral-600 ring-1 ring-black/[0.09]">
@@ -988,27 +1087,29 @@ export function WorldCanvas({
           </span>
         </div>
 
-        {/* Agents waiting on a human — click cycles, double-click opens */}
+        {/* Agents waiting on a human — click opens, advances on multiples */}
         {needsAttention.length > 0 && (
           <button
             type="button"
-            onClick={() =>
-              setAttentionIdx((i) => (i + 1) % needsAttention.length)
-            }
-            onDoubleClick={() =>
-              setOpenMemberId(needsAttention[attentionIdx]?.[0] ?? null)
-            }
-            title={`${needsAttention.length} agent(s) need you — ${needsAttention
+            onClick={() => {
+              const idx = attentionIdx % needsAttention.length;
+              setOpenMemberId(needsAttention[idx]?.[0] ?? null);
+              setAttentionIdx((i) => (i + 1) % needsAttention.length);
+            }}
+            title={`${needsAttention.length} agent${needsAttention.length === 1 ? "" : "s"} need${needsAttention.length === 1 ? "s" : ""} you — ${needsAttention
               .map(([, a]) => a.name || "member")
-              .join(", ")}. Click to cycle, double-click to open.`}
-            className={`${CHIP} pointer-events-auto border-amber-500/40 bg-amber-50/95 py-2 transition-colors hover:bg-amber-100/95`}
+              .join(", ")}. Click to open the next one.`}
+            className={`${CHIP} pointer-events-auto border-amber-500/40 bg-amber-50/95 py-2 shadow-[0_0_0_1px_rgba(245,158,11,0.25),0_8px_24px_-8px_rgba(245,158,11,0.5)] transition-all hover:scale-[1.02] hover:bg-amber-100/95 active:scale-[0.98]`}
           >
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-500" />
-            <span className="text-[12px] font-semibold text-amber-900">
+            <span className="relative flex h-1.5 w-1.5">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-500 opacity-70" />
+              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-amber-500" />
+            </span>
+            <span className="text-[12px] font-semibold tabular-nums text-amber-900">
               {needsAttention.length} agent
               {needsAttention.length === 1 ? "" : "s"} need you
               {needsAttention.length > 1 &&
-                ` · ${needsAttention[attentionIdx % needsAttention.length]?.[1]?.name ?? "next"} ↓`}
+                ` · ${needsAttention[attentionIdx % needsAttention.length]?.[1]?.name ?? "next"}`}
             </span>
           </button>
         )}
@@ -1053,19 +1154,22 @@ export function WorldCanvas({
           >
             <FiUsers className="size-4 text-neutral-700" />
             {onlineCount > 0 && (
-              <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-emerald-600 px-1 text-[9.5px] font-bold text-white ring-2 ring-[#faf9f6]">
+              <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-emerald-600 px-1 text-[9.5px] font-bold tabular-nums text-white ring-2 ring-[#faf9f6]">
                 {onlineCount}
               </span>
             )}
           </button>
 
-          {membersOpen && (
-            <MembersPopup
-              roster={roster}
-              onlineCount={onlineCount}
-              onClose={() => setMembersOpen(false)}
-            />
-          )}
+          <AnimatePresence>
+            {membersOpen && (
+              <MembersPopup
+                roster={roster}
+                onlineCount={onlineCount}
+                onClose={() => setMembersOpen(false)}
+                onOpenMember={(id) => setOpenMemberId(id)}
+              />
+            )}
+          </AnimatePresence>
 
           {/* Chat toggle */}
           <button
@@ -1077,7 +1181,7 @@ export function WorldCanvas({
           >
             <FiMessageSquare className="size-4 text-neutral-700" />
             {chat.totalUnread > 0 && (
-              <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-emerald-600 px-1 text-[9.5px] font-bold text-white ring-2 ring-[#faf9f6]">
+              <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-emerald-600 px-1 text-[9.5px] font-bold tabular-nums text-white ring-2 ring-[#faf9f6]">
                 {chat.totalUnread > 9 ? "9+" : chat.totalUnread}
               </span>
             )}
@@ -1103,58 +1207,62 @@ export function WorldCanvas({
                 {meName}
               </span>
               {myPresence?.label && (
-                <span className="max-w-[140px] truncate text-[11px] font-medium text-neutral-600">
+                <span className="hidden max-w-[140px] truncate text-[11px] font-medium text-neutral-600 lg:inline">
                   · {myPresence.label}
                 </span>
               )}
               {myPresence?.workingOn && (
-                <span className="inline-flex max-w-[150px] items-center gap-1 truncate text-[11px] font-medium text-violet-600">
+                <span className="hidden max-w-[150px] items-center gap-1 truncate text-[11px] font-medium text-violet-600 lg:inline-flex">
                   <Zap className="size-3 shrink-0" />
                   <span className="truncate">{myPresence.workingOn}</span>
                 </span>
               )}
             </button>
 
-            {statusMenu && (
-              <StatusMenu
-                status={myPresence?.status ?? "online"}
-                onPick={(value) => {
-                  client?.sendPresence(value);
-                  setStatusMenu(false);
-                }}
-                onLabel={(label) => {
-                  client?.sendPresence(
-                    (myPresence?.status as
-                      "online" | "away" | "on_call" | "busy" | "focusing") ??
-                      "online",
-                    label,
-                  );
-                  setStatusMenu(false);
-                }}
-                onWorkingOn={(workingOn) => {
-                  client?.sendPresence(
-                    (myPresence?.status as
-                      "online" | "away" | "on_call" | "busy" | "focusing") ??
-                      "online",
-                    myPresence?.label ?? undefined,
-                    workingOn,
-                  );
-                  setStatusMenu(false);
-                }}
-                onClearWorkingOn={() => {
-                  client?.sendPresence(
-                    (myPresence?.status as
-                      "online" | "away" | "on_call" | "busy" | "focusing") ??
-                      "online",
-                    myPresence?.label ?? undefined,
-                    null,
-                  );
-                  setStatusMenu(false);
-                }}
-                onFocusChange={setStatusInputFocused}
-                onClose={() => setStatusMenu(false)}
-              />
-            )}
+            <AnimatePresence>
+              {statusMenu && (
+                <StatusMenu
+                  status={myPresence?.status ?? "online"}
+                  currentLabel={myPresence?.label ?? null}
+                  currentWorkingOn={myPresence?.workingOn ?? null}
+                  onPick={(value) => {
+                    client?.sendPresence(value);
+                    setStatusMenu(false);
+                  }}
+                  onLabel={(label) => {
+                    client?.sendPresence(
+                      (myPresence?.status as
+                        "online" | "away" | "on_call" | "busy" | "focusing") ??
+                        "online",
+                      label,
+                    );
+                    setStatusMenu(false);
+                  }}
+                  onWorkingOn={(workingOn) => {
+                    client?.sendPresence(
+                      (myPresence?.status as
+                        "online" | "away" | "on_call" | "busy" | "focusing") ??
+                        "online",
+                      myPresence?.label ?? undefined,
+                      workingOn,
+                    );
+                    setStatusMenu(false);
+                  }}
+                  onClearWorkingOn={() => {
+                    client?.sendPresence(
+                      (myPresence?.status as
+                        "online" | "away" | "on_call" | "busy" | "focusing") ??
+                        "online",
+                      myPresence?.label ?? undefined,
+                      null,
+                    );
+                    setStatusMenu(false);
+                  }}
+                  onFocusChange={setStatusInputFocused}
+                  onClose={() => setStatusMenu(false)}
+                />
+              )}
+            </AnimatePresence>
           </div>
         </div>
       </div>
@@ -1163,34 +1271,56 @@ export function WorldCanvas({
       {!workspaceOpen &&
         !ciOpen &&
         !whiteboardId &&
-        (interaction.near || toast) && (
-          <div className="pointer-events-none absolute bottom-20 left-4 z-10 flex flex-col items-start gap-1.5">
+        (interaction.near || nearChair || toasts.length > 0) && (
+          <WToastStack>
             {interaction.near &&
               (() => {
                 const Icon = INTERACTABLE_ICONS[interaction.near.icon];
                 return (
-                  <div className={`${CHIP} px-3.5 py-2`}>
-                    <kbd className="rounded-md bg-white px-1.5 py-0.5 font-mono text-[10px] font-semibold text-neutral-800 ring-1 ring-black/[0.09]">
-                      E
-                    </kbd>
-                    <Icon className="size-3.5 shrink-0 text-neutral-700" />
-                    <span className="text-[12px] font-semibold text-neutral-800">
-                      {interaction.near.prompt}
-                    </span>
-                  </div>
+                  <WToast id="interact" tone="neutral">
+                    <button
+                      type="button"
+                      onClick={() => interaction.press()}
+                      className="flex cursor-pointer items-center gap-2"
+                      aria-label={`Interact: ${interaction.near.prompt}`}
+                    >
+                      <kbd className="rounded-md bg-white px-1.5 py-0.5 font-mono text-[10px] font-semibold text-neutral-800 ring-1 ring-black/[0.09]">
+                        E
+                      </kbd>
+                      <Icon className="size-3.5 shrink-0 text-neutral-700" />
+                      <span className="text-[12px] font-semibold text-neutral-800">
+                        {interaction.near.prompt}
+                      </span>
+                    </button>
+                  </WToast>
                 );
               })()}
-            {toast && (
-              <div
-                role="status"
-                className={`${CHIP} border-amber-500/30 bg-amber-50/95 px-3.5 py-1.5`}
-              >
-                <span className="text-[11.5px] font-semibold text-amber-800">
-                  {toast}
-                </span>
-              </div>
+            {/* Sit pill shows alongside (not instead of) the E pill — every
+                chair sits inside a monitor spot's radius, so gating on
+                !interaction.near hid it exactly when it was relevant. */}
+            {nearChair && (
+              <WToast key="sit" id="sit" tone="neutral">
+                <button
+                  type="button"
+                  onClick={() => sitToggleRef.current?.()}
+                  className="flex cursor-pointer items-center gap-2"
+                  aria-label={sitting ? "Stand up" : "Sit down"}
+                >
+                  <kbd className="rounded-md bg-white px-1.5 py-0.5 font-mono text-[10px] font-semibold text-neutral-800 ring-1 ring-black/[0.09]">
+                    F
+                  </kbd>
+                  <span className="text-[12px] font-semibold text-neutral-800">
+                    {sitting ? "Seated — stand up" : "Sit down"}
+                  </span>
+                </button>
+              </WToast>
             )}
-          </div>
+            {toasts.map((t) => (
+              <WToast key={t.key} id={t.key} tone={t.tone}>
+                <span role="status">{t.node}</span>
+              </WToast>
+            ))}
+          </WToastStack>
         )}
 
       {/* Controls legend — contextual hint follows room + target */}
@@ -1199,38 +1329,66 @@ export function WorldCanvas({
           className={`${CHIP} rounded-full px-4 py-2.5 text-[11px] font-medium text-neutral-500`}
           aria-label="Controls and current hint"
         >
-          {["W", "A", "S", "D"].map((k) => (
-            <kbd
-              key={k}
-              className="rounded-md bg-white px-1.5 py-0.5 font-mono text-[10px] font-semibold text-neutral-800 ring-1 ring-black/[0.09]"
-            >
-              {k}
-            </kbd>
-          ))}
-          <span className="ml-0.5">Move</span>
-          <span className="h-3.5 w-px bg-black/[0.09]" />
-          <span className="max-w-[220px] truncate font-semibold text-neutral-700">
-            {interaction.near
-              ? `E — ${interaction.near.prompt}`
-              : currentRoom === "Courtyard"
-                ? "Walk north → entrance"
-                : playerPos[1] > 3.1
-                  ? "Upper floor — stairs go back down"
-                  : "Stairs at lobby west end → L2"}
-          </span>
-          <span className="hidden sm:inline">
-            <span className="font-semibold text-neutral-900">Drag</span> Look ·{" "}
-            <span className="font-semibold text-neutral-900">Scroll</span> Zoom
-          </span>
-          <span className="h-3.5 w-px bg-black/[0.09]" />
-          <span>
-            <kbd className="rounded-md bg-white px-1.5 py-0.5 font-mono text-[10px] font-semibold text-neutral-800 ring-1 ring-black/[0.09]">
-              V
-            </kbd>{" "}
-            <span className="font-semibold text-neutral-900">
-              {fpp ? "Exit first-person" : "First-person"}
-            </span>
-          </span>
+          {isCoarsePointer ? (
+            <>
+              <span>
+                <span className="font-semibold text-neutral-900">
+                  Best on desktop
+                </span>{" "}
+                · drag to look around
+              </span>
+              <span className="h-3.5 w-px bg-black/[0.09]" />
+              <span className="max-w-[220px] truncate font-semibold text-neutral-700">
+                {currentRoom === "Courtyard"
+                  ? "Walk north → entrance"
+                  : playerPos[1] > 3.1
+                    ? "Upper floor — stairs go back down"
+                    : "Stairs at lobby west end → L2"}
+              </span>
+            </>
+          ) : (
+            <>
+              {["W", "A", "S", "D"].map((k) => (
+                <kbd
+                  key={k}
+                  className="rounded-md bg-white px-1.5 py-0.5 font-mono text-[10px] font-semibold text-neutral-800 ring-1 ring-black/[0.09]"
+                >
+                  {k}
+                </kbd>
+              ))}
+              <span className="ml-0.5">
+                Move · Shift run · Space jump · F sit
+              </span>
+              <span className="h-3.5 w-px bg-black/[0.09]" />
+              {!interaction.near && (
+                <>
+                  <span className="max-w-[220px] truncate font-semibold text-neutral-700">
+                    {currentRoom === "Courtyard"
+                      ? "Walk north → entrance"
+                      : playerPos[1] > 3.1
+                        ? "Upper floor — stairs go back down"
+                        : "Stairs at lobby west end → L2"}
+                  </span>
+                  <span className="h-3.5 w-px bg-black/[0.09]" />
+                </>
+              )}
+              <span className="hidden sm:inline">
+                <span className="font-semibold text-neutral-900">Drag</span>{" "}
+                Look ·{" "}
+                <span className="font-semibold text-neutral-900">Scroll</span>{" "}
+                Zoom
+              </span>
+              <span className="hidden h-3.5 w-px bg-black/[0.09] sm:inline" />
+              <span>
+                <kbd className="rounded-md bg-white px-1.5 py-0.5 font-mono text-[10px] font-semibold text-neutral-800 ring-1 ring-black/[0.09]">
+                  V
+                </kbd>{" "}
+                <span className="font-semibold text-neutral-900">
+                  {fpp ? "Exit first-person (Esc)" : "First-person"}
+                </span>
+              </span>
+            </>
+          )}
         </div>
       </div>
 
@@ -1242,67 +1400,78 @@ export function WorldCanvas({
       )}
 
       {/* First-run tour */}
-      {tourOpen && (
-        <div className="absolute bottom-24 left-1/2 z-20 -translate-x-1/2">
-          <WorldTour
-            onClose={() => {
-              markTourSeen();
-              setTourOpen(false);
-            }}
-          />
-        </div>
-      )}
+      <AnimatePresence>
+        {tourOpen && (
+          <div className="absolute bottom-24 left-1/2 z-20 -translate-x-1/2">
+            <WorldTour
+              onClose={(seen) => {
+                if (seen) markTourSeen();
+                setTourOpen(false);
+              }}
+            />
+          </div>
+        )}
+      </AnimatePresence>
 
-      {/* Office ticker — pushes / PRs / test pulses (hidden while a call is active) */}
-      {feed.length > 0 && nearIds.size === 0 && (
-        <div
-          role="status"
-          aria-live="polite"
-          className="pointer-events-none absolute bottom-4 left-1/2 z-10 hidden -translate-x-1/2 flex-col items-center gap-1.5 md:flex"
-        >
-          {feed
-            .filter((f) => Date.now() - f.at < 30_000)
-            .slice(0, 3)
-            .map((f, i) => (
-              <div
-                key={f.key}
-                className={`${CHIP} max-w-[400px] px-3.5 py-1.5 text-[11px] font-medium text-neutral-700 ${
-                  i === 0
-                    ? "opacity-100"
-                    : i === 1
-                      ? "opacity-70"
-                      : "opacity-45"
-                }`}
-                style={{ transform: `scale(${1 - i * 0.04})` }}
-              >
-                <span className="shrink-0">
-                  {f.tone === "merge" ? (
-                    <Trophy className="size-3 text-amber-500" />
-                  ) : (
-                    <span
-                      className={`inline-block h-1.5 w-1.5 rounded-full ${
-                        f.tone === "test"
-                          ? "bg-sky-500"
-                          : f.tone === "pr"
-                            ? "bg-violet-500"
-                            : f.tone === "bump"
-                              ? "bg-amber-500"
-                              : f.tone === "focusing"
-                                ? "bg-purple-500"
-                                : f.tone === "review"
-                                  ? "bg-teal-500"
-                                  : f.tone === "alert"
-                                    ? "bg-rose-500"
-                                    : "bg-emerald-500"
-                      }`}
-                    />
-                  )}
-                </span>
-                <span className="min-w-0 truncate">{f.text}</span>
-              </div>
-            ))}
-        </div>
-      )}
+      {/* Office ticker — latest pulse always visible (collapsed to one line
+          during calls / on small screens); full stack when idle on desktop. */}
+      {feed.length > 0 &&
+        (() => {
+          const fresh = feed.filter((f) => Date.now() - f.at < 60_000);
+          if (fresh.length === 0) return null;
+          const inCall = nearIds.size > 0;
+          const items = inCall ? fresh.slice(0, 1) : fresh.slice(0, 3);
+          return (
+            <div
+              role="status"
+              aria-live="polite"
+              className={`pointer-events-none absolute z-10 flex -translate-x-1/2 flex-col items-center gap-1.5 ${
+                inCall ? "bottom-24 left-1/2" : "bottom-4 left-1/2"
+              }`}
+            >
+              {items.map((f, i) => (
+                <div
+                  key={f.key}
+                  className={`${CHIP} max-w-[400px] px-3.5 py-1.5 text-[11px] font-medium text-neutral-700 ${
+                    i > 0 ? "hidden md:inline-flex" : ""
+                  } ${
+                    i === 0
+                      ? "opacity-100"
+                      : i === 1
+                        ? "opacity-70"
+                        : "opacity-45"
+                  }`}
+                  style={{ transform: `scale(${1 - i * 0.04})` }}
+                >
+                  <span className="shrink-0">
+                    {f.tone === "merge" ? (
+                      <Trophy className="size-3 text-amber-500" />
+                    ) : (
+                      <span
+                        className={`inline-block h-1.5 w-1.5 rounded-full ${
+                          f.tone === "test"
+                            ? "bg-emerald-500"
+                            : f.tone === "pr"
+                              ? "bg-sky-500"
+                              : f.tone === "bump"
+                                ? "bg-amber-500"
+                                : f.tone === "focusing"
+                                  ? "bg-violet-500"
+                                  : f.tone === "review"
+                                    ? "bg-teal-500"
+                                    : f.tone === "alert"
+                                      ? "bg-rose-500"
+                                      : "bg-emerald-500"
+                        }`}
+                      />
+                    )}
+                  </span>
+                  <span className="min-w-0 truncate">{f.text}</span>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
 
       {/* Match-end card — "You won" (+ confetti) or "You lose", both games */}
       {endCelebration && (
@@ -1470,14 +1639,16 @@ export function WorldCanvas({
 
       {/* Pair-session setup modal (auto-shown when two people meet in a
           pair-programming room without a session) */}
-      {pair.open && pair.suggestedPartnerId && (
-        <PairSessionModal
-          workspaceId={workspaceId}
-          partnerName={nameOf(pair.suggestedPartnerId)}
-          onStart={(repositoryId) => void pair.start(repositoryId)}
-          onClose={pair.close}
-        />
-      )}
+      <AnimatePresence>
+        {pair.open && pair.suggestedPartnerId && (
+          <PairSessionModal
+            workspaceId={workspaceId}
+            partnerName={nameOf(pair.suggestedPartnerId)}
+            onStart={(repositoryId) => void pair.start(repositoryId)}
+            onClose={pair.close}
+          />
+        )}
+      </AnimatePresence>
 
       {/* 3D world */}
       <Canvas
@@ -1499,9 +1670,9 @@ export function WorldCanvas({
         }}
         events={safePointerEvents}
         className="w-full h-full"
-        onCreated={() => setWorldReady(true)}
       >
         <color attach="background" args={["#cdd8e3"]} />
+        <AssetGate onReady={handleWorldReady} />
         <ThumbnailCapture workspaceId={workspaceId} />
 
         <Suspense fallback={null}>
@@ -1518,7 +1689,7 @@ export function WorldCanvas({
 
         <PlayerController
           playerRef={playerGroupRef}
-          cameraYaw={cameraYaw}
+          yawRef={sharedYaw}
           obstacles={PLAYER_COLLIDERS}
           spawn={SPAWN}
           modelUrl={playerModel}
@@ -1527,23 +1698,7 @@ export function WorldCanvas({
           badgeColor={
             STATUS_DOT[myPresence?.status ?? "online"] ?? "bg-emerald-500"
           }
-          disabled={
-            !worldReady ||
-            tourOpen ||
-            chatOpen ||
-            statusInputFocused ||
-            membersOpen ||
-            statusMenu ||
-            openMemberId !== null ||
-            workspaceOpen ||
-            ciOpen ||
-            chillScreenOpen ||
-            gamesOpen ||
-            vendingOpen ||
-            reviewerOpen ||
-            fleetOpen ||
-            whiteboardId !== null
-          }
+          disabled={anyOverlayOpen}
           onRoomChange={handleRoomChange}
           onPositionUpdate={(pos) => setPlayerPos(pos)}
           roomAt={roomAt}
@@ -1552,6 +1707,11 @@ export function WorldCanvas({
           onRealtimeMove={handleRealtimeMove}
           coffee={coffeeActive}
           firstPerson={fpp}
+          sitSpots={CHAIR_SIT_SPOTS}
+          sitToggleRef={sitToggleRef}
+          onSitChange={(seated) => {
+            setSitting(seated);
+          }}
         />
 
         <RemoteAvatars
@@ -1559,6 +1719,7 @@ export function WorldCanvas({
           myUserId={myUserId}
           pills={nearbyTokens}
           bubbles={bubblesWithBot}
+          groundAt={supportAt}
           onAvatarClick={(id) => {
             if (id !== REVIEWER_BOT_ID) setOpenMemberId(id);
           }}
@@ -1573,7 +1734,7 @@ export function WorldCanvas({
         <ThirdPersonCamera
           targetRef={playerGroupRef}
           colliders={CAMERA_COLLIDERS}
-          onYawChange={setCameraYaw}
+          sharedYaw={sharedYaw}
           mode={fpp ? "first" : "third"}
           onPointerLockExit={() => setFpp(false)}
         />
@@ -1583,85 +1744,111 @@ export function WorldCanvas({
       </Canvas>
 
       {/* Member modal */}
-      <MemberDetailPopup
-        workspaceId={workspaceId}
-        myUserId={myUserId}
-        client={client}
-        developerId={openMemberId}
-        onClose={() => setOpenMemberId(null)}
-      />
-
-      {/* Chat panel */}
-      {chatOpen && (
-        <div className="pointer-events-auto absolute bottom-4 right-4 z-20">
-          <ChatPanel
+      <AnimatePresence>
+        {openMemberId && (
+          <MemberDetailPopup
             workspaceId={workspaceId}
             myUserId={myUserId}
             client={client}
-            presence={avatars}
-            onClose={() => setChatOpen(false)}
+            developerId={openMemberId}
+            onClose={() => setOpenMemberId(null)}
           />
-        </div>
-      )}
+        )}
+      </AnimatePresence>
+
+      {/* Chat panel */}
+      <AnimatePresence>
+        {chatOpen && (
+          <div className="pointer-events-auto absolute bottom-4 right-4 z-20">
+            <ChatPanel
+              workspaceId={workspaceId}
+              myUserId={myUserId}
+              client={client}
+              presence={avatars}
+              onClose={() => setChatOpen(false)}
+            />
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Desk monitor — "open workspace" */}
-      {workspaceOpen && (
-        <WorkspaceModal
-          workspaceId={workspaceId}
-          myUserId={myUserId}
-          client={client}
-          onClose={() => setWorkspaceOpen(false)}
-        />
-      )}
+      <AnimatePresence>
+        {workspaceOpen && (
+          <WorkspaceModal
+            workspaceId={workspaceId}
+            myUserId={myUserId}
+            client={client}
+            onClose={() => setWorkspaceOpen(false)}
+          />
+        )}
+      </AnimatePresence>
 
       {/* Engineering CI wall screen */}
-      {ciOpen && (
-        <CiDashboardModal
-          workspaceId={workspaceId}
-          client={client}
-          onClose={() => setCiOpen(false)}
-        />
-      )}
+      <AnimatePresence>
+        {ciOpen && (
+          <CiDashboardModal
+            workspaceId={workspaceId}
+            client={client}
+            onClose={() => setCiOpen(false)}
+          />
+        )}
+      </AnimatePresence>
 
       {/* Whiteboard — shared canvas for the board you pressed E on */}
-      {whiteboardId && (
-        <WhiteboardModal
-          boardId={whiteboardId}
-          client={client}
-          onClose={() => setWhiteboardId(null)}
-        />
-      )}
+      <AnimatePresence>
+        {whiteboardId && (
+          <WhiteboardModal
+            boardId={whiteboardId}
+            client={client}
+            onClose={() => setWhiteboardId(null)}
+          />
+        )}
+      </AnimatePresence>
 
       {/* Chill Space shared screen + arcade station */}
-      {chillScreenOpen && (
-        <ChillScreenModal
-          client={client}
-          state={chill.state}
-          onClose={() => setChillScreenOpen(false)}
-        />
-      )}
-      {gamesOpen && (
-        <GamesModal
-          myUserId={myUserId}
-          members={chat.members}
-          games={games}
-          onClose={() => setGamesOpen(false)}
-        />
-      )}
-      {vendingOpen && <VendingModal vending={vending} onClose={closeVending} />}
-      {reviewerOpen && (
-        <ReviewerModal
-          workspaceId={workspaceId}
-          onClose={() => setReviewerOpen(false)}
-        />
-      )}
-      {fleetOpen && (
-        <FleetModal
-          workspaceId={workspaceId}
-          client={client}
-          onClose={() => setFleetOpen(false)}
-        />
-      )}
+      <AnimatePresence>
+        {chillScreenOpen && (
+          <ChillScreenModal
+            client={client}
+            state={chill.state}
+            queue={chill.queue}
+            currentItemId={chill.currentItemId}
+            onClose={() => setChillScreenOpen(false)}
+          />
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {gamesOpen && (
+          <GamesModal
+            myUserId={myUserId}
+            members={chat.members}
+            games={games}
+            onClose={() => setGamesOpen(false)}
+          />
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {vendingOpen && (
+          <VendingModal vending={vending} onClose={closeVending} />
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {reviewerOpen && (
+          <ReviewerModal
+            workspaceId={workspaceId}
+            onClose={() => setReviewerOpen(false)}
+          />
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {fleetOpen && (
+          <FleetModal
+            workspaceId={workspaceId}
+            client={client}
+            onClose={() => setFleetOpen(false)}
+          />
+        )}
+      </AnimatePresence>
 
       {/* Proximity voice/video — only when near other members.
           Bottom-center column: video tiles above the mic/camera controls. */}

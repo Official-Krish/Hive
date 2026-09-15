@@ -787,6 +787,29 @@ export const M = {
     map: carpetTex ?? undefined,
     roughness: 0.98,
   }),
+  // Chill Space rug — warmer tint so the corner reads as a lounge nook.
+  chillRug: new THREE.MeshStandardMaterial({
+    color: "#a08062",
+    map: carpetTex ?? undefined,
+    roughness: 0.98,
+  }),
+  // Plush bean-bag fabrics — solid warm hues (no new textures, shared singletons).
+  puffA: new THREE.MeshStandardMaterial({
+    color: "#c06a3e",
+    roughness: 0.95,
+  }),
+  puffB: new THREE.MeshStandardMaterial({
+    color: "#d9a441",
+    roughness: 0.95,
+  }),
+  puffC: new THREE.MeshStandardMaterial({
+    color: "#35706a",
+    roughness: 0.95,
+  }),
+  puffD: new THREE.MeshStandardMaterial({
+    color: "#b0506b",
+    roughness: 0.95,
+  }),
   felt: new THREE.MeshStandardMaterial({
     color: "#ffffff",
     map: feltTex ?? undefined,

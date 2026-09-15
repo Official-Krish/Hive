@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { prisma, EventType, type Prisma } from "@hive/db";
 import { WATCHDOG_DEFAULTS } from "@hive/types";
+import { publishAlert, type AlertBroadcast } from "@hive/queue";
 import { env } from "../config/env";
 import { logger } from "../lib/logger";
 
@@ -42,6 +43,7 @@ async function ensureOpen(
   message: string,
   metadata: Record<string, unknown>,
   open: OpenAlert[],
+  created: AlertBroadcast[],
 ): Promise<void> {
   const existing = open.find((a) => metaKey(a.metadata) === key);
   if (existing) {
@@ -62,7 +64,7 @@ async function ensureOpen(
     return;
   }
   if (open.length >= WATCHDOG_DEFAULTS.maxOpenPerType) return;
-  await prisma.alert.create({
+  const row = await prisma.alert.create({
     data: {
       workspaceId,
       severity,
@@ -70,12 +72,20 @@ async function ensureOpen(
       message,
       metadata: metadata as Prisma.InputJsonValue,
     },
+    select: { id: true },
   });
   open.push({
-    id: "",
+    id: row.id,
     type,
     metadata,
     createdAt: new Date(),
+  });
+  created.push({
+    alertId: row.id,
+    workspaceId,
+    alertType: type,
+    severity: severity === "CRITICAL" ? "critical" : "warning",
+    message,
   });
 }
 
@@ -97,6 +107,7 @@ async function resolveStale(
 async function checkStuckSessions(
   workspaceId: string,
   now: Date,
+  created: AlertBroadcast[],
 ): Promise<void> {
   const warnMs = env.WATCHDOG_STUCK_MIN * 60_000;
   const critMs = warnMs * 3;
@@ -150,12 +161,17 @@ async function checkStuckSessions(
         stuckMinutes: minutes,
       },
       open,
+      created,
     );
   }
   await resolveStale(open, live);
 }
 
-async function checkTokenBurn(workspaceId: string, now: Date): Promise<void> {
+async function checkTokenBurn(
+  workspaceId: string,
+  now: Date,
+  created: AlertBroadcast[],
+): Promise<void> {
   const windowStart = new Date(
     now.getTime() - WATCHDOG_DEFAULTS.burnWindowMin * 60_000,
   );
@@ -203,12 +219,16 @@ async function checkTokenBurn(workspaceId: string, now: Date): Promise<void> {
         windowCostCents,
       },
       open,
+      created,
     );
   }
   await resolveStale(open, live);
 }
 
-async function checkFailingStreaks(workspaceId: string): Promise<void> {
+async function checkFailingStreaks(
+  workspaceId: string,
+  created: AlertBroadcast[],
+): Promise<void> {
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
   const runs = await prisma.testRun.findMany({
     where: {
@@ -261,12 +281,17 @@ async function checkFailingStreaks(workspaceId: string): Promise<void> {
         consecutiveFailures: streak,
       },
       open,
+      created,
     );
   }
   await resolveStale(open, live);
 }
 
-async function checkBudgets(workspaceId: string, now: Date): Promise<void> {
+async function checkBudgets(
+  workspaceId: string,
+  now: Date,
+  created: AlertBroadcast[],
+): Promise<void> {
   const budget = await prisma.usageBudget.findUnique({
     where: { workspaceId },
   });
@@ -304,6 +329,7 @@ async function checkBudgets(workspaceId: string, now: Date): Promise<void> {
         pct: Math.round(pct),
       },
       open,
+      created,
     );
   } else if (pct >= budget.alertAtPct) {
     live.add(period);
@@ -320,6 +346,7 @@ async function checkBudgets(workspaceId: string, now: Date): Promise<void> {
         pct: Math.round(pct),
       },
       open,
+      created,
     );
   }
   await resolveStale(open, live);
@@ -329,10 +356,15 @@ export async function checkWorkspace(
   workspaceId: string,
   now: Date = new Date(),
 ): Promise<void> {
-  await checkStuckSessions(workspaceId, now);
-  await checkTokenBurn(workspaceId, now);
-  await checkFailingStreaks(workspaceId);
-  await checkBudgets(workspaceId, now);
+  const created: AlertBroadcast[] = [];
+  await checkStuckSessions(workspaceId, now, created);
+  await checkTokenBurn(workspaceId, now, created);
+  await checkFailingStreaks(workspaceId, created);
+  await checkBudgets(workspaceId, now, created);
+  // Instant fan-out to connected dashboards (polling covers the rest).
+  for (const event of created) {
+    await publishAlert(event, logger);
+  }
 }
 
 export async function handler(): Promise<void> {

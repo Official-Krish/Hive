@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import type * as THREE from "three";
 import { Instances, Instance } from "@react-three/drei";
 import { InstancedFurniture } from "../InstancedFurniture";
+import { KitPiece } from "./KitInstances";
 import { M, floorFor } from "./materials";
 import { plateTexture } from "./signage";
 import {
@@ -17,7 +18,6 @@ import {
   L2_MONITORS,
   L2_SOFAS,
   L2_TABLES,
-  L2_PLANTS,
   L2_Y,
   POD_H,
   MEZZ,
@@ -169,25 +169,8 @@ function ExecDesk({
         <boxGeometry args={[0.34, 0.24, 0.02]} />
         <primitive object={M.screen} attach="material" />
       </mesh>
-      {/* task chair */}
-      <group position={[0, 0, 1.05]}>
-        <mesh position={[0, 0.45, 0]} castShadow>
-          <boxGeometry args={[0.58, 0.1, 0.56]} />
-          <primitive object={M.chairFabric} attach="material" />
-        </mesh>
-        <mesh position={[0, 0.78, 0.24]} rotation={[0.14, 0, 0]} castShadow>
-          <boxGeometry args={[0.54, 0.62, 0.08]} />
-          <primitive object={M.chairFabric} attach="material" />
-        </mesh>
-        <mesh position={[0, 0.22, 0]}>
-          <cylinderGeometry args={[0.05, 0.05, 0.44, 10]} />
-          <primitive object={M.blackAnodized} attach="material" />
-        </mesh>
-        <mesh position={[0, 0.03, 0]}>
-          <cylinderGeometry args={[0.32, 0.32, 0.06, 12]} />
-          <primitive object={M.metalDark} attach="material" />
-        </mesh>
-      </group>
+      {/* task chair (kit, CC0) */}
+      <KitPiece model="taskChair" position={[0, 0, 1.05]} />
       {/* credenza behind */}
       <mesh position={[0, 0.32, -1.35]} castShadow receiveShadow>
         <boxGeometry args={[2.2, 0.64, 0.5]} />
@@ -232,24 +215,12 @@ function PodTable({
       </mesh>
       {cols.map((x) =>
         [-1, 1].map((s) => (
-          <group key={`${x}-${s}`} position={[x, 0, s * (d / 2 + 0.42)]}>
-            <mesh position={[0, 0.45, 0]} castShadow>
-              <boxGeometry args={[0.5, 0.09, 0.48]} />
-              <primitive object={M.chairFabric} attach="material" />
-            </mesh>
-            <mesh
-              position={[0, 0.75, s * 0.2]}
-              rotation={[s * -0.12, 0, 0]}
-              castShadow
-            >
-              <boxGeometry args={[0.48, 0.56, 0.07]} />
-              <primitive object={M.chairFabric} attach="material" />
-            </mesh>
-            <mesh position={[0, 0.21, 0]}>
-              <cylinderGeometry args={[0.045, 0.045, 0.42, 8]} />
-              <primitive object={M.blackAnodized} attach="material" />
-            </mesh>
-          </group>
+          <KitPiece
+            key={`${x}-${s}`}
+            model="meetingChair"
+            position={[x, 0, s * (d / 2 + 0.42)]}
+            rotation={[0, s > 0 ? 0 : Math.PI, 0]}
+          />
         )),
       )}
     </group>
@@ -435,7 +406,6 @@ export function Level2() {
         desks={L2_DESKS}
         chairs={L2_DESK_CHAIRS}
         monitors={L2_MONITORS}
-        plants={L2_PLANTS}
         sofas={L2_SOFAS}
         coffeeTables={L2_TABLES}
       />

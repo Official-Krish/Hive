@@ -741,6 +741,23 @@ export const CHILL_LAMPS: Vec2[] = [
   [-19, -18],
   [-9, -18],
 ];
+/** Low media console under the screen: [x, z, width, depth]. Top stays below
+ *  y≈0.6 so it never occludes the YouTube projection plane. */
+export const CHILL_CONSOLE: [number, number, number, number] = [
+  -14, -19.2, 6.4, 0.5,
+];
+/** Round side tables flanking the front puff: [x, z]. */
+export const CHILL_TABLES: Vec2[] = [
+  [-16.2, -12.4],
+  [-11.8, -12.4],
+];
+/** Floor plant softening the west corner: [x, z]. */
+export const CHILL_PLANT: Vec2 = [-19.6, -12.2];
+/** Felt acoustic panels on the screen wall (north face): [x, width]. */
+export const CHILL_PANELS: [number, number][] = [
+  [-18.6, 1.1],
+  [-9.4, 1.1],
+];
 
 // --- Server racks (AI lab) --------------------------------------------------
 export const SERVER_RACKS: TransformData[] = (() => {
@@ -1505,10 +1522,19 @@ export const PLAYER_COLLIDERS: AABB[] = [
   ...propBoxes(L2_TABLES, 0.8, 0.5, L2_Y),
   ...propBoxes(
     CHILL_SEATS.map(([x, z]) => ({ position: [x, 0, z] })),
-    0.34,
-    0.34,
+    0.46,
+    0.46,
   ),
   ...CHILL_LAMPS.map(([x, z]) => rect(x, z, 0.12, 0.12, 0, 2.4)),
+  rect(
+    CHILL_CONSOLE[0],
+    CHILL_CONSOLE[1],
+    CHILL_CONSOLE[2] / 2,
+    CHILL_CONSOLE[3] / 2,
+    0,
+    0.6,
+  ),
+  ...CHILL_TABLES.map(([x, z]) => rect(x, z, 0.34, 0.34, 0, 0.5)),
   rect(-7, -15, 0.5, 0.4, 0, 2.0),
 ];
 

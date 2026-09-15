@@ -3,6 +3,7 @@ import { Check, X, Zap } from "lucide-react";
 import { useMapOverlay } from "@/hooks/useRealtimeMap";
 import { type MapOverlay } from "@/lib/http";
 import { formatDuration, formatTokens, statusLabel, timeAgo } from "./chrome";
+import { WModal } from "./motion";
 import { cn } from "@/lib/utils";
 
 const LABEL =
@@ -49,26 +50,15 @@ export function MemberDetailPopup({
   if (!developerId) return null;
 
   return (
-    <div
-      className="pointer-events-auto fixed inset-0 z-40 grid place-items-center bg-black/25 p-4 backdrop-blur-[2px]"
-      onClick={onClose}
-      role="dialog"
-      aria-modal="true"
-      aria-label="Member details"
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md overflow-hidden rounded-2xl bg-[#f4f2ed] ring-1 ring-black/[0.08]"
-      >
-        <MemberModalInner
-          workspaceId={workspaceId}
-          myUserId={myUserId}
-          client={client}
-          developerId={developerId}
-          onClose={onClose}
-        />
-      </div>
-    </div>
+    <WModal label="Member details" onClose={onClose}>
+      <MemberModalInner
+        workspaceId={workspaceId}
+        myUserId={myUserId}
+        client={client}
+        developerId={developerId}
+        onClose={onClose}
+      />
+    </WModal>
   );
 }
 
@@ -91,10 +81,11 @@ function MemberModalInner({
   const isMe = developerId === myUserId;
   const title = isMe ? "You" : (data?.developer.name ?? "Member");
 
-  // Live session-duration ticker.
+  // Live session-duration ticker. 1s with tabular numerals — cheaper than
+  // the perceived lie of a 30s-stale duration.
   const [, setNow] = useState(0);
   useEffect(() => {
-    const t = setInterval(() => setNow((n) => n + 1), 30_000);
+    const t = setInterval(() => setNow((n) => n + 1), 1000);
     return () => clearInterval(t);
   }, []);
 
@@ -146,7 +137,7 @@ function MemberModalInner({
           </div>
         )}
         {overlay.error && !data && (
-          <div className="rounded-lg border border-rose-400/25 bg-rose-500/[0.07] px-3.5 py-3 text-[13px] text-rose-100/90">
+          <div className="rounded-lg border border-rose-600/25 bg-rose-600/[0.06] px-3.5 py-3 text-[13px] text-rose-800">
             Couldn't load this member's activity.{" "}
             <button
               type="button"
