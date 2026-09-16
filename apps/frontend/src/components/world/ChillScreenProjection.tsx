@@ -57,7 +57,11 @@ export function ChillScreenProjection({
     chillScreenOverlay.videoActive = active;
   });
 
-  if (!mounted || !active) return null;
+  // NOTE: the host stays mounted whenever a video exists and only hides via
+  // CSS when inactive. Returning null on inactive would unmount the <Html>
+  // subtree and destroy the reparented iframe with it, permanently killing
+  // the player object (e.g. walking out of Chill Space and back in).
+  if (!mounted) return null;
   return (
     <Html
       transform

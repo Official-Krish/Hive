@@ -153,6 +153,20 @@ export function useChillMedia(
             setPlayerMounted(true);
           },
           onStateChange: (ev) => {
+            if (ev.data === YT.PlayerState.PLAYING) {
+              // Autoplay starts muted (browser policy blocks unmuted starts
+              // with no gesture left after the server round-trip). Go audible
+              // as soon as playback actually runs, if this client should
+              // hear it — unmuting a running player needs no gesture.
+              if (inChillRef.current && volumeRef.current > 0) {
+                try {
+                  p.unMute();
+                } catch {
+                  /* player torn down mid-callback */
+                }
+              }
+              return;
+            }
             if (ev.data !== YT.PlayerState.ENDED) return;
             const current = stateRef.current;
             const itemId = current.queueItemId;
@@ -174,52 +188,121 @@ export function useChillMedia(
     };
   }, []);
 
-  // Reconcile the player with the latest server state.
+  // Reconcile the player with the latest server state. Every player call is
+  // guarded individually: on a fresh/not-yet-ready iframe any single getter
+  // can throw, and one throw must never abort the load itself (that silent
+  // death is what left late joiners staring at a blank screen until the next
+  // broadcast). Unknown state is treated as "needs load/play".
   useEffect(() => {
     const p = playerRef.current;
-    if (!p || !state.videoId) return;
+    if (!p || !playerMounted || !state.videoId) return;
     const targetVideo = state.videoId;
-    void loadYouTubeApi().then(() => {
+    let cancelled = false;
+    let timer: number | undefined;
+    let retries = 0;
+
+    const attempt = () => {
+      if (cancelled) return;
       const player = playerRef.current;
       if (!player) return;
-      const wantPlaying =
-        stateRef.current.isPlaying && !!stateRef.current.videoId;
+      const snap = stateRef.current;
+      // Superseded by a newer broadcast — let that run handle it.
+      if (!snap.videoId || snap.videoId !== targetVideo) return;
+      const wantPlaying = snap.isPlaying && !!snap.videoId;
+      const fail = () => {
+        // Bounded retry for the narrow window where the player object
+        // exists but the iframe isn't callable yet.
+        if (!cancelled && retries++ < 4) {
+          window.clearTimeout(timer);
+          timer = window.setTimeout(attempt, 1500);
+        }
+      };
+      let loadedId: string | null = null;
       try {
-        const actual = player.getPlayerState();
-        const videoChanged = player.getVideoData()?.video_id !== targetVideo;
-
-        if (videoChanged) {
+        loadedId = player.getVideoData()?.video_id ?? null;
+      } catch {
+        // Unreadable (fresh iframe) — null already means "needs load".
+      }
+      try {
+        if (loadedId !== targetVideo) {
           endedSentForRef.current = null;
           const video = {
             videoId: targetVideo,
-            startSeconds: stateRef.current.playheadMs / 1000,
+            startSeconds: snap.playheadMs / 1000,
             suggestedQuality: "large" as const,
           };
-          // Loading starts playback immediately. Cue a paused shared video so
-          // the iframe cannot report an unintended play event back to peers.
-          if (wantPlaying) player.loadVideoById(video);
-          else player.cueVideoById(video);
+          // loadVideoById starts playback immediately. Mute first: the
+          // server event arrives with no click gesture in context, so an
+          // unmuted start is blocked and the UI would show "playing" over a
+          // silent, stalled player. The PLAYING handler above unmutes once
+          // audible. Cue a paused shared video so the iframe cannot report
+          // an unintended play event back to peers.
+          if (wantPlaying) {
+            player.mute();
+            player.loadVideoById(video);
+          } else player.cueVideoById(video);
         } else {
-          const expected = stateRef.current.isPlaying
-            ? stateRef.current.playheadMs + (Date.now() - stateRef.current.at)
-            : stateRef.current.playheadMs;
-          const currentMs = player.getCurrentTime() * 1000;
-          if (Math.abs(currentMs - expected) > 120 && !videoChanged) {
-            player.seekTo(expected / 1000, true);
+          const expected = snap.isPlaying
+            ? snap.playheadMs + (Date.now() - snap.at)
+            : snap.playheadMs;
+          let currentMs = Number.NaN;
+          try {
+            currentMs = player.getCurrentTime() * 1000;
+          } catch {
+            /* not readable yet — skip the drift check, not the sync */
+          }
+          if (
+            Number.isFinite(currentMs) &&
+            Math.abs(currentMs - expected) > 120
+          ) {
+            try {
+              player.seekTo(expected / 1000, true);
+            } catch {
+              /* seek on a loading player — drift check retries next run */
+            }
           }
         }
 
+        let actual = -2;
+        try {
+          actual = player.getPlayerState();
+        } catch {
+          actual = -2;
+        }
         if (wantPlaying && actual !== YT.PlayerState.PLAYING) {
-          player.playVideo();
+          try {
+            player.playVideo();
+          } catch {
+            fail();
+          }
         } else if (!wantPlaying && actual === YT.PlayerState.PLAYING) {
-          player.pauseVideo();
+          try {
+            player.pauseVideo();
+          } catch {
+            fail();
+          }
         }
       } catch {
-        /* player not ready yet */
+        fail();
       }
-    });
-    // Depend only on the media identity + play flag; run when synced by events.
-  }, [state.videoId, state.isPlaying, state.playheadMs, state.at]);
+    };
+
+    attempt();
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+    // Depend on media identity + play flag + player readiness: state can
+    // arrive (e.g. hello snapshot for a late joiner) before the YT player
+    // is ready, and the player can become ready after state arrived — both
+    // orders must converge on the next run.
+  }, [
+    state.videoId,
+    state.isPlaying,
+    state.playheadMs,
+    state.at,
+    playerMounted,
+  ]);
 
   // Audio gate: audible only inside the Chill Space.
   useEffect(() => {
