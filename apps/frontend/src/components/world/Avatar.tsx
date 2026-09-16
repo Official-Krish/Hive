@@ -15,6 +15,17 @@ import { ASSET_BASE_URL } from "../../lib/config";
 
 /** Uniform scale applied to every avatar GLB. */
 const SCALE = 0.55;
+/** Mixamo FBX files are authored in centimeters — scale to meters. */
+const FBX_SCALE = 0.01;
+/** Default model (also the GLB fallback while an FBX URL loads). */
+const DEFAULT_MODEL = `${ASSET_BASE_URL}/avatars/male/hive_male_01.glb`;
+/** Animation URL reused as the FBX-hook fallback for GLB models (preloaded). */
+const IDLE_URL = `${ASSET_BASE_URL}/Animations/idle.fbx`;
+
+/** True for FBX characters (Mixamo downloads, cm units, namespaced bones). */
+export function isFbxModelUrl(url: string | null | undefined): boolean {
+  return !!url && /\.fbx($|[?#])/i.test(url.trim());
+}
 
 /**
  * Stride matching (kills moonwalk foot-slide). The clips are in-place, so
@@ -208,7 +219,7 @@ function Nameplate({
 }
 
 export default function Avatar({
-  modelUrl = `${ASSET_BASE_URL}/avatars/male/hive_male_01.glb`,
+  modelUrl = DEFAULT_MODEL,
   motionRef,
   position = [0, 0, 0],
   rotation = [0, 0, 0],
@@ -220,7 +231,15 @@ export default function Avatar({
   hideNameplate = false,
   sitting: sittingProp = false,
 }: AvatarProps) {
-  const { scene } = useGLTF(modelUrl);
+  // Dual loader: GLB avatars go through useGLTF, FBX characters through
+  // useFBX. Both hooks stay unconditional (rules of hooks) — only the URL
+  // varies, and each fallback is preloaded elsewhere so the unused branch
+  // never triggers an extra fetch.
+  const isFbx = isFbxModelUrl(modelUrl);
+  const glb = useGLTF(isFbx ? DEFAULT_MODEL : modelUrl);
+  const fbxModel = useFBX(isFbx ? modelUrl : IDLE_URL);
+  const scene = (isFbx ? fbxModel : glb.scene) as THREE.Group;
+  const modelScale = isFbx ? FBX_SCALE : SCALE;
   const idleFBX = useFBX(`${ASSET_BASE_URL}/Animations/idle.fbx`);
   const runFBX = useFBX(`${ASSET_BASE_URL}/Animations/run.fbx`);
   const jumpFBX = useFBX(`${ASSET_BASE_URL}/Animations/jump.fbx`);
@@ -248,7 +267,29 @@ export default function Avatar({
     };
   }, []);
 
-  const clonedScene = useMemo(() => SkeletonUtils.clone(scene), [scene]);
+  const clonedScene = useMemo(() => {
+    const cloned = SkeletonUtils.clone(scene);
+
+    if (isFbx) {
+      // FBX is static — no animation/retargeting.
+      cloned.scale.setScalar(FBX_SCALE);
+
+      // Center horizontally and place feet on the ground.
+      cloned.updateWorldMatrix(true, true);
+
+      const box = new THREE.Box3().setFromObject(cloned);
+
+      if (!box.isEmpty()) {
+        const center = box.getCenter(new THREE.Vector3());
+
+        cloned.position.x -= center.x;
+        cloned.position.z -= center.z;
+        cloned.position.y -= box.min.y;
+      }
+    }
+
+    return cloned;
+  }, [scene, isFbx]);
 
   const mixerRef = useRef<THREE.AnimationMixer | null>(null);
   const actionsRef = useRef<{
@@ -265,8 +306,8 @@ export default function Avatar({
   const runWRef = useRef(0); // run weight
   const jumpWRef = useRef(0); // jump overlay weight
   const sitWRef = useRef(0); // seated weight (overrides locomotion)
-  // Gait-cycle duration read off the run clip.
-  const gaitRef = useRef({ runDur: 0 });
+  // Gait-cycle durations read off the run/walk clips.
+  const gaitRef = useRef({ runDur: 0, walkDur: 0 });
   const jumpingRef = useRef(false);
   const lastJumpSeq = useRef(0);
 
@@ -277,7 +318,9 @@ export default function Avatar({
   const [labelY, setLabelY] = useState(1.9);
 
   // --- Retarget FBX clips onto the GLB skeleton --------------------------------
+  // FBX characters are static by design — no mixer, no track matching.
   useEffect(() => {
+    if (isFbx) return;
     let skinnedMesh: THREE.SkinnedMesh | null = null;
     clonedScene.traverse((obj) => {
       if (obj instanceof THREE.SkinnedMesh) skinnedMesh = obj;
@@ -306,7 +349,7 @@ export default function Avatar({
     // Measure the rendered height so the nameplate clears the head. The box is
     // taken in the parent's space (scale already applied by the prop below), and
     // feet sit at y=0, so max.y is the head height directly.
-    clonedScene.scale.setScalar(SCALE);
+    clonedScene.scale.setScalar(modelScale);
     clonedScene.updateWorldMatrix(true, true);
     const bounds = new THREE.Box3().setFromObject(clonedScene);
     if (Number.isFinite(bounds.max.y)) {
@@ -562,7 +605,7 @@ export default function Avatar({
     // Sitting.fbx ships a single "mixamo.com" take — longest-clip fallback
     // picks it; rebind maps its rest pose onto the avatar stance.
     const sitClip = sitFBX ? prepareClip("Sitting", sitFBX, true) : null;
-    gaitRef.current = { runDur: runClip?.duration ?? 0 };
+    gaitRef.current = { runDur: runClip?.duration ?? 0, walkDur: 0 };
 
     const mixer = new THREE.AnimationMixer(clonedScene);
     mixerRef.current = mixer;
@@ -613,7 +656,116 @@ export default function Avatar({
       mixer.uncacheRoot(clonedScene);
       mixerRef.current = null;
     };
-  }, [clonedScene, idleFBX, runFBX, jumpFBX, sitFBX]);
+  }, [clonedScene, idleFBX, runFBX, jumpFBX, sitFBX, isFbx]);
+
+  // --- FBX built-in takes (new characters only; GLB path above untouched) ----
+  // The file ships its own Idle/Walk/Run on its own rig, so no retargeting:
+  // bind quaternion tracks straight onto the cloned bones. Position/scale
+  // tracks are dropped (root motion would fight the controller — same rule
+  // as the GLB path). No sit take: seating degrades to idle via the shared
+  // guards (sitT requires actions.sit).
+  useEffect(() => {
+    if (!isFbx) return;
+    clonedScene.traverse((obj) => {
+      // Shadows aren't inherited by children of <primitive>, so set them here.
+      const m = obj as THREE.Mesh;
+      if (m.isMesh) {
+        m.castShadow = true;
+        m.receiveShadow = false;
+        if (m.geometry) {
+          m.geometry.computeBoundingSphere();
+          const sphere = m.geometry.boundingSphere;
+          if (sphere) sphere.radius *= 1.6;
+          m.frustumCulled = true;
+        } else {
+          m.frustumCulled = false;
+        }
+      }
+    });
+    clonedScene.updateWorldMatrix(true, true);
+    const bounds = new THREE.Box3().setFromObject(clonedScene);
+    if (Number.isFinite(bounds.max.y)) {
+      setLabelY(bounds.max.y + 0.22);
+    }
+
+    const bones = new Set<string>();
+    clonedScene.traverse((obj) => {
+      if ((obj as THREE.Bone).isBone && obj.name) bones.add(obj.name);
+    });
+    const takes = (fbxModel.animations ?? []) as THREE.AnimationClip[];
+    const pick = (re: RegExp) => takes.find((c) => re.test(c.name)) ?? null;
+    const toClip = (take: THREE.AnimationClip | null, label: string) => {
+      if (!take) return null;
+      const tracks: THREE.KeyframeTrack[] = [];
+      for (const track of take.tracks) {
+        const dot = track.name.lastIndexOf(".");
+        if (dot < 0) continue;
+        const node = track.name.slice(0, dot);
+        const property = track.name.slice(dot + 1);
+        // Quaternion-only, skeleton bones only — never mutate the cached FBX.
+        if (property !== "quaternion" || !bones.has(node)) continue;
+        tracks.push(
+          new THREE.QuaternionKeyframeTrack(
+            `${node}.${property}`,
+            [...track.times],
+            track.values.slice(0),
+          ),
+        );
+      }
+      if (tracks.length === 0) {
+        console.warn(`[Avatar] no bindable tracks in FBX take "${take.name}"`);
+        return null;
+      }
+      return new THREE.AnimationClip(label, take.duration, tracks);
+    };
+
+    const idleClip = toClip(
+      pick(/idle_neutral/i) ?? pick(/\|idle$/i) ?? pick(/idle/i),
+      "Idle",
+    );
+    const walkClip = toClip(pick(/\|walk$/i) ?? pick(/walk/i), "Walk");
+    const runClip = toClip(pick(/\|run$/i) ?? pick(/run/i), "Run");
+
+    // No sitting for FBX: Sitting.fbx is authored for a foreign (Mixamo)
+    // rig and manual bone-by-bone retargeting produced a broken seat pose.
+    // With no actions.sit, seating degrades to idle via the shared guards.
+    gaitRef.current = {
+      runDur: runClip?.duration ?? 0,
+      walkDur: walkClip?.duration ?? 0,
+    };
+
+    const mixer = new THREE.AnimationMixer(clonedScene);
+    mixerRef.current = mixer;
+    const actions: typeof actionsRef.current = {};
+    if (idleClip) {
+      actions.idle = mixer.clipAction(idleClip);
+      actions.idle.setLoop(THREE.LoopRepeat, Infinity);
+      actions.idle.play();
+    }
+    if (walkClip) {
+      actions.walk = mixer.clipAction(walkClip);
+      actions.walk.setLoop(THREE.LoopRepeat, Infinity);
+      actions.walk.play();
+    }
+    if (runClip) {
+      actions.run = mixer.clipAction(runClip);
+      actions.run.setLoop(THREE.LoopRepeat, Infinity);
+      actions.run.play();
+    }
+    actionsRef.current = actions;
+    currentActionRef.current = actions.idle ?? null;
+
+    // Start weights: full idle.
+    actions.idle?.setEffectiveWeight(1);
+    actions.walk?.setEffectiveWeight(0);
+    actions.run?.setEffectiveWeight(0);
+
+    return () => {
+      mixer.stopAllAction();
+      mixer.uncacheRoot(clonedScene);
+      mixerRef.current = null;
+    };
+  }, [clonedScene, fbxModel, isFbx]);
 
   // --- Legacy crossfade for static avatars (no motionRef) ----------------------
   useEffect(() => {
@@ -716,10 +868,18 @@ export default function Avatar({
     // Stride-matched playback: step frequency follows ground speed so feet
     // plant instead of glide. The same run gait is simply slower while walking.
     const v = s * AV_RUN_SPEED;
-    const { runDur } = gaitRef.current;
+    const { runDur, walkDur } = gaitRef.current;
     if (runDur > 0) {
       actions.run.setEffectiveTimeScale(
         THREE.MathUtils.clamp((v * runDur) / RUN_STRIDE_M, 0.5, 2.6),
+      );
+    }
+    // FBX only (GLB walkDur is always 0): same matching for the built-in
+    // walk take. Walk stride is a rough match for the run constant — tune
+    // per character here if feet visibly slide while walking.
+    if (walkDur > 0 && actions.walk) {
+      actions.walk.setEffectiveTimeScale(
+        THREE.MathUtils.clamp((v * walkDur) / RUN_STRIDE_M, 0.5, 2.6),
       );
     }
   });
@@ -738,7 +898,7 @@ export default function Avatar({
 
   return (
     <group {...groupProps} ref={groupRef}>
-      <primitive object={clonedScene} scale={SCALE} />
+      <primitive object={clonedScene} />
 
       {/* Minimal nameplate floating just above the head. No distanceFactor:
           the label keeps a constant, legible screen size at every zoom level.

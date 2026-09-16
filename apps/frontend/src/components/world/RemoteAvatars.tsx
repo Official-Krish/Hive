@@ -11,9 +11,9 @@ import { ASSET_BASE_URL } from "@/lib/config";
 
 const DEFAULT_AVATAR = `${ASSET_BASE_URL}/avatars/male/hive_male_01.glb`;
 
-/** Only genuine model files reach useGLTF — anything else gets the default. */
+/** Only genuine model files reach the loader — anything else gets the default. */
 function safeModelUrl(url: string | null | undefined): string {
-  if (url && /\.(glb|gltf)$/i.test(url.trim())) return url.trim();
+  if (url && /\.(glb|gltf|fbx)$/i.test(url.trim())) return url.trim();
   return DEFAULT_AVATAR;
 }
 

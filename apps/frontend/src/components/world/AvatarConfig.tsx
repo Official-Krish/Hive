@@ -17,52 +17,52 @@ export const AVATARS = {
     {
       id: "male-adventure",
       name: "Adventure",
-      model: `${ASSET_BASE_URL}/avatars/male/adventure.glb`,
+      model: `${ASSET_BASE_URL}/avatars/male/Adventurer.fbx`,
     },
     {
       id: "male-astronaut",
       name: "Astronaut",
-      model: `${ASSET_BASE_URL}/avatars/male/astronaut.glb`,
+      model: `${ASSET_BASE_URL}/avatars/male/Spacesuit.fbx`,
     },
     {
       id: "male-beach",
       name: "Beach",
-      model: `${ASSET_BASE_URL}/avatars/male/beach.glb`,
+      model: `${ASSET_BASE_URL}/avatars/male/Beach.fbx`,
     },
     {
       id: "male-business",
       name: "Business Man",
-      model: `${ASSET_BASE_URL}/avatars/male/Buisness%20Man.glb`,
+      model: `${ASSET_BASE_URL}/avatars/male/Suit.fbx`,
     },
     {
       id: "male-casual",
       name: "Casual",
-      model: `${ASSET_BASE_URL}/avatars/male/casual.glb`,
+      model: `${ASSET_BASE_URL}/avatars/male/Casual_2.fbx`,
     },
     {
       id: "male-farmer",
       name: "Farmer",
-      model: `${ASSET_BASE_URL}/avatars/male/farmer.glb`,
+      model: `${ASSET_BASE_URL}/avatars/male/Farmer.fbx`,
     },
     {
       id: "male-hoodie",
       name: "Hoodie",
-      model: `${ASSET_BASE_URL}/avatars/male/hoodie.glb`,
+      model: `${ASSET_BASE_URL}/avatars/male/Casual_Hoodie.fbx`,
     },
     {
       id: "male-king",
       name: "King",
-      model: `${ASSET_BASE_URL}/avatars/male/king.glb`,
+      model: `${ASSET_BASE_URL}/avatars/male/King.fbx`,
     },
     {
       id: "male-punk",
       name: "Punk",
-      model: `${ASSET_BASE_URL}/avatars/male/punk.glb`,
+      model: `${ASSET_BASE_URL}/avatars/male/Punk.fbx`,
     },
     {
       id: "male-worker",
       name: "Worker",
-      model: `${ASSET_BASE_URL}/avatars/male/worker.glb`,
+      model: `${ASSET_BASE_URL}/avatars/male/Worker.fbx`,
     },
   ],
   female: [
