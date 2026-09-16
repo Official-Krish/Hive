@@ -63,6 +63,8 @@ export const realtimeMemberSchema = z.object({
   workingOn: z.string().max(60).nullable(),
   status: presenceStatusSchema,
   position: avatarPositionSchema.nullable(),
+  /** Whether the member is currently seated on a chair. Ephemeral — not persisted. */
+  sitting: z.boolean().optional(),
 });
 export type RealtimeMember = z.infer<typeof realtimeMemberSchema>;
 
@@ -307,6 +309,8 @@ export const realtimeEventSchema = z.discriminatedUnion("type", [
     roomId: z.string().nullable(),
     x: z.number(),
     y: z.number(),
+    /** Seated on a chair — remotes play the sit pose. Always sent. */
+    sitting: z.boolean(),
     timestamp: z.number(),
   }),
   z.object({
@@ -473,6 +477,8 @@ export const realtimeClientMessageSchema = z.discriminatedUnion("type", [
     x: z.number(),
     y: z.number(),
     roomId: z.string().min(1).max(100).nullable(),
+    /** Seated on a chair — optional so older clients keep working. */
+    sitting: z.boolean().optional(),
   }),
   z.object({
     type: z.literal("presence.update"),

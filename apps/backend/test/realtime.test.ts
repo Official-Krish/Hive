@@ -273,6 +273,7 @@ describe("realtime hub", () => {
       expect(movedA.x).toBe(12.5);
       expect(movedA.y).toBe(-3);
       expect(movedA.roomId).toBeNull();
+      expect(movedA.sitting).toBe(false);
       expect(movedB.x).toBe(12.5);
 
       const avatar = await prisma.avatar.findFirst({
@@ -280,6 +281,40 @@ describe("realtime hub", () => {
       });
       expect(avatar?.x).toBe(12.5);
       expect(avatar?.y).toBe(-3);
+    } finally {
+      a.close();
+      b.close();
+      await a.waitClose();
+      await b.waitClose();
+    }
+  });
+
+  test("broadcasts sitting pose without persisting it", async () => {
+    const { socket: a } = await connect("Alice", workspaceId);
+    const { socket: b, userId: bobId } = await connect("Bob", workspaceId);
+    try {
+      b.send({
+        type: "avatar.move",
+        x: 1,
+        y: 2,
+        roomId: "Lounge",
+        sitting: true,
+      });
+
+      const moved = await a.waitFor(
+        "avatar.moved",
+        (e) => e.developerId === bobId && e.sitting === true,
+      );
+      expect(moved.x).toBe(1);
+      expect(moved.sitting).toBe(true);
+
+      // Standing back up clears it on the next move.
+      b.send({ type: "avatar.move", x: 1.5, y: 2, roomId: "Lounge" });
+      const stood = await a.waitFor(
+        "avatar.moved",
+        (e) => e.developerId === bobId && e.x === 1.5,
+      );
+      expect(stood.sitting).toBe(false);
     } finally {
       a.close();
       b.close();

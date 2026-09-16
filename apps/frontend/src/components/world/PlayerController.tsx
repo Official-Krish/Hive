@@ -25,7 +25,12 @@ interface PlayerControllerProps {
   /** Largest step the player can walk up without jumping. */
   stepUp?: number;
   /** Called every frame with the player's current XZ position (for realtime). */
-  onRealtimeMove?: (x: number, z: number, roomId: string | null) => void;
+  onRealtimeMove?: (
+    x: number,
+    z: number,
+    roomId: string | null,
+    sitting: boolean,
+  ) => void;
   /** Locks keyboard movement (e.g. while a modal is open). */
   disabled?: boolean;
   /** When true, the avatar holds a coffee cup (inherits position + heading). */
@@ -457,7 +462,7 @@ export function PlayerController({
         onPositionUpdate([px, py, pz], room);
       }
       if (onRealtimeMove) {
-        onRealtimeMove(px, pz, room || null);
+        onRealtimeMove(px, pz, room || null, sittingRef.current !== null);
       }
     }
   });

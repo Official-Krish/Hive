@@ -8,7 +8,6 @@ import type { MapAvatar } from "@/hooks/useRealtimeMap";
 import { type NearbyTokens } from "@/hooks/useNearbyTokens";
 import { formatTokens } from "./MapHud";
 import { ASSET_BASE_URL } from "@/lib/config";
-import { CHAIR_SIT_SPOTS } from "./interactions";
 
 const DEFAULT_AVATAR = `${ASSET_BASE_URL}/avatars/male/hive_male_01.glb`;
 
@@ -75,11 +74,18 @@ export function RemoteAvatars({
         speed: number;
         moving: boolean;
         stillSince: number;
-        /** ms the remote has been stationary near a chair (sitting heuristic). */
-        stillAtChairMs: number;
         sitting: boolean;
+        /** Last network-derived locomotion speed (m/s), held between packets. */
+        netSpeed: number;
       }
     >(),
+  );
+  // Last seen authoritative network position per remote. Updated ONLY when a
+  // new network sample arrives (avatar.x/y actually changed or a fresh packet
+  // landed) — never every frame — so velocity = network delta / network dt
+  // stays constant between packets instead of decaying to zero.
+  const prevNetworkPosRef = useRef(
+    new Map<string, { x: number; z: number; t: number }>(),
   );
   // Per-remote motion objects fed to Avatar via motionRef (same path as the
   // local player). Mutated in useFrame — never triggers React re-renders,
@@ -119,13 +125,71 @@ export function RemoteAvatars({
           speed: 0,
           moving: false,
           stillSince: now,
-          stillAtChairMs: 0,
           sitting: false,
+          netSpeed: 0,
         };
         smoothRef.current.set(id, s);
+        prevNetworkPosRef.current.set(id, {
+          x: avatar.x,
+          z: avatar.y,
+          t: now,
+        });
         g.position.set(s.x, s.y, s.z);
         continue;
       }
+      // --- Network-delta velocity (the actual locomotion speed) --------------
+      // Only recompute when a new network sample arrived. Between packets
+      // avatar.x/y are frozen, so recomputing every frame would report 0 and
+      // flicker idle/walk. Holding the last velocity keeps the blend stable.
+      let prevNet = prevNetworkPosRef.current.get(id);
+      if (!prevNet) {
+        prevNet = { x: avatar.x, z: avatar.y, t: now };
+        prevNetworkPosRef.current.set(id, prevNet);
+      } else if (prevNet.x !== avatar.x || prevNet.z !== avatar.y) {
+        // Clamp dt: identical-position packets are indistinguishable from no
+        // packet here (no per-sample timestamp on MapAvatar), so after a long
+        // idle prevNet.t can be seconds old. Without the cap the first step
+        // after idle divides by seconds and never crosses MOVE_START.
+        const networkDt = Math.min(
+          Math.max((now - prevNet.t) / 1000, 1e-3),
+          0.25,
+        );
+        const networkDist = Math.hypot(
+          avatar.x - prevNet.x,
+          avatar.y - prevNet.z,
+        );
+        if (networkDist > 3) {
+          // Teleport (respawn) seen on the wire — snap, don't animate.
+          s.x = avatar.x;
+          s.z = avatar.y;
+          s.speed = 0;
+          s.netSpeed = 0;
+          s.moving = false;
+          s.stillSince = now;
+          s.sitting = false;
+          prevNetworkPosRef.current.set(id, {
+            x: avatar.x,
+            z: avatar.y,
+            t: now,
+          });
+          const groundSnap = groundRef.current?.(s.x, s.z, s.y) ?? 0;
+          s.y = groundSnap;
+          g.position.set(s.x, s.y, s.z);
+          continue;
+        }
+        s.netSpeed = Math.min(networkDist / networkDt, RUN_SPEED);
+        prevNetworkPosRef.current.set(id, {
+          x: avatar.x,
+          z: avatar.y,
+          t: now,
+        });
+      }
+      // If packets stall (no new sample for a while) the held velocity is
+      // stale — treat as stopped so remotes can't walk in place forever.
+      // Idle (same-position) packets don't refresh prevNet.t, so this also
+      // covers the stop case: ~3 missed packet intervals => settled.
+      const msSinceNet = now - (prevNetworkPosRef.current.get(id)?.t ?? now);
+      const effSpeed = msSinceNet > 250 ? 0 : s.netSpeed;
       const dx = avatar.x - s.x;
       const dz = avatar.y - s.z;
       const dist = Math.hypot(dx, dz);
@@ -134,52 +198,44 @@ export function RemoteAvatars({
         s.x = avatar.x;
         s.z = avatar.y;
         s.speed = 0;
+        s.netSpeed = 0;
         s.moving = false;
-        s.stillAtChairMs = 0;
         s.sitting = false;
+        prevNetworkPosRef.current.set(id, {
+          x: avatar.x,
+          z: avatar.y,
+          t: now,
+        });
       } else {
         const k = s.moving ? kMove : kIdle;
         s.x += dx * k;
         s.z += dz * k;
       }
-      // Hysteresis: start fast, stop only after holding still — 20Hz network
-      // updates straddling a single threshold flickered idle/run every tick.
-      const rawSpeed = dist / Math.max(delta, 1e-3);
-      if (rawSpeed > MOVE_START) {
+      // Hysteresis on the network-derived speed: start fast, stop only after
+      // holding still — per-packet quantization straddling a single threshold
+      // flickered idle/run every tick.
+      if (effSpeed > MOVE_START) {
         s.moving = true;
-      } else if (rawSpeed < MOVE_STOP) {
+      } else if (effSpeed < MOVE_STOP) {
         if (s.moving && now - s.stillSince < STOP_HOLD_MS) {
           // keep moving until the hold elapses
         } else {
           s.moving = false;
         }
       }
-      if (rawSpeed >= MOVE_STOP) s.stillSince = now;
+      if (effSpeed >= MOVE_STOP) s.stillSince = now;
       // Smooth the speed itself so the walk blend eases instead of snapping.
-      const targetSpeed = s.moving ? Math.min(rawSpeed, RUN_SPEED) : 0;
+      const targetSpeed = s.moving ? Math.min(effSpeed, RUN_SPEED) : 0;
       s.speed = THREE.MathUtils.damp(s.speed, targetSpeed, 8, delta);
       const motion = motionRefs.current.get(id);
       if (motion) {
         motion.current.speed = Math.min(1, s.speed / RUN_SPEED);
         motion.current.grounded = true;
-        // Infer sitting: stationary for >800ms within 0.6m of a chair spot.
-        // When moving, immediately clear (stand up).
-        if (s.moving) {
-          s.stillAtChairMs = 0;
-          s.sitting = false;
-        } else {
-          const nearChair = CHAIR_SIT_SPOTS.some(
-            (spot) => Math.hypot(s!.x - spot.x, s!.z - spot.z) < 0.6,
-          );
-          if (nearChair) {
-            s.stillAtChairMs += delta * 1000;
-            if (s.stillAtChairMs > 800) s.sitting = true;
-          } else {
-            s.stillAtChairMs = 0;
-            s.sitting = false;
-          }
-        }
-        motion.current.sitting = s.sitting;
+        // Authoritative pose from the backend (avatar.moved carries it at
+        // ~12Hz); the sit blend eases in Avatar itself. No local inference —
+        // standing still near a chair must not read as seated.
+        motion.current.sitting = avatar.sitting;
+        s.sitting = avatar.sitting;
       }
       if (dist > 0.05) {
         const target = Math.atan2(dx, dz);
@@ -200,6 +256,7 @@ export function RemoteAvatars({
         smoothRef.current.delete(id);
         groupRefs.current.delete(id);
         motionRefs.current.delete(id);
+        prevNetworkPosRef.current.delete(id);
       }
     }
   });

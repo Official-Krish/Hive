@@ -138,8 +138,13 @@ export class RealtimeClient {
     return true;
   }
 
-  sendAvatarMove(x: number, y: number, roomId: string | null): boolean {
-    return this.send({ type: "avatar.move", x, y, roomId });
+  sendAvatarMove(
+    x: number,
+    y: number,
+    roomId: string | null,
+    sitting = false,
+  ): boolean {
+    return this.send({ type: "avatar.move", x, y, roomId, sitting });
   }
 
   sendPresence(

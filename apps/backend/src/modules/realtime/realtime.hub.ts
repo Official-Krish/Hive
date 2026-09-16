@@ -405,6 +405,7 @@ export class RealtimeHub {
           x: position.x,
           y: position.y,
           roomId: position.roomId,
+          sitting: parsed.sitting ?? false,
           timestamp,
         };
         this.publishToWorkspace(workspaceId, event);

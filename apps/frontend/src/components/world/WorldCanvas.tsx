@@ -528,8 +528,8 @@ export function WorldCanvas({
   }, []);
 
   const handleRealtimeMove = useCallback(
-    (x: number, z: number, roomId: string | null) => {
-      setMyPosition(x, z, roomId);
+    (x: number, z: number, roomId: string | null, sitting: boolean) => {
+      setMyPosition(x, z, roomId, sitting);
     },
     [setMyPosition],
   );
