@@ -130,6 +130,67 @@ export class RealtimeHub {
     return ids.size;
   }
 
+  private broadcastMedia(
+    workspaceId: string,
+    state: {
+      videoUrl: string | null;
+      videoId: string | null;
+      title: string | null;
+      isPlaying: boolean;
+      playheadMs: number;
+      at: number;
+      setByName: string | null;
+      queueItemId?: string | null;
+    },
+  ): void {
+    const event: RealtimeEvent = {
+      type: "chill.media.state",
+      workspaceId,
+      videoUrl: state.videoUrl,
+      videoId: state.videoId,
+      title: state.title,
+      isPlaying: state.isPlaying,
+      playheadMs: state.playheadMs,
+      at: state.at,
+      setByName: state.setByName,
+      queueItemId: state.queueItemId ?? null,
+      timestamp: Date.now(),
+    };
+    this.publishToWorkspace(workspaceId, event);
+  }
+
+  private broadcastChill(
+    workspaceId: string,
+    media: {
+      videoUrl: string | null;
+      videoId: string | null;
+      title: string | null;
+      isPlaying: boolean;
+      playheadMs: number;
+      at: number;
+      setByName: string | null;
+      queueItemId?: string | null;
+    },
+    queue: Array<{
+      id: string;
+      videoUrl: string;
+      videoId: string;
+      title: string | null;
+      position: number;
+      addedByName: string | null;
+    }>,
+  ): void {
+    this.broadcastMedia(workspaceId, media);
+    const queueEvent: RealtimeEvent = {
+      type: "chill.queue.state",
+      workspaceId,
+      currentItemId: media.queueItemId ?? null,
+      items: queue,
+      timestamp: Date.now(),
+    };
+    this.publishToWorkspace(workspaceId, queueEvent);
+  }
+
   private async onFetch(
     req: Request,
     server: WsServer,
@@ -256,7 +317,10 @@ export class RealtimeHub {
       };
       this.publishToWorkspace(client.workspaceId, online);
 
-      const chill = await this.service.getChillMedia(client.workspaceId);
+      const [chill, queue] = await Promise.all([
+        this.service.getChillMedia(client.workspaceId),
+        this.service.getChillQueue(client.workspaceId),
+      ]);
       if (chill) {
         const media: RealtimeEvent = {
           type: "chill.media.state",
@@ -268,10 +332,19 @@ export class RealtimeHub {
           playheadMs: chill.playheadMs,
           at: chill.at,
           setByName: chill.setByName,
+          queueItemId: chill.queueItemId,
           timestamp,
         };
         ws.send(JSON.stringify(media));
       }
+      const queueEvent: RealtimeEvent = {
+        type: "chill.queue.state",
+        workspaceId: client.workspaceId,
+        currentItemId: chill?.queueItemId ?? null,
+        items: queue,
+        timestamp,
+      };
+      ws.send(JSON.stringify(queueEvent));
     } catch (err) {
       console.error(
         `[hive] realtime open failed for user ${client.userId}`,
@@ -332,6 +405,7 @@ export class RealtimeHub {
           x: position.x,
           y: position.y,
           roomId: position.roomId,
+          sitting: parsed.sitting ?? false,
           timestamp,
         };
         this.publishToWorkspace(workspaceId, event);
@@ -531,13 +605,13 @@ export class RealtimeHub {
         break;
       }
       case "chill.setUrl": {
-        let state;
         try {
-          state = await this.service.setChillUrl(
+          const result = await this.service.setChillUrl(
             workspaceId,
             client.userId,
             parsed.url,
           );
+          this.broadcastChill(workspaceId, result.media, result.queue);
         } catch (err) {
           // Invalid YouTube URL — notify the sender only.
           const invalid: RealtimeEvent = {
@@ -553,21 +627,7 @@ export class RealtimeHub {
           };
           ws.send(JSON.stringify(invalid));
           void err;
-          break;
         }
-        const event: RealtimeEvent = {
-          type: "chill.media.state",
-          workspaceId,
-          videoUrl: state.videoUrl,
-          videoId: state.videoId,
-          title: state.title,
-          isPlaying: state.isPlaying,
-          playheadMs: state.playheadMs,
-          at: state.at,
-          setByName: state.setByName,
-          timestamp,
-        };
-        this.publishToWorkspace(workspaceId, event);
         break;
       }
       case "chill.media.play":
@@ -578,19 +638,7 @@ export class RealtimeHub {
           isPlaying,
         );
         if (state) {
-          const event: RealtimeEvent = {
-            type: "chill.media.state",
-            workspaceId,
-            videoUrl: state.videoUrl,
-            videoId: state.videoId,
-            title: state.title,
-            isPlaying: state.isPlaying,
-            playheadMs: state.playheadMs,
-            at: state.at,
-            setByName: state.setByName,
-            timestamp,
-          };
-          this.publishToWorkspace(workspaceId, event);
+          this.broadcastMedia(workspaceId, state);
         }
         break;
       }
@@ -600,19 +648,108 @@ export class RealtimeHub {
           parsed.playheadMs,
         );
         if (state) {
-          const event: RealtimeEvent = {
+          this.broadcastMedia(workspaceId, state);
+        }
+        break;
+      }
+      case "chill.queue.add": {
+        try {
+          const result = await this.service.addToChillQueue(
+            workspaceId,
+            client.userId,
+            parsed.url,
+          );
+          this.broadcastChill(workspaceId, result.media, result.queue);
+        } catch {
+          const invalid: RealtimeEvent = {
             type: "chill.media.state",
             workspaceId,
-            videoUrl: state.videoUrl,
-            videoId: state.videoId,
-            title: state.title,
-            isPlaying: state.isPlaying,
-            playheadMs: state.playheadMs,
-            at: state.at,
-            setByName: state.setByName,
+            videoUrl: null,
+            videoId: null,
+            title: null,
+            isPlaying: false,
+            playheadMs: 0,
+            at: Date.now(),
             timestamp,
           };
-          this.publishToWorkspace(workspaceId, event);
+          ws.send(JSON.stringify(invalid));
+        }
+        break;
+      }
+      case "chill.queue.play": {
+        const result = await this.service.playChillQueueItem(
+          workspaceId,
+          client.userId,
+          parsed.itemId,
+        );
+        if (result)
+          this.broadcastChill(workspaceId, result.media, result.queue);
+        break;
+      }
+      case "chill.queue.next":
+      case "chill.queue.prev": {
+        const result = await this.service.stepChillQueue(
+          workspaceId,
+          client.userId,
+          parsed.type === "chill.queue.next" ? 1 : -1,
+        );
+        if (result)
+          this.broadcastChill(workspaceId, result.media, result.queue);
+        break;
+      }
+      case "chill.queue.ended": {
+        // Auto-advance: every client reports ENDED, server de-dupes by itemId.
+        const result = await this.service.endChillQueueItem(
+          workspaceId,
+          client.userId,
+          parsed.itemId,
+        );
+        if (result)
+          this.broadcastChill(workspaceId, result.media, result.queue);
+        break;
+      }
+      case "chill.queue.remove": {
+        const result = await this.service.removeChillQueueItem(
+          workspaceId,
+          client.userId,
+          parsed.itemId,
+        );
+        if (result)
+          this.broadcastChill(workspaceId, result.media, result.queue);
+        break;
+      }
+      case "chill.queue.reorder": {
+        const queue = await this.service.reorderChillQueue(
+          workspaceId,
+          parsed.itemId,
+          parsed.toIndex,
+        );
+        if (queue) {
+          const media = await this.service.getChillMedia(workspaceId);
+          const queueEvent: RealtimeEvent = {
+            type: "chill.queue.state",
+            workspaceId,
+            currentItemId: media?.queueItemId ?? null,
+            items: queue,
+            timestamp,
+          };
+          this.publishToWorkspace(workspaceId, queueEvent);
+        }
+        break;
+      }
+      case "chill.queue.clear": {
+        const result = await this.service.clearChillQueue(workspaceId);
+        if (result.media) {
+          this.broadcastChill(workspaceId, result.media, result.queue);
+        } else {
+          const queueEvent: RealtimeEvent = {
+            type: "chill.queue.state",
+            workspaceId,
+            currentItemId: null,
+            items: [],
+            timestamp,
+          };
+          this.publishToWorkspace(workspaceId, queueEvent);
         }
         break;
       }

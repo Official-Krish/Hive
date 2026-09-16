@@ -63,6 +63,8 @@ export const realtimeMemberSchema = z.object({
   workingOn: z.string().max(60).nullable(),
   status: presenceStatusSchema,
   position: avatarPositionSchema.nullable(),
+  /** Whether the member is currently seated on a chair. Ephemeral — not persisted. */
+  sitting: z.boolean().optional(),
 });
 export type RealtimeMember = z.infer<typeof realtimeMemberSchema>;
 
@@ -77,6 +79,23 @@ export const whiteboardStrokeSchema = z.object({
   points: z.array(whiteboardPointSchema).min(2).max(4096),
 });
 export type WhiteboardStroke = z.infer<typeof whiteboardStrokeSchema>;
+
+// ---------------------------------------------------------------------------
+// Chill Space queue — YouTube-like shared playback queue. Postgres is the
+// source of truth (ChillQueueItem rows ordered by `position`); ChillMedia
+// holds the now-playing pointer. Clients advance via `chill.queue.ended`
+// when the YT player reports ENDED; the server guards de-dup with itemId.
+// ---------------------------------------------------------------------------
+
+export const chillQueueItemSchema = z.object({
+  id: z.string(),
+  videoId: z.string(),
+  videoUrl: z.string(),
+  title: z.string().nullable(),
+  position: z.number(),
+  addedByName: z.string().nullable(),
+});
+export type ChillQueueItem = z.infer<typeof chillQueueItemSchema>;
 
 // ---------------------------------------------------------------------------
 // Mini-games — server-authoritative Chess + Connect 4 (2 seats) and Ludo-lite
@@ -290,6 +309,8 @@ export const realtimeEventSchema = z.discriminatedUnion("type", [
     roomId: z.string().nullable(),
     x: z.number(),
     y: z.number(),
+    /** Seated on a chair — remotes play the sit pose. Always sent. */
+    sitting: z.boolean(),
     timestamp: z.number(),
   }),
   z.object({
@@ -410,6 +431,15 @@ export const realtimeEventSchema = z.discriminatedUnion("type", [
     /** Server wall-clock ms when playhead was captured. Clients use this to compute live position. */
     at: z.number(),
     setByName: z.string().nullable().optional(),
+    /** Queue item id currently loaded — lets clients de-dupe ended events. */
+    queueItemId: z.string().nullable().optional(),
+    timestamp: z.number(),
+  }),
+  z.object({
+    type: z.literal("chill.queue.state"),
+    workspaceId: z.string(),
+    currentItemId: z.string().nullable(),
+    items: z.array(chillQueueItemSchema).max(200),
     timestamp: z.number(),
   }),
   z.object({
@@ -447,6 +477,8 @@ export const realtimeClientMessageSchema = z.discriminatedUnion("type", [
     x: z.number(),
     y: z.number(),
     roomId: z.string().min(1).max(100).nullable(),
+    /** Seated on a chair — optional so older clients keep working. */
+    sitting: z.boolean().optional(),
   }),
   z.object({
     type: z.literal("presence.update"),
@@ -512,6 +544,37 @@ export const realtimeClientMessageSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("chill.media.seek"),
     playheadMs: z.number().min(0),
+  }),
+  z.object({
+    type: z.literal("chill.queue.add"),
+    url: z.string().min(1).max(512),
+  }),
+  z.object({
+    type: z.literal("chill.queue.play"),
+    itemId: z.string().min(1).max(80),
+  }),
+  z.object({
+    type: z.literal("chill.queue.next"),
+  }),
+  z.object({
+    type: z.literal("chill.queue.prev"),
+  }),
+  z.object({
+    type: z.literal("chill.queue.remove"),
+    itemId: z.string().min(1).max(80),
+  }),
+  z.object({
+    type: z.literal("chill.queue.reorder"),
+    itemId: z.string().min(1).max(80),
+    toIndex: z.number().int().min(0).max(199),
+  }),
+  z.object({
+    type: z.literal("chill.queue.clear"),
+  }),
+  z.object({
+    type: z.literal("chill.queue.ended"),
+    /** Item that just finished — server ignores stale/duplicate reports. */
+    itemId: z.string().min(1).max(80),
   }),
   z.object({
     type: z.literal("game.move"),

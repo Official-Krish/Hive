@@ -6,13 +6,11 @@ import type { UsageDayPoint } from "@hive/types";
 import {
   BackLink,
   Btn,
-  Card,
-  CardHead,
   Note,
   PageHead,
   Spinner,
   Stat,
-  inputClass,
+  baselineInputClass,
 } from "@/components/dashboard/kit";
 
 const RANGE_DAYS = [7, 30, 90] as const;
@@ -237,11 +235,11 @@ export function WorkspaceUsage() {
 
       {isAdmin && (
         <>
-          <div className="mt-4 flex flex-wrap items-center gap-2">
+          <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-2">
             <div
               role="tablist"
               aria-label="Usage sections"
-              className="flex rounded-xl bg-white p-1 ring-1 ring-black/[0.07]"
+              className="flex items-center gap-5 border-b border-neutral-900/10"
             >
               {(["usage", "throughput", "keys"] as const).map((t) => (
                 <button
@@ -252,8 +250,8 @@ export function WorkspaceUsage() {
                   onClick={() => setTab(t)}
                   className={
                     tab === t
-                      ? "rounded-lg bg-neutral-900 px-3 py-1.5 text-[13px] font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900/40"
-                      : "rounded-lg px-3 py-1.5 text-[13px] font-medium text-neutral-500 hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900/30"
+                      ? "border-b-2 border-neutral-900 pb-2 text-[13px] font-semibold text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900/30"
+                      : "border-b-2 border-transparent pb-2 text-[13px] font-medium text-neutral-500 hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900/30"
                   }
                 >
                   {t === "usage"
@@ -267,7 +265,7 @@ export function WorkspaceUsage() {
             <div
               role="group"
               aria-label="Date range"
-              className="flex rounded-xl bg-white p-1 ring-1 ring-black/[0.07]"
+              className="flex items-center gap-3"
             >
               {RANGE_DAYS.map((d) => (
                 <button
@@ -277,8 +275,8 @@ export function WorkspaceUsage() {
                   onClick={() => setDays(d)}
                   className={
                     days === d
-                      ? "rounded-lg bg-neutral-900 px-3 py-1.5 text-[13px] font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900/40"
-                      : "rounded-lg px-3 py-1.5 text-[13px] font-medium text-neutral-500 hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900/30"
+                      ? "data-mono text-[12px] font-semibold text-neutral-900 underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900/30"
+                      : "data-mono text-[12px] text-neutral-400 hover:text-neutral-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900/30"
                   }
                 >
                   {d}d
@@ -304,7 +302,7 @@ export function WorkspaceUsage() {
           )}
 
           {tab === "usage" && (
-            <div className="mt-4 flex flex-col gap-4">
+            <div className="mt-6 flex flex-col gap-10">
               {summary.isError && (
                 <Note tone="error">
                   <span className="flex flex-wrap items-center gap-3">
@@ -315,7 +313,7 @@ export function WorkspaceUsage() {
                   </span>
                 </Note>
               )}
-              <Card className="grid grid-cols-2 gap-6 p-5 lg:grid-cols-4">
+              <div className="grid grid-cols-2 gap-x-6 gap-y-8 py-2 sm:grid-cols-4">
                 <Stat
                   label={`Spend · month`}
                   value={masked ? "masked" : fmtMoney(spent)}
@@ -348,22 +346,28 @@ export function WorkspaceUsage() {
                   label={`Sessions · ${days}d`}
                   value={String(data?.sessions ?? 0)}
                 />
-              </Card>
+              </div>
 
               {cap !== null && pct !== null && !masked && (
-                <Card className="p-5">
+                <div>
                   <div className="flex items-center justify-between text-[13px] font-semibold">
                     <span>Monthly budget</span>
-                    <span className={overAlert ? "text-rose-600" : ""}>
+                    <span
+                      className={
+                        overAlert
+                          ? "text-rose-600"
+                          : "data-mono tabular-nums text-neutral-500"
+                      }
+                    >
                       {pct}% used
                     </span>
                   </div>
-                  <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-neutral-900/[0.07]">
+                  <div className="mt-2 h-2 overflow-hidden rounded-full bg-neutral-900/[0.07]">
                     <div
                       className={
                         overAlert
                           ? "h-full bg-rose-500"
-                          : "h-full bg-emerald-500"
+                          : "h-full bg-neutral-900"
                       }
                       style={{ width: `${pct}%` }}
                     />
@@ -373,12 +377,14 @@ export function WorkspaceUsage() {
                       Over the {data?.budget.alertAtPct}% alert threshold.
                     </div>
                   )}
-                </Card>
+                </div>
               )}
 
-              <Card>
-                <CardHead title="Daily tokens" />
-                <div className="px-5 py-4">
+              <section aria-label="Daily tokens">
+                <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-neutral-400">
+                  Daily tokens
+                </p>
+                <div className="pt-3">
                   {(data?.byDay.length ?? 0) === 0 ? (
                     <div className="py-6 text-center text-sm text-neutral-400">
                       {masked ? "Masked by privacy." : "No usage in range."}
@@ -399,12 +405,14 @@ export function WorkspaceUsage() {
                     </>
                   )}
                 </div>
-              </Card>
+              </section>
 
               {!masked && (data?.byModel.length ?? 0) > 0 && (
-                <Card>
-                  <CardHead title="By model" />
-                  <div className="flex flex-col gap-2 px-5 py-4">
+                <section aria-label="By model">
+                  <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-neutral-400">
+                    By model
+                  </p>
+                  <div className="flex flex-col gap-2 pt-3">
                     {data!.byModel.map((m) => {
                       const total = m.inputTokens + m.outputTokens;
                       const max = Math.max(
@@ -434,12 +442,14 @@ export function WorkspaceUsage() {
                       );
                     })}
                   </div>
-                </Card>
+                </section>
               )}
 
-              <Card>
-                <CardHead title="By member" />
-                <div className="px-5 py-2">
+              <section aria-label="By member">
+                <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-neutral-400">
+                  By member
+                </p>
+                <div className="pt-1">
                   {byMember.isLoading ? (
                     <div className="flex items-center gap-2 py-4 text-sm text-neutral-500">
                       <Spinner /> Loading members…
@@ -523,11 +533,13 @@ export function WorkspaceUsage() {
                     </div>
                   )}
                 </div>
-              </Card>
+              </section>
 
-              <Card>
-                <CardHead title="Monthly budget" />
-                <div className="flex flex-wrap items-end gap-3 px-5 py-4">
+              <section aria-label="Monthly budget">
+                <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-neutral-400">
+                  Monthly budget
+                </p>
+                <div className="flex flex-wrap items-end gap-x-6 gap-y-4 pt-3">
                   <label className="flex flex-col gap-1 text-[12px] font-medium text-neutral-500">
                     Cap (USD, empty = none)
                     <input
@@ -537,7 +549,7 @@ export function WorkspaceUsage() {
                         cap !== null ? `$${(cap / 100).toFixed(2)}` : "No cap"
                       }
                       inputMode="decimal"
-                      className={`${inputClass} w-32`}
+                      className={`${baselineInputClass} w-32`}
                     />
                   </label>
                   <label className="flex flex-col gap-1 text-[12px] font-medium text-neutral-500">
@@ -546,7 +558,7 @@ export function WorkspaceUsage() {
                       value={alertInput}
                       onChange={(e) => setAlertInput(e.target.value)}
                       inputMode="numeric"
-                      className={`${inputClass} w-20`}
+                      className={`${baselineInputClass} w-20`}
                     />
                   </label>
                   <Btn
@@ -565,11 +577,11 @@ export function WorkspaceUsage() {
                   </Btn>
                 </div>
                 {budgetMutation.isError && (
-                  <div className="px-5 pb-4 text-[12px] font-medium text-rose-600">
+                  <div className="pt-3 text-[12px] font-medium text-rose-600">
                     Could not save — check the amounts.
                   </div>
                 )}
-              </Card>
+              </section>
             </div>
           )}
 
@@ -578,7 +590,7 @@ export function WorkspaceUsage() {
               {reviewsDigest.data &&
                 (reviewsDigest.data.reviewed > 0 ||
                   reviewsDigest.data.findings > 0) && (
-                  <Card className="mb-4 flex flex-wrap items-center gap-x-6 gap-y-2 p-5">
+                  <div className="mb-2 flex flex-wrap items-end gap-x-8 gap-y-4">
                     <Stat
                       label="PRs reviewed"
                       value={String(reviewsDigest.data.reviewed)}
@@ -591,14 +603,16 @@ export function WorkspaceUsage() {
                       label="Review spend"
                       value={fmtMoney(reviewsDigest.data.costCents)}
                     />
-                    <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-neutral-400">
+                    <span className="pb-1 text-[11px] font-medium uppercase tracking-[0.14em] text-neutral-400">
                       Reviewer teammate · {days}d
                     </span>
-                  </Card>
+                  </div>
                 )}
-              <Card>
-                <CardHead title={`Team throughput · ${days}d`} />
-                <div className="px-5 py-2">
+              <section aria-label={`Team throughput, last ${days} days`}>
+                <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-neutral-400">
+                  Team throughput · {days}d
+                </p>
+                <div className="pt-1">
                   {throughput.isLoading ? (
                     <div className="flex items-center gap-2 py-4 text-sm text-neutral-500">
                       <Spinner /> Loading throughput…
@@ -707,7 +721,7 @@ export function WorkspaceUsage() {
                     </div>
                   )}
                 </div>
-              </Card>
+              </section>
             </>
           )}
 
@@ -815,25 +829,27 @@ function KeysTab({
   const available = pool.filter((e) => e.status === "available");
 
   return (
-    <div className="mt-4 flex flex-col gap-4">
-      <Card className="grid grid-cols-1 gap-6 p-5 sm:grid-cols-3">
+    <div className="mt-6 flex flex-col gap-10">
+      <div className="grid grid-cols-1 gap-x-6 gap-y-8 py-2 sm:grid-cols-3">
         <Stat label="Total keys" value={String(total)} />
         <Stat label="Taken" value={String(taken)} />
         <Stat label="Untaken" value={String(untaken)} />
-      </Card>
+      </div>
 
-      <Card>
-        <CardHead
-          title="Stock a key"
-          hint="Admins only — encrypted at rest, hashed for lookup"
-        />
-        <div className="flex flex-wrap items-end gap-3 px-5 py-4">
+      <section aria-label="Stock a key">
+        <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-neutral-400">
+          Stock a key
+        </p>
+        <p className="mt-2 text-[13px] text-neutral-500">
+          Admins only — encrypted at rest, hashed for lookup.
+        </p>
+        <div className="flex flex-wrap items-end gap-x-6 gap-y-4 pt-3">
           <label className="flex w-32 flex-col gap-1 text-[12px] font-medium text-neutral-500">
             Provider
             <select
               value={stockProvider}
               onChange={(e) => setStockProvider(e.target.value)}
-              className={inputClass}
+              className={baselineInputClass}
             >
               <option value="claude">Claude</option>
               <option value="opencode">OpenCode</option>
@@ -846,7 +862,7 @@ function KeysTab({
               value={stockLabel}
               onChange={(e) => setStockLabel(e.target.value)}
               placeholder="team-key-1"
-              className={inputClass}
+              className={baselineInputClass}
             />
           </label>
           <label className="flex min-w-44 flex-[2] flex-col gap-1 text-[12px] font-medium text-neutral-500">
@@ -857,7 +873,7 @@ function KeysTab({
               placeholder="sk-…"
               autoComplete="off"
               spellCheck={false}
-              className={`${inputClass} font-mono`}
+              className={`${baselineInputClass} font-mono`}
             />
           </label>
           <label className="flex w-24 flex-col gap-1 text-[12px] font-medium text-neutral-500">
@@ -867,7 +883,7 @@ function KeysTab({
               onChange={(e) => setStockCap(e.target.value)}
               placeholder="∞"
               inputMode="numeric"
-              className={inputClass}
+              className={baselineInputClass}
             />
           </label>
           <Btn
@@ -880,26 +896,31 @@ function KeysTab({
           </Btn>
         </div>
         {stockError && (
-          <div className="px-5 pb-4 text-[12px] font-medium text-rose-600">
+          <div className="pt-3 text-[12px] font-medium text-rose-600">
             Could not stock — it may already exist.
           </div>
         )}
         {stockOk && (
-          <div className="px-5 pb-4 text-[12px] font-medium text-emerald-600">
+          <div className="pt-3 text-[12px] font-medium text-emerald-600">
             Key stocked — ready in the machine.
           </div>
         )}
-      </Card>
+      </section>
 
-      <Card>
-        <CardHead title="Assign a key" hint="Admins grant keys to members" />
-        <div className="flex flex-wrap items-end gap-3 px-5 py-4">
+      <section aria-label="Assign a key">
+        <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-neutral-400">
+          Assign a key
+        </p>
+        <p className="mt-2 text-[13px] text-neutral-500">
+          Admins grant keys to members.
+        </p>
+        <div className="flex flex-wrap items-end gap-x-6 gap-y-4 pt-3">
           <label className="flex min-w-44 flex-1 flex-col gap-1 text-[12px] font-medium text-neutral-500">
             Key
             <select
               value={assignPool}
               onChange={(e) => setAssignPool(e.target.value)}
-              className={inputClass}
+              className={baselineInputClass}
             >
               <option value="">Select a stocked key…</option>
               {available.map((e) => (
@@ -915,7 +936,7 @@ function KeysTab({
             <select
               value={assignUser}
               onChange={(e) => setAssignUser(e.target.value)}
-              className={inputClass}
+              className={baselineInputClass}
             >
               <option value="">Select a member…</option>
               {members.map((m) => (
@@ -933,15 +954,18 @@ function KeysTab({
           </Btn>
         </div>
         {assignError && (
-          <div className="px-5 pb-4 text-[12px] font-medium text-rose-600">
+          <div className="pt-3 text-[12px] font-medium text-rose-600">
             Could not assign — the key may be exhausted.
           </div>
         )}
-      </Card>
+      </section>
 
-      <Card>
-        <CardHead title="Taken keys" hint="Who holds what" />
-        <div className="px-5 py-2">
+      <section aria-label="Taken keys">
+        <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-neutral-400">
+          Taken keys
+        </p>
+        <p className="mt-2 text-[13px] text-neutral-500">Who holds what.</p>
+        <div className="pt-1">
           {loading ? (
             <div className="flex items-center gap-2 py-4 text-sm text-neutral-500">
               <Spinner /> Loading keys…
@@ -995,11 +1019,16 @@ function KeysTab({
             </div>
           )}
         </div>
-      </Card>
+      </section>
 
-      <Card>
-        <CardHead title="Stock" hint="Every stocked key + status" />
-        <div className="px-5 py-2">
+      <section aria-label="Stock">
+        <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-neutral-400">
+          Stock
+        </p>
+        <p className="mt-2 text-[13px] text-neutral-500">
+          Every stocked key + status.
+        </p>
+        <div className="pt-1">
           {loading ? (
             <div className="flex items-center gap-2 py-4 text-sm text-neutral-500">
               <Spinner /> Loading stock…
@@ -1053,7 +1082,7 @@ function KeysTab({
             </div>
           )}
         </div>
-      </Card>
+      </section>
     </div>
   );
 }

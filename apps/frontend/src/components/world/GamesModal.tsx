@@ -28,6 +28,7 @@ import { BattleshipBoard } from "./games/BattleshipBoard";
 import { LudoBoard } from "./games/LudoBoard";
 import { UnoBoard } from "./games/UnoBoard";
 import { AnchorIcon, CrownIcon, DieIcon } from "./games/GameIcons";
+import { WModal } from "./motion";
 import { isBoardMuted, setBoardMuted } from "./games/sound";
 
 interface GamesModalProps {
@@ -296,380 +297,381 @@ export function GamesModal({
   );
 
   return (
-    <div className="pointer-events-auto fixed inset-0 z-40 grid place-items-center bg-black/30 p-4 backdrop-blur-[2px]">
-      <div className="flex h-[min(92vh,700px)] w-[min(720px,96vw)] flex-col overflow-hidden rounded-2xl bg-[#f4f2ed] shadow-[0_28px_70px_-24px_rgba(0,0,0,0.35)] ring-1 ring-black/[0.09]">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-black/[0.07] px-4 py-3">
-          <div className="flex items-center gap-2.5">
-            {openSession && (
-              <button
-                type="button"
-                onClick={() => games.open(null)}
-                aria-label="Back to lobby"
-                className="rounded-lg p-1.5 text-neutral-500 transition-colors hover:bg-black/[0.05] hover:text-neutral-900"
-              >
-                <FiArrowLeft className="size-4" />
-              </button>
-            )}
-            <div>
-              <div className="text-[10px] font-medium uppercase tracking-[0.18em] text-neutral-500">
-                Play Area
-              </div>
-              <div className="text-[15px] font-semibold tracking-tight text-neutral-900">
-                {openSession
-                  ? KIND_LABEL[openSession.kind]
-                  : "Multiplayer games"}
-              </div>
+    <WModal
+      label={openSession ? KIND_LABEL[openSession.kind] : "Multiplayer games"}
+      onClose={onClose}
+      wide
+      className="h-[min(92vh,700px)] max-w-[min(720px,96vw)]"
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between border-b border-black/[0.07] px-4 py-3">
+        <div className="flex items-center gap-2.5">
+          {openSession && (
+            <button
+              type="button"
+              onClick={() => games.open(null)}
+              aria-label="Back to lobby"
+              className="rounded-lg p-1.5 text-neutral-500 transition-colors hover:bg-black/[0.05] hover:text-neutral-900"
+            >
+              <FiArrowLeft className="size-4" />
+            </button>
+          )}
+          <div>
+            <div className="text-[10px] font-medium uppercase tracking-[0.18em] text-neutral-500">
+              Play Area
+            </div>
+            <div className="text-[15px] font-semibold tracking-tight text-neutral-900">
+              {openSession ? KIND_LABEL[openSession.kind] : "Multiplayer games"}
             </div>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close games"
-            className="rounded-lg p-2 text-neutral-500 transition-colors hover:bg-black/[0.05] hover:text-neutral-900"
-          >
-            <FiX className="size-4" />
-          </button>
         </div>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close games"
+          className="rounded-lg p-2 text-neutral-500 transition-colors hover:bg-black/[0.05] hover:text-neutral-900"
+        >
+          <FiX className="size-4" />
+        </button>
+      </div>
 
-        {/* Body — fixed height, never page-scrolls. Lobby scrolls
+      {/* Body — fixed height, never page-scrolls. Lobby scrolls
             internally; the match view always fits. */}
-        <div className="min-h-0 flex-1 overflow-hidden p-4">
-          {openSession ? (
-            <MatchView
-              session={openSession}
-              myUserId={myUserId}
-              members={members}
-              rejected={games.rejected}
-              onMove={(move) => games.sendMove(openSession.id, move)}
-              onResign={() => void games.resign(openSession.id)}
-              onDecline={() => void games.decline(openSession.id)}
-              onStart={() => {
-                setStartingId(openSession.id);
-                void games
-                  .start(openSession.id)
-                  .finally(() => setStartingId(null));
-              }}
-              onExit={() => games.open(null)}
-              onSync={() => games.requestState(openSession.id)}
-              starting={startingId === openSession.id}
-              onRematch={() => {
-                const opps = openSession.members
-                  .filter((m) => m.userId !== myUserId)
-                  .map((m) => m.userId);
-                if (opps.length > 0) {
-                  void games.create(
-                    openSession.kind,
-                    isPartyKind(openSession.kind) ? opps : opps[0]!,
-                  );
-                }
-              }}
-            />
-          ) : (
-            <div className="flex h-full min-h-0 flex-col gap-4 overflow-y-auto pr-0.5">
-              {/* Resume banner */}
-              {games.active && (
-                <button
-                  type="button"
-                  onClick={() => games.open(games.active!.id)}
-                  className="group flex w-full items-center gap-3 rounded-2xl bg-neutral-950 px-4 py-3 text-left text-white shadow-lg transition-transform hover:scale-[1.01]"
-                >
-                  <span className="relative flex size-2.5">
-                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
-                    <span className="relative inline-flex size-2.5 rounded-full bg-emerald-400" />
+      <div className="min-h-0 flex-1 overflow-hidden p-4">
+        {openSession ? (
+          <MatchView
+            session={openSession}
+            myUserId={myUserId}
+            members={members}
+            rejected={games.rejected}
+            onMove={(move) => games.sendMove(openSession.id, move)}
+            onResign={() => void games.resign(openSession.id)}
+            onDecline={() => void games.decline(openSession.id)}
+            onStart={() => {
+              setStartingId(openSession.id);
+              void games
+                .start(openSession.id)
+                .finally(() => setStartingId(null));
+            }}
+            onExit={() => games.open(null)}
+            onSync={() => games.requestState(openSession.id)}
+            starting={startingId === openSession.id}
+            onRematch={() => {
+              const opps = openSession.members
+                .filter((m) => m.userId !== myUserId)
+                .map((m) => m.userId);
+              if (opps.length > 0) {
+                void games.create(
+                  openSession.kind,
+                  isPartyKind(openSession.kind) ? opps : opps[0]!,
+                );
+              }
+            }}
+          />
+        ) : (
+          <div className="flex h-full min-h-0 flex-col gap-4 overflow-y-auto pr-0.5">
+            {/* Resume banner */}
+            {games.active && (
+              <button
+                type="button"
+                onClick={() => games.open(games.active!.id)}
+                className="group flex w-full items-center gap-3 rounded-2xl bg-neutral-950 px-4 py-3 text-left text-white shadow-lg transition-transform hover:scale-[1.01]"
+              >
+                <span className="relative flex size-2.5">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+                  <span className="relative inline-flex size-2.5 rounded-full bg-emerald-400" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[13.5px] font-semibold">
+                    Your {KIND_LABEL[games.active.kind]} game is live
                   </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[13.5px] font-semibold">
-                      Your {KIND_LABEL[games.active.kind]} game is live
-                    </span>
-                    <span className="block text-[11.5px] font-medium text-white/60">
-                      {games.active.turnUserId === myUserId
-                        ? "Your move — they're waiting"
-                        : `${nameOf(games.active, members, games.active.turnUserId)} to move`}
-                    </span>
+                  <span className="block text-[11.5px] font-medium text-white/60">
+                    {games.active.turnUserId === myUserId
+                      ? "Your move — they're waiting"
+                      : `${nameOf(games.active, members, games.active.turnUserId)} to move`}
                   </span>
-                  <span className="shrink-0 rounded-lg bg-white/10 px-2.5 py-1.5 text-[12px] font-semibold transition-colors group-hover:bg-white/20">
-                    Resume →
-                  </span>
-                </button>
-              )}
+                </span>
+                <span className="shrink-0 rounded-lg bg-white/10 px-2.5 py-1.5 text-[12px] font-semibold transition-colors group-hover:bg-white/20">
+                  Resume →
+                </span>
+              </button>
+            )}
 
-              {/* Open tables */}
-              {listedTables.length > 0 && (
-                <section>
-                  <Eyebrow>Open tables · {listedTables.length}</Eyebrow>
-                  <div className="flex flex-col gap-2">
-                    {listedTables.map((s) => {
-                      const turnName = nameOf(s, members, s.turnUserId);
-                      const mine = s.turnUserId === myUserId;
-                      return (
-                        <button
-                          key={s.id}
-                          type="button"
-                          onClick={() => games.open(s.id)}
-                          className="group flex items-center gap-3 rounded-2xl bg-white px-3.5 py-3 text-left ring-1 ring-black/[0.07] transition-all hover:-translate-y-px hover:shadow-md"
-                        >
-                          <GameGlyph kind={s.kind} />
-                          <span className="min-w-0 flex-1">
-                            <span className="block truncate text-[13.5px] font-semibold text-neutral-900">
-                              {s.members.length > 2
-                                ? `${s.members[0]?.name} +${s.members.length - 1} more`
-                                : s.members.map((m) => m.name).join("  vs  ")}
-                            </span>
-                            <span className="mt-0.5 flex items-center gap-1.5 text-[11.5px] font-medium text-neutral-500">
-                              {s.status === "pending" ? (
-                                <>
-                                  <FiClock className="size-3" />
-                                  Waiting to start
-                                </>
-                              ) : mine ? (
-                                <>
-                                  <FiZap className="size-3 text-amber-500" />
-                                  <span className="text-amber-600">
-                                    Your move
-                                  </span>
-                                </>
-                              ) : (
-                                `${turnName} to move`
-                              )}
-                              <span className="text-neutral-300">·</span>
-                              {KIND_LABEL[s.kind]}
-                            </span>
+            {/* Open tables */}
+            {listedTables.length > 0 && (
+              <section>
+                <Eyebrow>Open tables · {listedTables.length}</Eyebrow>
+                <div className="flex flex-col gap-2">
+                  {listedTables.map((s) => {
+                    const turnName = nameOf(s, members, s.turnUserId);
+                    const mine = s.turnUserId === myUserId;
+                    return (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={() => games.open(s.id)}
+                        className="group flex items-center gap-3 rounded-2xl bg-white px-3.5 py-3 text-left ring-1 ring-black/[0.07] transition-all hover:-translate-y-px hover:shadow-md"
+                      >
+                        <GameGlyph kind={s.kind} />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-[13.5px] font-semibold text-neutral-900">
+                            {s.members.length > 2
+                              ? `${s.members[0]?.name} +${s.members.length - 1} more`
+                              : s.members.map((m) => m.name).join("  vs  ")}
                           </span>
-                          <span className="shrink-0 text-[13px] font-semibold text-neutral-300 transition-all group-hover:translate-x-0.5 group-hover:text-neutral-600">
-                            →
+                          <span className="mt-0.5 flex items-center gap-1.5 text-[11.5px] font-medium text-neutral-500">
+                            {s.status === "pending" ? (
+                              <>
+                                <FiClock className="size-3" />
+                                Waiting to start
+                              </>
+                            ) : mine ? (
+                              <>
+                                <FiZap className="size-3 text-amber-500" />
+                                <span className="text-amber-600">
+                                  Your move
+                                </span>
+                              </>
+                            ) : (
+                              `${turnName} to move`
+                            )}
+                            <span className="text-neutral-300">·</span>
+                            {KIND_LABEL[s.kind]}
                           </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </section>
-              )}
+                        </span>
+                        <span className="shrink-0 text-[13px] font-semibold text-neutral-300 transition-all group-hover:translate-x-0.5 group-hover:text-neutral-600">
+                          →
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+            )}
 
-              {/* Challenge */}
-              <section className="overflow-hidden rounded-2xl bg-neutral-950 text-white shadow-lg">
-                <div className="px-4 pb-4 pt-4">
-                  <div className="mb-2 flex items-center justify-between">
-                    <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-white/50">
-                      Start a match
-                    </span>
-                    <span className="rounded-full bg-white/[0.07] px-2 py-0.5 font-mono text-[10px] font-bold text-white/60 ring-1 ring-white/10">
-                      {party ? "2–4 PLAYERS" : "HEAD TO HEAD"}
-                    </span>
-                  </div>
-                  {games.actionError && (
-                    <div
-                      role="alert"
-                      className="mb-2 rounded-xl bg-rose-500/15 px-3.5 py-2 text-[12px] font-medium text-rose-200 ring-1 ring-rose-400/40"
-                    >
-                      {games.actionError}
-                    </div>
-                  )}
-                  {/* Game picker — arcade art tiles */}
+            {/* Challenge */}
+            <section className="overflow-hidden rounded-2xl bg-neutral-950 text-white shadow-lg">
+              <div className="px-4 pb-4 pt-4">
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-white/50">
+                    Start a match
+                  </span>
+                  <span className="rounded-full bg-white/[0.07] px-2 py-0.5 font-mono text-[10px] font-bold text-white/60 ring-1 ring-white/10">
+                    {party ? "2–4 PLAYERS" : "HEAD TO HEAD"}
+                  </span>
+                </div>
+                {games.actionError && (
                   <div
-                    className="grid grid-cols-2 gap-2"
-                    role="radiogroup"
-                    aria-label="Game"
+                    role="alert"
+                    className="mb-2 rounded-xl bg-rose-500/15 px-3.5 py-2 text-[12px] font-medium text-rose-200 ring-1 ring-rose-400/40"
                   >
-                    {(
-                      [
-                        {
-                          k: "chess",
-                          art: "from-neutral-700 via-neutral-900 to-black",
-                          tag: "Outthink them",
-                        },
-                        {
-                          k: "connect4",
-                          art: "from-rose-500 via-rose-700 to-amber-600",
-                          tag: "Four in a row",
-                        },
-                        {
-                          k: "ludo",
-                          art: "from-emerald-500 via-emerald-700 to-teal-900",
-                          tag: "Race them home",
-                        },
-                        {
-                          k: "uno",
-                          art: "from-violet-500 via-purple-700 to-fuchsia-800",
-                          tag: "Shed every card",
-                        },
-                        {
-                          k: "checkers",
-                          art: "from-red-700 via-red-900 to-neutral-900",
-                          tag: "Jump them all",
-                        },
-                        {
-                          k: "battleship",
-                          art: "from-sky-500 via-sky-700 to-indigo-900",
-                          tag: "Sink the fleet",
-                        },
-                      ] as Array<{
-                        k: GameKind;
-                        art: string;
-                        tag: string;
-                      }>
-                    ).map(({ k, art, tag }) => {
-                      const selected = kind === k;
-                      return (
-                        <button
-                          key={k}
-                          type="button"
-                          role="radio"
-                          aria-checked={selected}
-                          onClick={() => {
-                            setKind(k);
-                            setOpponentIds([]);
-                          }}
+                    {games.actionError}
+                  </div>
+                )}
+                {/* Game picker — arcade art tiles */}
+                <div
+                  className="grid grid-cols-2 gap-2"
+                  role="radiogroup"
+                  aria-label="Game"
+                >
+                  {(
+                    [
+                      {
+                        k: "chess",
+                        art: "from-neutral-700 via-neutral-900 to-black",
+                        tag: "Outthink them",
+                      },
+                      {
+                        k: "connect4",
+                        art: "from-rose-500 via-rose-700 to-amber-600",
+                        tag: "Four in a row",
+                      },
+                      {
+                        k: "ludo",
+                        art: "from-emerald-500 via-emerald-700 to-teal-900",
+                        tag: "Race them home",
+                      },
+                      {
+                        k: "uno",
+                        art: "from-violet-500 via-purple-700 to-fuchsia-800",
+                        tag: "Shed every card",
+                      },
+                      {
+                        k: "checkers",
+                        art: "from-red-700 via-red-900 to-neutral-900",
+                        tag: "Jump them all",
+                      },
+                      {
+                        k: "battleship",
+                        art: "from-sky-500 via-sky-700 to-indigo-900",
+                        tag: "Sink the fleet",
+                      },
+                    ] as Array<{
+                      k: GameKind;
+                      art: string;
+                      tag: string;
+                    }>
+                  ).map(({ k, art, tag }) => {
+                    const selected = kind === k;
+                    return (
+                      <button
+                        key={k}
+                        type="button"
+                        role="radio"
+                        aria-checked={selected}
+                        onClick={() => {
+                          setKind(k);
+                          setOpponentIds([]);
+                        }}
+                        className={cn(
+                          "group relative overflow-hidden rounded-2xl text-left ring-2 transition-all",
+                          selected
+                            ? "ring-amber-300"
+                            : "ring-white/10 hover:ring-white/30",
+                        )}
+                      >
+                        <span
                           className={cn(
-                            "group relative overflow-hidden rounded-2xl text-left ring-2 transition-all",
-                            selected
-                              ? "ring-amber-300"
-                              : "ring-white/10 hover:ring-white/30",
+                            "flex items-center gap-3 bg-gradient-to-br px-3 py-3",
+                            art,
                           )}
                         >
-                          <span
-                            className={cn(
-                              "flex items-center gap-3 bg-gradient-to-br px-3 py-3",
-                              art,
-                            )}
-                          >
-                            <GameGlyph kind={k} />
-                            <span className="min-w-0 flex-1">
-                              <span className="block text-[14px] font-black leading-tight tracking-tight">
-                                {KIND_LABEL[k]}
-                              </span>
-                              <span className="block text-[11px] font-medium text-white/70">
-                                {tag}
-                              </span>
-                              <span className="mt-1 inline-block rounded-full bg-black/35 px-2 py-px font-mono text-[9.5px] font-bold tracking-wide text-white/90">
-                                {KIND_BLURB[k].toUpperCase()}
-                              </span>
+                          <GameGlyph kind={k} />
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-[14px] font-black leading-tight tracking-tight">
+                              {KIND_LABEL[k]}
+                            </span>
+                            <span className="block text-[11px] font-medium text-white/70">
+                              {tag}
+                            </span>
+                            <span className="mt-1 inline-block rounded-full bg-black/35 px-2 py-px font-mono text-[9.5px] font-bold tracking-wide text-white/90">
+                              {KIND_BLURB[k].toUpperCase()}
                             </span>
                           </span>
-                          {selected && (
-                            <span className="absolute right-2 top-2 flex size-5 items-center justify-center rounded-full bg-amber-300 text-[11px] font-black text-neutral-950">
-                              ✓
-                            </span>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  {/* Opponent picker */}
-                  <div className="mt-3 flex items-baseline justify-between text-[10px] font-medium uppercase tracking-[0.18em] text-white/50">
-                    <span>{party ? "Invite up to 3" : "Challenge"}</span>
-                    {party && opponentIds.length > 0 && (
-                      <span className="text-emerald-300">
-                        {opponentIds.length + 1} players
-                      </span>
-                    )}
-                  </div>
-                  <div className="mt-2 grid max-h-40 grid-cols-2 gap-1.5 overflow-y-auto pr-0.5">
-                    {opponents.length === 0 && (
-                      <div className="col-span-2 rounded-xl bg-white/[0.06] px-3 py-2.5 text-[12px] text-white/50 ring-1 ring-white/10">
-                        No one else is around yet — invite a teammate to the
-                        workspace first.
-                      </div>
-                    )}
-                    {opponents.map((m) => {
-                      const picked = opponentIds.includes(m.userId);
-                      return (
-                        <button
-                          key={m.userId}
-                          type="button"
-                          onClick={() => toggleOpponent(m.userId)}
-                          aria-pressed={picked}
-                          className={cn(
-                            "relative flex items-center gap-2 rounded-xl px-2 py-1.5 text-left ring-1 transition-all",
-                            picked
-                              ? "bg-emerald-400/15 ring-emerald-300/70"
-                              : "bg-transparent ring-white/10 hover:bg-white/[0.07]",
-                          )}
-                        >
-                          <span
-                            className={cn(
-                              "flex size-8 shrink-0 items-center justify-center rounded-full text-[12px] font-black ring-2",
-                              picked
-                                ? "bg-emerald-400 text-neutral-950 ring-emerald-200"
-                                : "bg-white/15 text-white ring-transparent",
-                            )}
-                          >
-                            {initials(m.name)}
-                          </span>
-                          <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold">
-                            {m.name}
-                          </span>
-                          <span
-                            className={cn(
-                              "flex size-4 shrink-0 items-center justify-center rounded-full text-[9px] font-black ring-1",
-                              picked
-                                ? "bg-emerald-400 text-neutral-950 ring-emerald-200"
-                                : "text-transparent ring-white/25",
-                            )}
-                          >
+                        </span>
+                        {selected && (
+                          <span className="absolute right-2 top-2 flex size-5 items-center justify-center rounded-full bg-amber-300 text-[11px] font-black text-neutral-950">
                             ✓
                           </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => void start()}
-                    disabled={opponentIds.length === 0 || creating}
-                    className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 py-2.5 text-[13.5px] font-bold text-neutral-950 transition-all hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-30"
-                  >
-                    <FiPlay className="size-3.5" />
-                    {creating
-                      ? "Sending invite…"
-                      : party
-                        ? `Invite ${opponentIds.length > 0 ? `(${opponentIds.length + 1}P) ` : ""}to play`
-                        : "Challenge to play"}
-                  </button>
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
-              </section>
-
-              {/* On the bench */}
-              <section>
-                <Eyebrow>On the bench</Eyebrow>
-                <div className="grid grid-cols-2 gap-2">
-                  {[
-                    {
-                      name: "Pictionary",
-                      seats: "2–8P",
-                      icon: <FiEdit3 className="size-4" />,
-                    },
-                    {
-                      name: "Table Tennis",
-                      seats: "2/4P",
-                      icon: <FiActivity className="size-4" />,
-                    },
-                  ].map((g) => (
-                    <div
-                      key={g.name}
-                      aria-disabled="true"
-                      className="flex cursor-not-allowed items-center gap-2.5 rounded-2xl bg-white px-3.5 py-3 opacity-70 ring-1 ring-black/[0.07]"
-                    >
-                      <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-neutral-900/[0.05] text-neutral-400">
-                        {g.icon}
-                      </span>
-                      <span className="min-w-0">
-                        <span className="block truncate text-[13px] font-semibold text-neutral-800">
-                          {g.name}
-                        </span>
-                        <span className="block font-mono text-[10px] uppercase tracking-wide text-neutral-400">
-                          {g.seats} · soon
-                        </span>
-                      </span>
+                {/* Opponent picker */}
+                <div className="mt-3 flex items-baseline justify-between text-[10px] font-medium uppercase tracking-[0.18em] text-white/50">
+                  <span>{party ? "Invite up to 3" : "Challenge"}</span>
+                  {party && opponentIds.length > 0 && (
+                    <span className="text-emerald-300">
+                      {opponentIds.length + 1} players
+                    </span>
+                  )}
+                </div>
+                <div className="mt-2 grid max-h-40 grid-cols-2 gap-1.5 overflow-y-auto pr-0.5">
+                  {opponents.length === 0 && (
+                    <div className="col-span-2 rounded-xl bg-white/[0.06] px-3 py-2.5 text-[12px] text-white/50 ring-1 ring-white/10">
+                      No one else is around yet — invite a teammate to the
+                      workspace first.
                     </div>
-                  ))}
+                  )}
+                  {opponents.map((m) => {
+                    const picked = opponentIds.includes(m.userId);
+                    return (
+                      <button
+                        key={m.userId}
+                        type="button"
+                        onClick={() => toggleOpponent(m.userId)}
+                        aria-pressed={picked}
+                        className={cn(
+                          "relative flex items-center gap-2 rounded-xl px-2 py-1.5 text-left ring-1 transition-all",
+                          picked
+                            ? "bg-emerald-400/15 ring-emerald-300/70"
+                            : "bg-transparent ring-white/10 hover:bg-white/[0.07]",
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            "flex size-8 shrink-0 items-center justify-center rounded-full text-[12px] font-black ring-2",
+                            picked
+                              ? "bg-emerald-400 text-neutral-950 ring-emerald-200"
+                              : "bg-white/15 text-white ring-transparent",
+                          )}
+                        >
+                          {initials(m.name)}
+                        </span>
+                        <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold">
+                          {m.name}
+                        </span>
+                        <span
+                          className={cn(
+                            "flex size-4 shrink-0 items-center justify-center rounded-full text-[9px] font-black ring-1",
+                            picked
+                              ? "bg-emerald-400 text-neutral-950 ring-emerald-200"
+                              : "text-transparent ring-white/25",
+                          )}
+                        >
+                          ✓
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
-              </section>
-            </div>
-          )}
-        </div>
+                <button
+                  type="button"
+                  onClick={() => void start()}
+                  disabled={opponentIds.length === 0 || creating}
+                  className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 py-2.5 text-[13.5px] font-bold text-neutral-950 transition-all hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-30"
+                >
+                  <FiPlay className="size-3.5" />
+                  {creating
+                    ? "Sending invite…"
+                    : party
+                      ? `Invite ${opponentIds.length > 0 ? `(${opponentIds.length + 1}P) ` : ""}to play`
+                      : "Challenge to play"}
+                </button>
+              </div>
+            </section>
+
+            {/* On the bench */}
+            <section>
+              <Eyebrow>On the bench</Eyebrow>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  {
+                    name: "Pictionary",
+                    seats: "2–8P",
+                    icon: <FiEdit3 className="size-4" />,
+                  },
+                  {
+                    name: "Table Tennis",
+                    seats: "2/4P",
+                    icon: <FiActivity className="size-4" />,
+                  },
+                ].map((g) => (
+                  <div
+                    key={g.name}
+                    aria-disabled="true"
+                    className="flex cursor-not-allowed items-center gap-2.5 rounded-2xl bg-white px-3.5 py-3 opacity-70 ring-1 ring-black/[0.07]"
+                  >
+                    <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-neutral-900/[0.05] text-neutral-400">
+                      {g.icon}
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block truncate text-[13px] font-semibold text-neutral-800">
+                        {g.name}
+                      </span>
+                      <span className="block font-mono text-[10px] uppercase tracking-wide text-neutral-400">
+                        {g.seats} · soon
+                      </span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </section>
+          </div>
+        )}
       </div>
-    </div>
+    </WModal>
   );
 }
 

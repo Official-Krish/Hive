@@ -23,6 +23,7 @@ function baseBot(modelUrl: string | null): MapAvatar {
     x: BOT_X,
     y: BOT_Y,
     roomId: null,
+    sitting: false,
   };
 }
 

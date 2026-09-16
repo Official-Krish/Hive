@@ -13,14 +13,14 @@ interface UseInteractionsOptions {
 }
 
 /** Cooldown between presses on the same interactable. */
-const COOLDOWN_MS = 2500;
+const COOLDOWN_MS = 500;
 /** How close the player's feet must be to an interactable's floor level. */
 const LEVEL_EPS = 0.9;
 
 /**
  * Picks the nearest interactable within its radius (level-aware) and fires
- * `onPress` when the player taps E. The handler ignores keys typed into
- * inputs so it can't hijack chat, search, or the custom-status field.
+ * `onPress` when the player taps E. Nearest is diffed by id so standing
+ * still never re-renders; the key listener subscribes once and reads refs.
  */
 export function useInteractions({
   pos,
@@ -28,6 +28,9 @@ export function useInteractions({
   onPress,
 }: UseInteractionsOptions) {
   const [near, setNear] = useState<Interactable | null>(null);
+  const nearRef = useRef<Interactable | null>(null);
+  const blockedRef = useRef(blocked);
+  blockedRef.current = blocked;
   const lastPressRef = useRef<Record<string, number>>({});
   const onPressRef = useRef(onPress);
   onPressRef.current = onPress;
@@ -44,22 +47,26 @@ export function useInteractions({
         bestDistance = d;
       }
     }
-    setNear(best);
+    if ((best?.id ?? null) !== (nearRef.current?.id ?? null)) {
+      nearRef.current = best;
+      setNear(best);
+    }
   }, [pos]);
 
   const press = useCallback(() => {
-    if (blocked || !near) return;
+    const target = nearRef.current;
+    if (blockedRef.current || !target) return;
     const now = Date.now();
-    if (now - (lastPressRef.current[near.id] ?? 0) < COOLDOWN_MS) return;
-    lastPressRef.current[near.id] = now;
-    onPressRef.current?.(near);
-  }, [near, blocked]);
+    if (now - (lastPressRef.current[target.id] ?? 0) < COOLDOWN_MS) return;
+    lastPressRef.current[target.id] = now;
+    onPressRef.current?.(target);
+  }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.code !== "KeyE") return;
       const target = e.target as HTMLElement | null;
-      if (target?.closest("input, textarea, select")) return;
+      if (target?.closest("input, textarea, select, [contenteditable]")) return;
       press();
     };
     window.addEventListener("keydown", onKey);

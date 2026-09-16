@@ -1,6 +1,8 @@
 import { Instances, Instance } from "@react-three/drei";
 import { InstancedFurniture } from "../InstancedFurniture";
+import { KitInstances, KitPiece } from "./KitInstances";
 import { M } from "./materials";
+import { monumentTexture } from "./signage";
 import {
   DESKS,
   DESK_CHAIRS,
@@ -13,7 +15,6 @@ import {
   LOUNGE_SOFAS,
   LOUNGE_TABLES,
   SERVER_RACKS,
-  PLANTS,
   PHONE_BOOTHS,
   CREDENZAS,
   PRINTERS,
@@ -197,12 +198,45 @@ export function Furnishings() {
           mounted at the real ceiling plane. */}
       <InstancedFurniture
         desks={DESKS}
-        chairs={[...DESK_CHAIRS, ...MEETING_CHAIRS]}
+        chairs={DESK_CHAIRS}
+        meetingChairs={MEETING_CHAIRS}
         monitors={MONITORS}
-        plants={PLANTS}
         sofas={LOUNGE_SOFAS}
         coffeeTables={LOUNGE_TABLES}
+        cafeTables={CAFE_TABLES}
+        stools={CAFE_STOOLS}
       />
+      {/* Cafeteria appliances + dressing (Kenney kit, CC0) */}
+      <KitPiece
+        model="coffeeMachine"
+        position={[27.2, 1.09, 5.2]}
+        rotation={[0, -Math.PI / 2, 0]}
+      />
+      <KitInstances
+        model="trashcan"
+        items={[
+          { position: [13, 0, 7] },
+          { position: [31, 0, 7] },
+          { position: [-4, 0, 11] },
+        ]}
+        name="kit-trash"
+      />
+      <KitInstances
+        model="bookcaseLow"
+        items={CREDENZAS.flatMap(([x, z, w, , ry]) => {
+          const n = Math.max(1, Math.round(w / 1.6));
+          return Array.from({ length: n }, (_, k) => ({
+            position: [x - w / 2 + (w * (k + 0.5)) / n, 0, z] as [
+              number,
+              number,
+              number,
+            ],
+            rotation: [0, ry, 0] as [number, number, number],
+          }));
+        })}
+        name="kit-credenzas"
+      />
+      <KitPiece model="coatRack" position={[-4.2, 0, 18.6]} />
       {/* ---------------- Reception (east lobby) ---------------- */}
       <group>
         {/* Counter: main run + return */}
@@ -258,6 +292,19 @@ export function Furnishings() {
         <HexLogo x={9.1} y={3.35} z={17.88} s={0.26} />
         <HexLogo x={10.5} y={3.35} z={17.88} s={0.26} />
         <HexLogo x={11.9} y={3.35} z={17.88} s={0.26} />
+        {/* Brand lockups flanking the video wall — same Hive artwork as the
+            courtyard monument outside (face the lobby, rotation PI reads
+            correctly — same as the desk-kit screens) */}
+        {[6.03, 14.97].map((x) => (
+          <mesh key={x} position={[x, 1.9, 17.87]} rotation={[0, Math.PI, 0]}>
+            <planeGeometry args={[2.6, 0.65]} />
+            <meshBasicMaterial
+              map={monumentTexture()}
+              transparent
+              toneMapped={false}
+            />
+          </mesh>
+        ))}
         {/* Wall-wash strip at the base */}
         <mesh position={[10.5, 0.06, 17.84]}>
           <boxGeometry args={[11.2, 0.05, 0.06]} />
@@ -370,71 +417,16 @@ export function Furnishings() {
           ))}
         </group>
       ))}
-      {/* Round dining tables */}
-      <Instances
-        frustumCulled={false}
-        range={CAFE_TABLES.length}
-        limit={CAFE_TABLES.length}
-        castShadow
-        receiveShadow
-      >
-        <cylinderGeometry args={[0.7, 0.7, 0.08, 20]} />
-        <primitive object={M.woodLight} attach="material" />
-        {CAFE_TABLES.map((t, i) => (
-          <Instance key={i} position={[t.position[0], 0.74, t.position[2]]} />
-        ))}
-      </Instances>
-      <Instances
-        frustumCulled={false}
-        range={CAFE_TABLES.length}
-        limit={CAFE_TABLES.length}
-      >
-        <cylinderGeometry args={[0.08, 0.12, 0.74, 12]} />
-        <primitive object={M.metalBrushed} attach="material" />
-        {CAFE_TABLES.map((t, i) => (
-          <Instance key={i} position={[t.position[0], 0.37, t.position[2]]} />
-        ))}
-      </Instances>
-      {/* Stools: seat + leg */}
-      <Instances
-        frustumCulled={false}
-        range={CAFE_STOOLS.length}
-        limit={CAFE_STOOLS.length}
-        castShadow
-      >
-        <cylinderGeometry args={[0.24, 0.24, 0.08, 16]} />
-        <primitive object={M.sofaWarm} attach="material" />
-        {CAFE_STOOLS.map((s, i) => (
-          <Instance key={i} position={[s.position[0], 0.5, s.position[2]]} />
-        ))}
-      </Instances>
-      <Instances
-        frustumCulled={false}
-        range={CAFE_STOOLS.length}
-        limit={CAFE_STOOLS.length}
-      >
-        <cylinderGeometry args={[0.05, 0.05, 0.5, 10]} />
-        <primitive object={M.metalDark} attach="material" />
-        {CAFE_STOOLS.map((s, i) => (
-          <Instance key={i} position={[s.position[0], 0.25, s.position[2]]} />
-        ))}
-      </Instances>
-      {/* Tall units / fridges */}
+      {/* Round dining tables + stools now come from the kit via
+          InstancedFurniture (cafeTables/stools) above. */}
+      {/* Tall units / fridges (kit, CC0) */}
       {FRIDGES.map(([x, z, ry], i) => (
-        <group key={i} position={[x, 0, z]} rotation={[0, ry, 0]}>
-          <mesh position={[0, 0.95, 0]} castShadow receiveShadow>
-            <boxGeometry args={[0.9, 1.9, 0.75]} />
-            <primitive object={M.metalBrushed} attach="material" />
-          </mesh>
-          <mesh position={[0, 1.1, 0.39]} renderOrder={20}>
-            <boxGeometry args={[0.72, 1.1, 0.03]} />
-            <primitive object={M.glassCheap} attach="material" />
-          </mesh>
-          <mesh position={[0, 1.85, 0.39]}>
-            <boxGeometry args={[0.7, 0.04, 0.03]} />
-            <primitive object={M.ledCyan} attach="material" />
-          </mesh>
-        </group>
+        <KitPiece
+          key={i}
+          model={i === 0 ? "fridgeLarge" : "fridgeSmall"}
+          position={[x, 0, z]}
+          rotation={[0, ry, 0]}
+        />
       ))}
       {/* Water dispenser */}
       <WaterCooler x={WATER_COOLER[0]} z={WATER_COOLER[1]} />

@@ -1,4 +1,14 @@
-import { DESKS, L2_DESKS, POD_DESKS, WATER_COOLER } from "./office/layout";
+import {
+  DESKS,
+  L2_DESKS,
+  POD_DESKS,
+  DESK_CHAIRS,
+  MEETING_CHAIRS,
+  L2_DESK_CHAIRS,
+  WATER_COOLER,
+} from "./office/layout";
+import { KIT_YAW } from "./office/kitManifest";
+import type { TransformData } from "./InstancedFurniture";
 
 export type InteractableKind =
   | "coffee"
@@ -243,3 +253,32 @@ export const INTERACTABLES: Interactable[] = [
 export function interactableById(id: string): Interactable | undefined {
   return INTERACTABLES.find((it) => it.id === id);
 }
+
+/** A chair the player can sit on: seat position + facing (toward the desk). */
+export interface SitSpot {
+  x: number;
+  y: number;
+  z: number;
+  heading: number;
+}
+
+/** How close (m) the player must be to a chair to sit down. */
+export const SIT_RADIUS = 1.4;
+
+/** Chairs sit slightly rotated/jittered in-scene; sitters snap to the base
+ *  spot facing the desk (layout yaw + the kit chair flip). */
+function sitSpots(chairs: TransformData[], yawFix: number): SitSpot[] {
+  return chairs.map((c) => ({
+    x: c.position[0],
+    y: c.position[1],
+    z: c.position[2],
+    heading: (c.rotation ? c.rotation[1] : 0) + yawFix,
+  }));
+}
+
+/** Every desk + meeting chair on both floors. Stools/sofas stay stand-only. */
+export const CHAIR_SIT_SPOTS: SitSpot[] = [
+  ...sitSpots(DESK_CHAIRS, KIT_YAW.taskChair),
+  ...sitSpots(MEETING_CHAIRS, KIT_YAW.meetingChair),
+  ...sitSpots(L2_DESK_CHAIRS, KIT_YAW.taskChair),
+];

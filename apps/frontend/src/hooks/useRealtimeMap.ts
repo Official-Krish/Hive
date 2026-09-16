@@ -22,6 +22,8 @@ export interface MapAvatar {
   x: number;
   y: number;
   roomId: string | null;
+  /** Seated on a chair (from avatar.moved) — remotes play the sit pose. */
+  sitting: boolean;
   /** Client-side only: most recent test pulse (for the red/green flash). */
   lastTest?: { passed: boolean; at: number };
 }
@@ -53,6 +55,7 @@ function blankMember(developerId: string): MapAvatar {
     x: 0,
     y: 0,
     roomId: null,
+    sitting: false,
   };
 }
 
@@ -76,7 +79,12 @@ export function useRealtimeMap(
   nearIds: ReadonlySet<string>;
   connectionStatus: string;
   myPosition: MapPosition;
-  setMyPosition: (x: number, y: number, roomId: string | null) => void;
+  setMyPosition: (
+    x: number,
+    y: number,
+    roomId: string | null,
+    sitting?: boolean,
+  ) => void;
   setMyPresence: (status: "online" | "away") => void;
 } {
   const [client, setClient] = useState<RealtimeClient | null>(null);
@@ -130,7 +138,7 @@ export function useRealtimeMap(
   }, []);
 
   const setMyPosition = useCallback(
-    (x: number, y: number, roomId: string | null) => {
+    (x: number, y: number, roomId: string | null, sitting = false) => {
       myPosRef.current = { x, y, roomId };
       setMyPositionState({ x, y, roomId });
 
@@ -145,7 +153,7 @@ export function useRealtimeMap(
         const now = Date.now();
         if (now - lastSendRef.current >= MOVE_THROTTLE_MS) {
           lastSendRef.current = now;
-          socket.sendAvatarMove(x, y, roomId);
+          socket.sendAvatarMove(x, y, roomId, sitting);
         }
       }
       recomputeNear();
@@ -180,6 +188,9 @@ export function useRealtimeMap(
             x: member.position?.x ?? 0,
             y: member.position?.y ?? 0,
             roomId: member.position?.roomId ?? null,
+            // Snapshot carries no pose — remotes start standing; the next
+            // avatar.moved (position streams at ~12Hz) corrects it.
+            sitting: false,
           });
         }
         avatarsRef.current = next;
@@ -249,6 +260,7 @@ export function useRealtimeMap(
           x: event.x,
           y: event.y,
           roomId: event.roomId,
+          sitting: event.sitting ?? current?.sitting ?? false,
         });
         avatarsRef.current = next;
         setAvatars(next);

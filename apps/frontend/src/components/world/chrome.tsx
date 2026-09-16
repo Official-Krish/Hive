@@ -1,6 +1,6 @@
 import { useEffect, useRef, type ReactNode } from "react";
-import { FiX } from "react-icons/fi";
 import { cn } from "@/lib/utils";
+import { WModal, WModalHeader } from "./motion";
 
 /* ─────────────────────────────────────────────────────────────
    WORLD CHROME — the in-world UI language.
@@ -150,7 +150,9 @@ export function DPanel({
   );
 }
 
-/* ── Modal shell (centered dialogs) ────────────────────────── */
+/* ── Modal shell (centered dialogs) ──────────────────────────
+   Animated via WModal — callers wrap their mount in <AnimatePresence>
+   for the exit transition. */
 export function DModal({
   children,
   eyebrow,
@@ -168,39 +170,15 @@ export function DModal({
 }) {
   useEscape(onClose);
   return (
-    <div
-      className="pointer-events-auto fixed inset-0 z-40 grid place-items-center bg-black/30 p-4 backdrop-blur-[2px]"
-      onClick={onClose}
-      role="dialog"
-      aria-modal="true"
-      aria-label={title}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className={cn(
-          "flex max-h-[86vh] w-full flex-col overflow-hidden rounded-2xl bg-[#f4f2ed] ring-1 ring-black/[0.09]",
-          wide ? "max-w-2xl" : "max-w-md",
-        )}
-      >
-        <div className="flex items-center justify-between gap-3 border-b border-black/[0.07] px-4 py-3">
-          <div className="min-w-0">
-            <div className={EYEBROW}>{eyebrow}</div>
-            <div className="mt-1 truncate text-[15px] font-semibold tracking-tight text-neutral-900">
-              {title}
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label={closeLabel}
-            className="rounded-lg p-2 text-neutral-500 transition-colors hover:bg-black/[0.05] hover:text-neutral-900"
-          >
-            <FiX className="size-4" />
-          </button>
-        </div>
-        {children}
-      </div>
-    </div>
+    <WModal label={title} onClose={onClose} wide={wide}>
+      <WModalHeader
+        eyebrow={eyebrow}
+        title={title}
+        onClose={onClose}
+        closeLabel={closeLabel}
+      />
+      {children}
+    </WModal>
   );
 }
 

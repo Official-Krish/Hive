@@ -18,6 +18,7 @@ import {
   type Wall,
 } from "./layout";
 import { M, floorFor, facadeFor } from "./materials";
+import { KitInstances } from "./KitInstances";
 import { monumentTexture, marqueeTexture } from "./signage";
 
 // Aligned with the directional SUN in OfficeLighting so the sky disc and the
@@ -1132,23 +1133,12 @@ export function Courtyard() {
         ))}
       </Instances>
 
-      {/* Benches: slatted seat on two legs */}
-      {COURT_BENCHES.map((b, i) => (
-        <group key={i} position={b.position} rotation={b.rotation}>
-          {[-0.17, 0, 0.17].map((dz) => (
-            <mesh key={dz} position={[0, 0.45, dz]} castShadow receiveShadow>
-              <boxGeometry args={[2.1, 0.08, 0.14]} />
-              <primitive object={M.woodLight} attach="material" />
-            </mesh>
-          ))}
-          {[-0.85, 0.85].map((dx) => (
-            <mesh key={dx} position={[dx, 0.21, 0]} castShadow>
-              <boxGeometry args={[0.1, 0.42, 0.48]} />
-              <primitive object={M.metalDark} attach="material" />
-            </mesh>
-          ))}
-        </group>
-      ))}
+      {/* Benches (kit bench.glb, CC0) */}
+      <KitInstances
+        model="bench"
+        items={COURT_BENCHES}
+        name="kit-court-benches"
+      />
 
       {/* Bollards flanking the entrance runway */}
       <Instances range={12} limit={12} castShadow>
