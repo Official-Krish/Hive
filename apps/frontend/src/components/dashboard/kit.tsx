@@ -2,6 +2,13 @@ import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { FiArrowLeft, FiCheck, FiCopy, FiInfo } from "react-icons/fi";
 import { cn } from "@/lib/utils";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 /* ─────────────────────────────────────────────────────────────
    HIVE console kit — light minimalist instrument.
@@ -709,6 +716,62 @@ export function BaselineField({
         <span className="mt-1.5 block text-xs text-neutral-500">{hint}</span>
       ) : null}
     </div>
+  );
+}
+
+/* ── Baseline select — shadcn/Radix value picker in the quiet-canvas voice.
+   Single shared dropdown: borderless baseline trigger, paper content, check
+   indicator rows. Radix forbids empty-string items, so the "choose…" row is
+   expressed as `placeholder` (shown whenever value is "") instead of an
+   <option value="">. */
+export interface BaselineOption {
+  value: string;
+  label: string;
+}
+
+export function BaselineSelect({
+  value,
+  onValueChange,
+  placeholder,
+  options,
+  disabled,
+  ariaLabel,
+  autoFocus,
+  className,
+}: {
+  value: string;
+  onValueChange: (value: string) => void;
+  placeholder?: string;
+  options: BaselineOption[];
+  disabled?: boolean;
+  ariaLabel?: string;
+  autoFocus?: boolean;
+  className?: string;
+}) {
+  return (
+    <Select value={value} onValueChange={onValueChange} disabled={disabled}>
+      <SelectTrigger
+        aria-label={ariaLabel}
+        autoFocus={autoFocus}
+        className={cn(
+          "w-full rounded-none border-0 border-b border-neutral-900/15 bg-transparent px-0 py-2.5 text-[15px] text-neutral-900 shadow-none outline-none transition-colors placeholder:text-neutral-400 focus:border-neutral-900/60 focus-visible:ring-0 data-[placeholder]:text-neutral-400 [&_svg]:text-neutral-400",
+          className,
+        )}
+      >
+        <SelectValue placeholder={placeholder} />
+      </SelectTrigger>
+      <SelectContent className="bg-[#f4f2ed] text-neutral-800">
+        {options.map((o) => (
+          <SelectItem
+            key={o.value}
+            value={o.value}
+            className="focus:bg-black/[0.05] focus:text-neutral-950"
+          >
+            {o.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }
 

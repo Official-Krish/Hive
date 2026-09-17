@@ -1,12 +1,11 @@
 import { useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
-import { AlertTriangle, Check, Waves, X, Zap } from "lucide-react";
+import { AlertTriangle, Waves, Zap } from "lucide-react";
 import Avatar, { type PlayerMotion } from "./Avatar";
 import { AvatarErrorBoundary } from "./AvatarErrorBoundary";
 import type { MapAvatar } from "@/hooks/useRealtimeMap";
 import { type NearbyTokens } from "@/hooks/useNearbyTokens";
-import { formatTokens } from "./MapHud";
 import { ASSET_BASE_URL } from "@/lib/config";
 
 const DEFAULT_AVATAR = `${ASSET_BASE_URL}/avatars/male/hive_male_01.glb`;
@@ -261,7 +260,6 @@ export function RemoteAvatars({
     }
   });
 
-  const now = Date.now();
   const entries: Array<[string, MapAvatar]> = [];
   for (const [id, a] of avatars) {
     if (id === myUserId) continue;
@@ -305,34 +303,11 @@ export function RemoteAvatars({
             icon: <AlertTriangle className="size-2.5" />,
           });
         if (avatar.label) meta.push({ text: avatar.label, tone: "neutral" });
-        if (avatar.project)
-          meta.push({ text: avatar.project, tone: "neutral" });
-        const t = pills?.get(id);
-        const testFresh =
-          avatar.lastTest && now - avatar.lastTest.at < 8_000
-            ? avatar.lastTest
-            : undefined;
-        if (testFresh) {
-          meta.push({
-            text: "Tests",
-            tone: testFresh.passed ? "green" : "red",
-            icon: testFresh.passed ? (
-              <Check className="size-2.5" />
-            ) : (
-              <X className="size-2.5" />
-            ),
-          });
-        } else if (t) {
-          meta.push({
-            text: `${formatTokens(t.inputTokens)} in · ${formatTokens(
-              t.outputTokens,
-            )} out${
-              t.costCents != null ? ` · $${(t.costCents / 100).toFixed(2)}` : ""
-            }`,
-            tone: "neutral",
-            icon: <Zap className="size-2.5" />,
-          });
-        }
+        // Floater cap: headline + one context pill max. Project, token and
+        // test details live in the member card (MemberDetailPopup) — keeping
+        // them here stacked 4-5 pills over heads in dense rooms.
+        void pills;
+        const cappedMeta = meta.slice(0, 2);
 
         return (
           <group
@@ -383,7 +358,7 @@ export function RemoteAvatars({
                   STATUS_COLOR[avatar.status ?? "online"] ?? "bg-emerald-400"
                 }
                 position={[0, 0, 0]}
-                meta={meta}
+                meta={cappedMeta}
               />
             </AvatarErrorBoundary>
           </group>

@@ -5,6 +5,7 @@ import { http } from "@/lib/http";
 import type { UsageDayPoint } from "@hive/types";
 import {
   BackLink,
+  BaselineSelect,
   Btn,
   Note,
   PageHead,
@@ -844,18 +845,19 @@ function KeysTab({
           Admins only — encrypted at rest, hashed for lookup.
         </p>
         <div className="flex flex-wrap items-end gap-x-6 gap-y-4 pt-3">
-          <label className="flex w-32 flex-col gap-1 text-[12px] font-medium text-neutral-500">
+          <div className="flex w-32 flex-col gap-1 text-[12px] font-medium text-neutral-500">
             Provider
-            <select
+            <BaselineSelect
               value={stockProvider}
-              onChange={(e) => setStockProvider(e.target.value)}
-              className={baselineInputClass}
-            >
-              <option value="claude">Claude</option>
-              <option value="opencode">OpenCode</option>
-              <option value="codex">Codex</option>
-            </select>
-          </label>
+              ariaLabel="Provider"
+              options={[
+                { value: "claude", label: "Claude" },
+                { value: "opencode", label: "OpenCode" },
+                { value: "codex", label: "Codex" },
+              ]}
+              onValueChange={setStockProvider}
+            />
+          </div>
           <label className="flex min-w-36 flex-1 flex-col gap-1 text-[12px] font-medium text-neutral-500">
             Label
             <input
@@ -915,37 +917,32 @@ function KeysTab({
           Admins grant keys to members.
         </p>
         <div className="flex flex-wrap items-end gap-x-6 gap-y-4 pt-3">
-          <label className="flex min-w-44 flex-1 flex-col gap-1 text-[12px] font-medium text-neutral-500">
+          <div className="flex min-w-44 flex-1 flex-col gap-1 text-[12px] font-medium text-neutral-500">
             Key
-            <select
+            <BaselineSelect
               value={assignPool}
-              onChange={(e) => setAssignPool(e.target.value)}
-              className={baselineInputClass}
-            >
-              <option value="">Select a stocked key…</option>
-              {available.map((e) => (
-                <option key={e.id} value={e.id}>
-                  {e.provider} · {e.label} ({e.checkoutCount}
-                  {e.maxCheckouts !== null ? `/${e.maxCheckouts}` : ""} taken)
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="flex min-w-44 flex-1 flex-col gap-1 text-[12px] font-medium text-neutral-500">
+              placeholder="Select a stocked key…"
+              ariaLabel="Select a stocked key"
+              options={available.map((e) => ({
+                value: e.id,
+                label: `${e.provider} · ${e.label} (${e.checkoutCount}${e.maxCheckouts !== null ? `/${e.maxCheckouts}` : ""} taken)`,
+              }))}
+              onValueChange={setAssignPool}
+            />
+          </div>
+          <div className="flex min-w-44 flex-1 flex-col gap-1 text-[12px] font-medium text-neutral-500">
             Member
-            <select
+            <BaselineSelect
               value={assignUser}
-              onChange={(e) => setAssignUser(e.target.value)}
-              className={baselineInputClass}
-            >
-              <option value="">Select a member…</option>
-              {members.map((m) => (
-                <option key={m.userId} value={m.userId}>
-                  {m.name}
-                </option>
-              ))}
-            </select>
-          </label>
+              placeholder="Select a member…"
+              ariaLabel="Select a member"
+              options={members.map((m) => ({
+                value: m.userId,
+                label: m.name,
+              }))}
+              onValueChange={setAssignUser}
+            />
+          </div>
           <Btn
             disabled={!assignPool || !assignUser || assigning}
             onClick={onAssign}

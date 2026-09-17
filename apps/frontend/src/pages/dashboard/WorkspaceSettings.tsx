@@ -15,6 +15,7 @@ import {
 import {
   BackLink,
   BaselineField,
+  BaselineSelect,
   Badge,
   Btn,
   ConfirmBtn,
@@ -471,22 +472,20 @@ export function WorkspaceSettings() {
               )}
 
               <div className="mt-4 flex flex-wrap items-center gap-2">
-                <select
-                  className={`${baselineInputClass} min-w-0 flex-1`}
-                  value={repositoryId}
-                  onChange={(e) => setRepositoryId(e.target.value)}
-                  aria-label="Add a repository"
-                >
-                  <option value="">Add a repository…</option>
-                  {repoOptions
-                    .filter((r) => !linkedFullNames.has(r.fullName))
-                    .map((r) => (
-                      <option key={r.id} value={String(r.id)}>
-                        {r.fullName}
-                        {r.private ? " · private" : ""}
-                      </option>
-                    ))}
-                </select>
+                <div className="min-w-0 flex-1">
+                  <BaselineSelect
+                    value={repositoryId}
+                    placeholder="Add a repository…"
+                    ariaLabel="Add a repository"
+                    options={repoOptions
+                      .filter((r) => !linkedFullNames.has(r.fullName))
+                      .map((r) => ({
+                        value: String(r.id),
+                        label: `${r.fullName}${r.private ? " · private" : ""}`,
+                      }))}
+                    onValueChange={setRepositoryId}
+                  />
+                </div>
                 <Btn
                   disabled={linkRepoMutation.isPending || !repositoryId}
                   onClick={() => {

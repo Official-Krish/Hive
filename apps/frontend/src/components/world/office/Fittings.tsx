@@ -16,6 +16,9 @@ import {
   PODS,
   RUGS,
   CEILING_Y,
+  CEILING_Y2,
+  INTERIOR,
+  MEZZ,
   EXT_H,
   type WallPanel,
 } from "./layout";
@@ -331,6 +334,56 @@ function DirectoryTotem({
   );
 }
 
+/** T-bar grid + vents: thin dark lines every 1.2m so the big ceiling planes
+ *  read as tiled, plus sprinkler/vent discs. One instanced draw per axis. */
+function CeilingGrid({ y, z0, z1 }: { y: number; z0: number; z1: number }) {
+  const xs = useMemo(() => {
+    const out: number[] = [];
+    for (let x = INTERIOR.minX + 0.6; x < INTERIOR.maxX; x += 1.2) out.push(x);
+    return out;
+  }, []);
+  const zs = useMemo(() => {
+    const out: number[] = [];
+    for (let z = z0 + 0.6; z < z1; z += 1.2) out.push(z);
+    return out;
+  }, [z0, z1]);
+  const depth = z1 - z0;
+  const width = INTERIOR.maxX - INTERIOR.minX;
+  return (
+    <group name="ceiling-grid">
+      <Instances range={xs.length} limit={xs.length}>
+        <boxGeometry args={[0.02, 0.015, depth]} />
+        <primitive object={M.precastDark} attach="material" />
+        {xs.map((x) => (
+          <Instance key={x} position={[x, y - 0.008, (z0 + z1) / 2]} />
+        ))}
+      </Instances>
+      <Instances range={zs.length} limit={zs.length}>
+        <boxGeometry args={[width, 0.015, 0.02]} />
+        <primitive object={M.precastDark} attach="material" />
+        {zs.map((z) => (
+          <Instance key={z} position={[0, y - 0.008, z]} />
+        ))}
+      </Instances>
+      {/* Vents / sprinklers — small dark discs scattered on the grid */}
+      <Instances range={10} limit={10}>
+        <cylinderGeometry args={[0.09, 0.09, 0.02, 12]} />
+        <primitive object={M.metalDark} attach="material" />
+        {Array.from({ length: 10 }, (_, i) => (
+          <Instance
+            key={i}
+            position={[
+              INTERIOR.minX + 3 + ((i * 7.3) % width),
+              y - 0.015,
+              z0 + 1 + ((i * 4.1) % depth),
+            ]}
+          />
+        ))}
+      </Instances>
+    </group>
+  );
+}
+
 /**
  * Everything mounted to the ceilings and walls: lighting fixtures that actually
  * sit in the ceiling plane, acoustic baffles, timber feature walls, displays,
@@ -341,6 +394,9 @@ export function Fittings() {
 
   return (
     <group name="fittings">
+      {/* T-bar grids over the wing ceilings (lobby stays open to the roof) */}
+      <CeilingGrid y={CEILING_Y} z0={INTERIOR.minZ} z1={MEZZ.z0} />
+      <CeilingGrid y={CEILING_Y2} z0={INTERIOR.minZ} z1={MEZZ.z0} />
       {/* Recessed ceiling runs — level 1 wings + corridor, then level 2 */}
       {[...CEILING_RUNS, ...CEILING_RUNS_L2].map((r, i) => (
         <CeilingRun

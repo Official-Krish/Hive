@@ -14,7 +14,7 @@ import {
 import { Preload, useProgress } from "@react-three/drei";
 import * as THREE from "three";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   FiArrowLeft,
   FiAward,
@@ -227,6 +227,16 @@ function MembersPopup({
           </span>
         </div>
         <div className="flex flex-col overflow-y-auto p-2">
+          {roster.length === 0 && (
+            <div className="px-4 py-10 text-center">
+              <div className="text-[13px] font-semibold text-neutral-800">
+                No members yet
+              </div>
+              <div className="mt-1 text-[12px] text-neutral-500">
+                Invite your team from the dashboard to fill this office.
+              </div>
+            </div>
+          )}
           {roster.map((row) => (
             <button
               key={row.userId}
@@ -774,8 +784,63 @@ export function WorldCanvas({
   const [spawnFaded, setSpawnFaded] = useState(false);
   const [tourOpen, setTourOpen] = useState(() => shouldShowTour());
   const [loadingTip, setLoadingTip] = useState(0);
+  const [loadProgress, setLoadProgress] = useState(0);
+  const [loadStalled, setLoadStalled] = useState(false);
+  // Exit gate: paints a "returning" veil synchronously on back-press so the
+  // click always feels instant, even while the 3D scene tears down.
+  const [leaving, setLeaving] = useState(false);
+  const queryClient = useQueryClient();
+  // Warm the dashboard gate on hover/focus so ["me"] resolves from cache.
+  const prefetchDashboard = useCallback(() => {
+    void queryClient.prefetchQuery({
+      queryKey: ["me"],
+      queryFn: http.auth.me,
+      staleTime: 60_000,
+    });
+  }, [queryClient]);
+  const goBack = useCallback(() => {
+    setLeaving(true);
+    const back = searchParams.get("from") ?? "/dashboard";
+    // Let the veil paint before the heavy Canvas unmount blocks the thread.
+    requestAnimationFrame(() => {
+      window.setTimeout(() => navigate(back), 0);
+    });
+  }, [navigate, searchParams]);
   // Stable callback so the in-Canvas gate's timers never reset on re-render.
   const handleWorldReady = useCallback(() => setWorldReady(true), []);
+  // Desktop quality gate: 2k shadows, AA, streak env, live contact shadows.
+  // Coarse pointers, small viewports and reduced-motion stay on the cheap path.
+  const [highQuality] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      !window.matchMedia("(pointer: coarse)").matches &&
+      !window.matchMedia("(prefers-reduced-motion: reduce)").matches &&
+      Math.min(window.innerWidth, window.innerHeight) >= 700,
+  );
+  // Loader progress polling (outside render — see AssetGate note above).
+  useEffect(() => {
+    if (worldReady) return;
+    const id = window.setInterval(() => {
+      try {
+        setLoadProgress(Math.round(useProgress.getState().progress));
+      } catch {
+        /* drei store not ready yet */
+      }
+    }, 200);
+    return () => window.clearInterval(id);
+  }, [worldReady]);
+  // If assets hang past the escape hatch, offer retry instead of a half-empty spawn.
+  useEffect(() => {
+    if (worldReady) return;
+    const t = window.setTimeout(() => {
+      try {
+        if (useProgress.getState().progress < 100) setLoadStalled(true);
+      } catch {
+        setLoadStalled(true);
+      }
+    }, 15000);
+    return () => window.clearTimeout(t);
+  }, [worldReady]);
 
   // DOM-level escape hatch: if the Canvas never mounts (WebGL unavailable,
   // 3D tree error), the in-Canvas gate never runs — never trap the player.
@@ -1017,41 +1082,82 @@ export function WorldCanvas({
           ready (not just renderer creation), with a timeout fallback so a
           hung fetch can never trap the player. */}
       {!worldReady && (
-        <div className="absolute inset-0 z-40 flex flex-col items-center justify-center gap-3 bg-[#14171d]">
-          <div className="text-[11px] font-medium uppercase tracking-[0.22em] text-neutral-400">
+        <div
+          role="status"
+          aria-live="polite"
+          className="absolute inset-0 z-40 flex flex-col items-center justify-center gap-3 bg-[#F4F3EF]"
+        >
+          <div className="text-[11px] font-medium uppercase tracking-[0.22em] text-neutral-500">
             Loading Hive
           </div>
-          <div className="h-1 w-44 overflow-hidden rounded-full bg-white/10">
-            <div className="h-full w-1/2 animate-pulse rounded-full bg-emerald-400" />
+          <div
+            className="h-1 w-44 overflow-hidden rounded-full bg-black/[0.08]"
+            role="progressbar"
+            aria-valuenow={loadProgress}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-label="World loading progress"
+          >
+            <div
+              className="h-full rounded-full bg-emerald-600 transition-[width] duration-300"
+              style={{ width: `${Math.max(4, loadProgress)}%` }}
+            />
           </div>
-          <div className="max-w-[300px] text-center text-[12px] text-neutral-400">
+          <div className="font-mono text-[10.5px] tabular-nums text-neutral-500">
+            {loadStalled ? "Still loading…" : `${loadProgress}%`}
+          </div>
+          <div className="max-w-[320px] text-center text-[12px] text-neutral-500">
             {
               [
                 "Tip: walk north (W) through the glass entrance.",
-                "Tip: press E at any glowing desk to open it.",
+                "Tip: press E at any glowing marker to open it.",
                 "Tip: the west-end stairs lead up to L2.",
-              ][loadingTip % 3]
+                "Tip: V toggles first-person, F sits near chairs.",
+                "Tip: the members button (top right) opens the directory.",
+              ][loadingTip % 5]
             }
           </div>
+          {loadStalled && (
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="mt-1 rounded-lg bg-neutral-950 px-3.5 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-neutral-800"
+            >
+              Retry loading
+            </button>
+          )}
         </div>
       )}
-      {/* Spawn fade — eases out over the first second in-world */}
+      {/* Spawn fade — warm paper veil instead of a grey flash */}
       {worldReady && (
         <div
           aria-hidden
-          className={`pointer-events-none absolute inset-0 z-30 bg-black/30 transition-opacity duration-700 motion-reduce:hidden ${
+          className={`pointer-events-none absolute inset-0 z-30 bg-[#F4F3EF]/60 transition-opacity duration-700 motion-reduce:hidden ${
             spawnFaded ? "opacity-0" : "opacity-100"
           }`}
         />
+      )}
+      {/* Exit veil — instant feedback on back-press while the Canvas
+          unmounts and dashboard queries resolve underneath. */}
+      {leaving && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="absolute inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-[#F4F3EF]"
+        >
+          <span className="inline-block size-5 animate-spin rounded-full border-2 border-neutral-900/15 border-t-neutral-900" />
+          <span className="text-[13px] font-medium text-neutral-600">
+            Returning to dashboard…
+          </span>
+        </div>
       )}
       {/* Top bar: back · breadcrumb · you */}
       <div className="absolute top-4 left-4 right-4 z-10 flex flex-wrap items-center gap-2 pointer-events-none">
         <button
           type="button"
-          onClick={() => {
-            const back = searchParams.get("from") ?? "/dashboard";
-            navigate(back);
-          }}
+          onClick={goBack}
+          onMouseEnter={prefetchDashboard}
+          onFocus={prefetchDashboard}
           aria-label="Back to dashboard"
           className={`${CHIP} pointer-events-auto px-3 py-2 text-[12px] font-medium text-neutral-700 transition-colors hover:text-neutral-950 hover:bg-white/70`}
         >
@@ -1121,9 +1227,11 @@ export function WorldCanvas({
             onClick={() => setTourOpen(true)}
             aria-label="Show tour"
             title="Show tour"
-            className={`${CHIP} px-3 py-2 text-[13px] font-semibold text-neutral-700 transition-colors hover:bg-white/70`}
+            className={`${CHIP} min-h-10 min-w-10 justify-center px-3 py-2 text-[13px] font-semibold text-neutral-700 transition-colors hover:bg-white/70`}
           >
-            ?
+            <span aria-hidden className="text-[15px] font-bold leading-none">
+              ?
+            </span>
           </button>
           {/* GitHub notifications */}
           <GitHubNotificationBell
@@ -1150,7 +1258,7 @@ export function WorldCanvas({
             }}
             aria-label="Members — who's in this workplace"
             aria-expanded={membersOpen}
-            className={`${CHIP} relative px-3 py-2 transition-colors hover:bg-white/70`}
+            className={`${CHIP} relative min-h-10 min-w-10 justify-center px-3 py-2 transition-colors hover:bg-white/70`}
           >
             <FiUsers className="size-4 text-neutral-700" />
             {onlineCount > 0 && (
@@ -1177,7 +1285,7 @@ export function WorldCanvas({
             onClick={() => setChatOpen((v) => !v)}
             aria-label="Messages"
             aria-expanded={chatOpen}
-            className={`${CHIP} relative px-3 py-2 transition-colors hover:bg-white/70`}
+            className={`${CHIP} relative min-h-10 min-w-10 justify-center px-3 py-2 transition-colors hover:bg-white/70`}
           >
             <FiMessageSquare className="size-4 text-neutral-700" />
             {chat.totalUnread > 0 && (
@@ -1267,12 +1375,13 @@ export function WorldCanvas({
         </div>
       </div>
 
-      {/* Interaction hint + toast (bottom-left, above the movement legend) */}
+      {/* Persistent interaction row (bottom-center, above ticker) — never
+          shifts when transient toasts fire. Separate stack below for toasts. */}
       {!workspaceOpen &&
         !ciOpen &&
         !whiteboardId &&
-        (interaction.near || nearChair || toasts.length > 0) && (
-          <WToastStack>
+        (interaction.near || nearChair) && (
+          <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 flex -translate-x-1/2 items-center gap-2">
             {interaction.near &&
               (() => {
                 const Icon = INTERACTABLE_ICONS[interaction.near.icon];
@@ -1296,8 +1405,8 @@ export function WorldCanvas({
                 );
               })()}
             {/* Sit pill shows alongside (not instead of) the E pill — every
-                chair sits inside a monitor spot's radius, so gating on
-                !interaction.near hid it exactly when it was relevant. */}
+              chair sits inside a monitor spot's radius, so gating on
+              !interaction.near hid it exactly when it was relevant. */}
             {nearChair && (
               <WToast key="sit" id="sit" tone="neutral">
                 <button
@@ -1315,13 +1424,19 @@ export function WorldCanvas({
                 </button>
               </WToast>
             )}
-            {toasts.map((t) => (
-              <WToast key={t.key} id={t.key} tone={t.tone}>
-                <span role="status">{t.node}</span>
-              </WToast>
-            ))}
-          </WToastStack>
+          </div>
         )}
+      {/* Transient toasts (bottom-left, above legend) — layout-animated but
+          isolated from the interaction row so E/F never shifts mid-aim. */}
+      {!workspaceOpen && !ciOpen && !whiteboardId && toasts.length > 0 && (
+        <WToastStack>
+          {toasts.map((t) => (
+            <WToast key={t.key} id={t.key} tone={t.tone}>
+              <span>{t.node}</span>
+            </WToast>
+          ))}
+        </WToastStack>
+      )}
 
       {/* Controls legend — contextual hint follows room + target */}
       <div className="absolute bottom-4 left-4 z-10 pointer-events-none">
@@ -1392,17 +1507,17 @@ export function WorldCanvas({
         </div>
       </div>
 
-      {/* First-person crosshair */}
+      {/* First-person crosshair — dark core + white ring reads on light stone */}
       {fpp && (
         <div className="pointer-events-none absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2">
-          <div className="h-1.5 w-1.5 rounded-full bg-white/90 ring-1 ring-black/40" />
+          <div className="h-2 w-2 rounded-full bg-neutral-950 ring-2 ring-white/90" />
         </div>
       )}
 
-      {/* First-run tour */}
+      {/* First-run tour — bottom-right card, off the ticker/interaction zone */}
       <AnimatePresence>
         {tourOpen && (
-          <div className="absolute bottom-24 left-1/2 z-20 -translate-x-1/2">
+          <div className="absolute bottom-6 right-6 z-20">
             <WorldTour
               onClose={(seen) => {
                 if (seen) markTourSeen();
@@ -1414,33 +1529,37 @@ export function WorldCanvas({
       </AnimatePresence>
 
       {/* Office ticker — latest pulse always visible (collapsed to one line
-          during calls / on small screens); full stack when idle on desktop. */}
-      {feed.length > 0 &&
-        (() => {
-          const fresh = feed.filter((f) => Date.now() - f.at < 60_000);
-          if (fresh.length === 0) return null;
-          const inCall = nearIds.size > 0;
-          const items = inCall ? fresh.slice(0, 1) : fresh.slice(0, 3);
-          return (
-            <div
-              role="status"
-              aria-live="polite"
-              className={`pointer-events-none absolute z-10 flex -translate-x-1/2 flex-col items-center gap-1.5 ${
-                inCall ? "bottom-24 left-1/2" : "bottom-4 left-1/2"
-              }`}
-            >
-              {items.map((f, i) => (
+          during calls / on small screens); full stack when idle on desktop.
+          Empty workspaces show a quiet placeholder instead of a dead zone. */}
+      {(() => {
+        const fresh = feed.filter((f) => Date.now() - f.at < 60_000);
+        const inCall = nearIds.size > 0;
+        // Interaction row moved to bottom-24 — ticker drops to bottom-4, but
+        // lifts when a call stage is up so they never stack.
+        const items = inCall ? fresh.slice(0, 1) : fresh.slice(0, 3);
+        return (
+          <div
+            role="status"
+            className={`pointer-events-none absolute z-10 flex -translate-x-1/2 flex-col items-center gap-1.5 ${
+              inCall ? "bottom-32 left-1/2" : "bottom-4 left-1/2"
+            }`}
+          >
+            {items.length === 0 ? (
+              <div
+                className={`${CHIP} max-w-[420px] px-3.5 py-1.5 text-[11px] font-medium text-neutral-500`}
+              >
+                <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-neutral-300" />
+                <span className="truncate">
+                  Quiet — pushes and reviews appear here
+                </span>
+              </div>
+            ) : (
+              items.map((f, i) => (
                 <div
                   key={f.key}
-                  className={`${CHIP} max-w-[400px] px-3.5 py-1.5 text-[11px] font-medium text-neutral-700 ${
+                  className={`${CHIP} max-w-[420px] bg-[#f4f2ed] px-3.5 py-1.5 text-[11px] font-medium text-neutral-800 shadow-[0_8px_24px_-8px_rgba(0,0,0,0.3)] ${
                     i > 0 ? "hidden md:inline-flex" : ""
-                  } ${
-                    i === 0
-                      ? "opacity-100"
-                      : i === 1
-                        ? "opacity-70"
-                        : "opacity-45"
-                  }`}
+                  } ${i === 0 ? "opacity-100" : i === 1 ? "opacity-80" : "opacity-70"}`}
                   style={{ transform: `scale(${1 - i * 0.04})` }}
                 >
                   <span className="shrink-0">
@@ -1468,10 +1587,11 @@ export function WorldCanvas({
                   </span>
                   <span className="min-w-0 truncate">{f.text}</span>
                 </div>
-              ))}
-            </div>
-          );
-        })()}
+              ))
+            )}
+          </div>
+        );
+      })()}
 
       {/* Match-end card — "You won" (+ confetti) or "You lose", both games */}
       {endCelebration && (
@@ -1653,20 +1773,17 @@ export function WorldCanvas({
       {/* 3D world */}
       <Canvas
         shadows
-        // A modest cap keeps edges and procedural materials crisp without
-        // returning to the memory cost of full device-pixel rendering.
-        dpr={[1, 1.15]}
+        // Desktop: dpr ≤1.5 + MSAA for crisp mullions/screens. Cheap path
+        // (coarse/small/reduced-motion) keeps dpr 1.15 + no MSAA.
+        dpr={highQuality ? [1, 1.5] : [1, 1.15]}
         camera={{ position: [0, 3, 46], fov: 50, near: 0.1, far: 900 }}
         gl={{
-          // At a capped DPR, MSAA duplicates the main framebuffer with little
-          // visible benefit in this stylised world. Turning it off materially
-          // reduces GPU memory at the viewport sizes used by the office.
-          antialias: false,
+          antialias: highQuality,
           stencil: false,
           alpha: false,
           powerPreference: "high-performance",
           toneMapping: THREE.ACESFilmicToneMapping,
-          toneMappingExposure: 1.05,
+          toneMappingExposure: 1.0,
         }}
         events={safePointerEvents}
         className="w-full h-full"
@@ -1676,7 +1793,10 @@ export function WorldCanvas({
         <ThumbnailCapture workspaceId={workspaceId} />
 
         <Suspense fallback={null}>
-          <OfficeLighting level={playerPos[1] > 3.1 ? 2 : 1} />
+          <OfficeLighting
+            level={playerPos[1] > 3.1 ? 2 : 1}
+            highQuality={highQuality}
+          />
           <OfficeBuilding />
         </Suspense>
         {/* The YouTube player is a DOM surface, so it cannot participate in

@@ -64,11 +64,17 @@ interface RequestOptions {
    Without this, a backend restart or 15 idle minutes would log the user out. */
 let refreshInFlight: Promise<boolean> | null = null;
 
+/* Every request is bounded: without a timeout a stalled backend connection
+   hangs until the browser gives up (minutes), leaving route transitions —
+   e.g. world → dashboard — stuck on skeletons with no feedback. */
+const REQUEST_TIMEOUT_MS = 15_000;
+
 function refreshSession(): Promise<boolean> {
   if (!refreshInFlight) {
     refreshInFlight = fetch(`${API_BASE_URL}/api/v1/auth/refresh`, {
       method: "POST",
       credentials: "include",
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     })
       .then((res) => res.ok)
       .catch(() => false)
@@ -97,6 +103,7 @@ async function request<T>(
     fetch(url.toString(), {
       method,
       credentials: "include",
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       headers: {
         ...(body !== undefined ? { "content-type": "application/json" } : {}),
         ...headers,

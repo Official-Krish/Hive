@@ -328,7 +328,7 @@ export default function Avatar({
       const m = obj as THREE.Mesh;
       if (m.isMesh) {
         m.castShadow = true;
-        m.receiveShadow = false;
+        m.receiveShadow = true;
         if (m.geometry) {
           m.geometry.computeBoundingSphere();
           const sphere = m.geometry.boundingSphere;
@@ -671,7 +671,7 @@ export default function Avatar({
       const m = obj as THREE.Mesh;
       if (m.isMesh) {
         m.castShadow = true;
-        m.receiveShadow = false;
+        m.receiveShadow = true;
         if (m.geometry) {
           m.geometry.computeBoundingSphere();
           const sphere = m.geometry.boundingSphere;

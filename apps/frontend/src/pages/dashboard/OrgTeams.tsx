@@ -6,6 +6,7 @@ import { ApiError, http } from "@/lib/http";
 import {
   Avatar,
   BaselineField,
+  BaselineSelect,
   Btn,
   ConfirmBtn,
   Note,
@@ -328,23 +329,19 @@ function TeamCard({
                 <div className="flex flex-shrink-0 items-center gap-2">
                   {isOwner ? (
                     <>
-                      <select
-                        className={`${baselineInputClass} h-8 w-auto px-0 text-xs`}
+                      <BaselineSelect
+                        className="w-28 py-1 text-xs"
                         value={m.role}
                         disabled={rowBusy}
-                        onChange={(e) =>
-                          changeRole.mutate({
-                            userId: m.userId,
-                            role: e.target.value,
-                          })
+                        ariaLabel={`${m.name}'s team role`}
+                        options={TEAM_ROLES.map((r) => ({
+                          value: r,
+                          label: r,
+                        }))}
+                        onValueChange={(role) =>
+                          changeRole.mutate({ userId: m.userId, role })
                         }
-                      >
-                        {TEAM_ROLES.map((r) => (
-                          <option key={r} value={r}>
-                            {r}
-                          </option>
-                        ))}
-                      </select>
+                      />
                       <ConfirmBtn
                         variant="ghost"
                         confirmLabel="Remove"
@@ -373,33 +370,26 @@ function TeamCard({
             >
               <div className="min-w-[160px] flex-1">
                 <BaselineField label="Add member">
-                  <select
-                    className={baselineInputClass}
+                  <BaselineSelect
                     value={pickUserId}
-                    onChange={(e) => setPickUserId(e.target.value)}
-                  >
-                    <option value="">Select an org member…</option>
-                    {candidates.map((m) => (
-                      <option key={m.userId} value={m.userId}>
-                        {m.name} · {m.email}
-                      </option>
-                    ))}
-                  </select>
+                    placeholder="Select an org member…"
+                    ariaLabel="Select an org member"
+                    options={candidates.map((m) => ({
+                      value: m.userId,
+                      label: `${m.name} · ${m.email}`,
+                    }))}
+                    onValueChange={setPickUserId}
+                  />
                 </BaselineField>
               </div>
               <div>
                 <BaselineField label="Role">
-                  <select
-                    className={baselineInputClass}
+                  <BaselineSelect
                     value={pickRole}
-                    onChange={(e) => setPickRole(e.target.value)}
-                  >
-                    {TEAM_ROLES.map((r) => (
-                      <option key={r} value={r}>
-                        {r}
-                      </option>
-                    ))}
-                  </select>
+                    ariaLabel="New member role"
+                    options={TEAM_ROLES.map((r) => ({ value: r, label: r }))}
+                    onValueChange={setPickRole}
+                  />
                 </BaselineField>
               </div>
               <Btn type="submit" disabled={addMember.isPending || !pickUserId}>

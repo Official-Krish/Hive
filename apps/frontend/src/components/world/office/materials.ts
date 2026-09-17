@@ -624,7 +624,7 @@ function tvMat(map: THREE.Texture | null) {
     map: map ?? undefined,
     emissive: "#ffffff",
     emissiveMap: map ?? undefined,
-    emissiveIntensity: 1.15,
+    emissiveIntensity: 1.6,
     roughness: 0.25,
   });
 }
@@ -643,14 +643,18 @@ const rmap = grain ?? undefined;
 export const M = {
   // --- Architecture ---------------------------------------------------------
   wall: new THREE.MeshStandardMaterial({
-    color: "#efece5",
+    color: "#ece8de",
     roughness: 0.9,
     roughnessMap: rmap,
+    bumpMap: rmap,
+    bumpScale: 0.02,
   }),
   wallWarm: new THREE.MeshStandardMaterial({
-    color: "#e4dccd",
+    color: "#e2dacb",
     roughness: 0.88,
     roughnessMap: rmap,
+    bumpMap: rmap,
+    bumpScale: 0.02,
   }),
   wallAccent: new THREE.MeshStandardMaterial({
     color: "#d5cfc1",
@@ -681,11 +685,15 @@ export const M = {
     color: "#b9b6ae",
     roughness: 0.92,
     roughnessMap: rmap,
+    bumpMap: rmap,
+    bumpScale: 0.02,
   }),
   parapet: new THREE.MeshStandardMaterial({
     color: "#cfcbc1",
     roughness: 0.88,
     roughnessMap: rmap,
+    bumpMap: rmap,
+    bumpScale: 0.015,
   }),
 
   // --- Glass ----------------------------------------------------------------
@@ -707,11 +715,12 @@ export const M = {
     depthWrite: false,
   }),
   glassCheap: new THREE.MeshStandardMaterial({
-    color: "#cfe3ea",
+    color: "#b9d2dc",
     transparent: true,
-    opacity: 0.18,
-    roughness: 0.08,
+    opacity: 0.28,
+    roughness: 0.15,
     metalness: 0.25,
+    envMapIntensity: 1.2,
     side: THREE.DoubleSide,
     depthWrite: false,
   }),
@@ -734,10 +743,12 @@ export const M = {
   }),
   slat: new THREE.MeshStandardMaterial({ color: "#a5763f", roughness: 0.5 }),
   stoneCounter: new THREE.MeshStandardMaterial({
-    color: "#efece3",
-    roughness: 0.22,
+    color: "#ece8de",
+    roughness: 0.28,
     metalness: 0.12,
     roughnessMap: rmap,
+    bumpMap: rmap,
+    bumpScale: 0.01,
   }),
   marble: new THREE.MeshStandardMaterial({
     color: "#ffffff",
@@ -787,11 +798,14 @@ export const M = {
     map: carpetTex ?? undefined,
     roughness: 0.98,
   }),
-  // Chill Space rug — warmer tint so the corner reads as a lounge nook.
+  // Chill Space rug — warmer tint + own seed feel via color shift so the
+  // corner reads as a lounge nook instead of a carpet-tile repeat.
   chillRug: new THREE.MeshStandardMaterial({
-    color: "#a08062",
+    color: "#9a7a5c",
     map: carpetTex ?? undefined,
     roughness: 0.98,
+    bumpMap: rmap,
+    bumpScale: 0.01,
   }),
   // Plush bean-bag fabrics — solid warm hues (no new textures, shared singletons).
   puffA: new THREE.MeshStandardMaterial({
@@ -953,30 +967,30 @@ export const M = {
 
   // Distant towers (three window densities so silhouettes read differently).
   towerA: new THREE.MeshStandardMaterial({
-    color: "#8f9aa8",
+    color: "#8b95a3",
     map: gridA ?? undefined,
-    emissive: "#ffffff",
+    emissive: "#cfd9e6",
     emissiveMap: gridA ?? undefined,
-    emissiveIntensity: 0.55,
-    roughness: 0.4,
+    emissiveIntensity: 0.7,
+    roughness: 0.42,
     metalness: 0.3,
   }),
   towerB: new THREE.MeshStandardMaterial({
-    color: "#7d8794",
+    color: "#79828e",
     map: gridB ?? undefined,
-    emissive: "#ffffff",
+    emissive: "#cfd9e6",
     emissiveMap: gridB ?? undefined,
-    emissiveIntensity: 0.45,
-    roughness: 0.45,
+    emissiveIntensity: 0.6,
+    roughness: 0.46,
     metalness: 0.25,
   }),
   towerC: new THREE.MeshStandardMaterial({
-    color: "#9aa4b0",
+    color: "#959faa",
     map: gridC ?? undefined,
-    emissive: "#ffffff",
+    emissive: "#cfd9e6",
     emissiveMap: gridC ?? undefined,
-    emissiveIntensity: 0.6,
-    roughness: 0.35,
+    emissiveIntensity: 0.75,
+    roughness: 0.38,
     metalness: 0.35,
   }),
 
@@ -1251,12 +1265,12 @@ export function facadeFor(
     );
   }
   const mat = new THREE.MeshStandardMaterial({
-    color: "#9aa5b1",
+    color: "#98a2af",
     map,
-    emissive: "#ffffff",
+    emissive: "#dfe8f2",
     emissiveMap: map,
-    emissiveIntensity: 0.28,
-    roughness: 0.34,
+    emissiveIntensity: 0.45,
+    roughness: 0.36,
     metalness: 0.36,
   });
   capCache(facadeCache);

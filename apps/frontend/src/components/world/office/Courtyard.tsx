@@ -507,12 +507,33 @@ function StreetProps() {
             />
           </mesh>
           {!van && (
-            <mesh position={[-0.2, 1.2, 0]}>
-              <boxGeometry args={[2.2, 0.55, 1.6]} />
+            <>
+              <mesh position={[-0.2, 1.2, 0]}>
+                <boxGeometry args={[2.2, 0.55, 1.6]} />
+                <meshStandardMaterial
+                  color={color}
+                  roughness={0.4}
+                  metalness={0.3}
+                />
+              </mesh>
+              {/* dark glass band so the cabin doesn't read as solid paint */}
+              <mesh position={[-0.2, 1.22, 0]}>
+                <boxGeometry args={[1.9, 0.34, 1.64]} />
+                <meshStandardMaterial
+                  color="#1a2028"
+                  roughness={0.12}
+                  metalness={0.4}
+                />
+              </mesh>
+            </>
+          )}
+          {van && (
+            <mesh position={[2.2, 1.1, 0]}>
+              <boxGeometry args={[0.9, 0.5, 1.7]} />
               <meshStandardMaterial
-                color={color}
-                roughness={0.4}
-                metalness={0.3}
+                color="#1a2028"
+                roughness={0.12}
+                metalness={0.4}
               />
             </mesh>
           )}
@@ -1066,8 +1087,8 @@ export function Courtyard() {
         </group>
       ))}
 
-      {/* Trees: two archetypes (broad + tall columnar) so the rows vary.
-          Type B (every 3rd tree) stretches taller with a narrower crown. */}
+      {/* Trees: three archetypes (broad + columnar + poplar) so rows vary.
+          Type B (every 3rd) stretches taller; every 5th is a slim poplar. */}
       <FoliageSway />
       <Instances
         range={COURT_TREES.length}
@@ -1079,11 +1100,20 @@ export function Courtyard() {
         <primitive object={M.trunk} attach="material" />
         {COURT_TREES.map((t, i) => {
           const tall = i % 3 === 2;
+          const poplar = i % 5 === 4;
           return (
             <Instance
               key={i}
-              position={[t.position[0], tall ? 1.95 : 1.55, t.position[2]]}
-              scale={[1, tall ? 1.26 : 1, 1]}
+              position={[
+                t.position[0],
+                poplar ? 2.4 : tall ? 1.95 : 1.55,
+                t.position[2],
+              ]}
+              scale={[
+                poplar ? 0.8 : 1,
+                poplar ? 1.55 : tall ? 1.26 : 1,
+                poplar ? 0.8 : 1,
+              ]}
             />
           );
         })}
@@ -1100,18 +1130,30 @@ export function Courtyard() {
           {COURT_TREES.map((t, i) => {
             // Deterministic per-tree variation so the row isn't a clone army.
             const tall = i % 3 === 2;
+            const poplar = i % 5 === 4;
             const v = 0.86 + ((i * 17 + c * 7) % 9) / 26;
             const spin = (i * 1.1 + c * 0.9) % 6.283;
+            const spread = poplar ? 0.45 : tall ? 0.7 : 1;
             return (
               <Instance
                 key={i}
                 position={[
-                  t.position[0] + ox * v * (tall ? 0.7 : 1),
-                  tall ? oy * 1.28 + 0.6 : oy * v + 0.2,
-                  t.position[2] + oz * v * (tall ? 0.7 : 1),
+                  t.position[0] + ox * v * spread,
+                  poplar
+                    ? oy * 1.55 + 0.9
+                    : tall
+                      ? oy * 1.28 + 0.6
+                      : oy * v + 0.2,
+                  t.position[2] + oz * v * spread,
                 ]}
                 rotation={[0, spin, (((i + c) % 3) - 1) * 0.18]}
-                scale={tall ? [v * 0.72, v * 1.05, v * 0.72] : [v, v * 0.82, v]}
+                scale={
+                  poplar
+                    ? [v * 0.5, v * 1.3, v * 0.5]
+                    : tall
+                      ? [v * 0.72, v * 1.05, v * 0.72]
+                      : [v, v * 0.82, v]
+                }
               />
             );
           })}

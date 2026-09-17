@@ -11,19 +11,34 @@ const SUN: [number, number, number] = [60, 80, -40];
  *
  * Perf: accent pools are storey-culled (only the player's level mounts its
  * lights), so the forward renderer shades ≤8 points + 2 spots per frame.
+ * Desktop gate (see WorldCanvas CANVAS_QUALITY): 2k shadows + streak
+ * Lightformer; coarse/reduced-motion keeps the cheap 1k path.
  */
-export function OfficeLighting({ level = 1 }: { level?: 1 | 2 }) {
+export function OfficeLighting({
+  level = 1,
+  highQuality = false,
+}: {
+  level?: 1 | 2;
+  highQuality?: boolean;
+}) {
   const { minX, maxX, minZ, maxZ } = INTERIOR;
   const cx = (minX + maxX) / 2;
   const cz = (minZ + maxZ) / 2;
+  // Tighter ortho centered on the interior: ~140m → ~90m span keeps texel
+  // density high enough for desk/trim shadows without a 4k map.
+  const SHADOW_SPAN = highQuality ? 45 : 70;
 
   return (
     <>
-      {/* Atmospheric depth for the courtyard / skyline */}
-      <fogExp2 attach="fog" args={["#cdd8e3", 0.0028]} />
+      {/* Per-level fog: thin indoors so the far wall stays saturated, thicker
+          outside for courtyard/skyline depth. */}
+      <fogExp2
+        attach="fog"
+        args={level === 2 ? ["#d4dce6", 0.0012] : ["#cdd8e3", 0.0016]}
+      />
 
       {/* Baked-once environment (IBL fill + reflections), no network fetch */}
-      <Environment resolution={192} frames={1}>
+      <Environment resolution={highQuality ? 256 : 192} frames={1}>
         <color attach="background" args={["#0a0d12"]} />
         {/* Big sky panel */}
         <Lightformer
@@ -68,25 +83,43 @@ export function OfficeLighting({ level = 1 }: { level?: 1 | 2 }) {
           scale={[20, 12, 1]}
           rotation={[0, -Math.PI / 2, 0]}
         />
+        {/* Narrow streak — chrome/mullion highlight only, desktop path */}
+        {highQuality && (
+          <Lightformer
+            form="rect"
+            intensity={4}
+            color="#ffffff"
+            position={[0, 14, 10]}
+            scale={[2, 12, 1]}
+            rotation={[0, 0, 0]}
+          />
+        )}
       </Environment>
 
-      {/* Global fills */}
-      <ambientLight intensity={0.28} />
-      <hemisphereLight args={["#bcd3ff", "#2c2820", 0.55]} />
+      {/* Global fills — pulled down so plaster keeps contrast under ACES */}
+      <ambientLight intensity={0.18} />
+      <hemisphereLight args={["#bcd3ff", "#2c2820", 0.4]} />
 
-      {/* Sun — the only shadow caster (1k map: soft/cheap over the 140m span) */}
+      {/* Sun — the only shadow caster. Desktop: 2k over ±45m; cheap: 1k ±70m */}
       <directionalLight
         position={SUN}
-        intensity={2.75}
+        intensity={2.4}
         color="#fff4e2"
         castShadow
-        shadow-mapSize={[1024, 1024]}
-        shadow-bias={-0.0004}
-        shadow-normalBias={0.03}
+        shadow-mapSize={highQuality ? [2048, 2048] : [1024, 1024]}
+        shadow-bias={-0.00025}
+        shadow-normalBias={0.02}
       >
         <orthographicCamera
           attach="shadow-camera"
-          args={[-70, 70, 70, -70, 0.5, 220]}
+          args={[
+            -SHADOW_SPAN,
+            SHADOW_SPAN,
+            SHADOW_SPAN,
+            -SHADOW_SPAN,
+            0.5,
+            220,
+          ]}
         />
       </directionalLight>
 
@@ -123,15 +156,16 @@ export function OfficeLighting({ level = 1 }: { level?: 1 | 2 }) {
         color="#f9a8d4"
       />
 
-      {/* Soft contact grounding across the interior floor (baked once for performance) */}
+      {/* Soft contact grounding across the interior floor. Desktop follows
+          every frame so moving avatars stay grounded; cheap path bakes once. */}
       <ContactShadows
         position={[cx, 0.02, cz]}
         scale={Math.max(maxX - minX, maxZ - minZ) + 6}
         resolution={256}
-        frames={1}
+        frames={highQuality ? Infinity : 1}
         far={3.2}
         blur={1.6}
-        opacity={0.4}
+        opacity={0.48}
         color="#1a1712"
       />
     </>

@@ -678,10 +678,10 @@ function MessageGroups({
               </div>
               <div
                 className={cn(
-                  "mt-1 text-[9.5px] tabular-nums transition-opacity",
+                  "mt-1 text-[9.5px] tabular-nums",
                   mine
-                    ? "text-right text-neutral-400 opacity-0 group-hover:opacity-100"
-                    : "ml-1 text-neutral-400 opacity-0 group-hover:opacity-100",
+                    ? "text-right text-neutral-400"
+                    : "ml-1 text-neutral-400",
                 )}
               >
                 {timeLabel(b.group[b.group.length - 1]!.createdAt)}
