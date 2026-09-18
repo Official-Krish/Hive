@@ -160,6 +160,7 @@ export function DModal({
   onClose,
   closeLabel = "Close",
   wide,
+  className,
 }: {
   children: ReactNode;
   eyebrow: string;
@@ -167,10 +168,11 @@ export function DModal({
   onClose: () => void;
   closeLabel?: string;
   wide?: boolean;
+  className?: string;
 }) {
   useEscape(onClose);
   return (
-    <WModal label={title} onClose={onClose} wide={wide}>
+    <WModal label={title} onClose={onClose} wide={wide} className={className}>
       <WModalHeader
         eyebrow={eyebrow}
         title={title}
@@ -179,6 +181,74 @@ export function DModal({
       />
       {children}
     </WModal>
+  );
+}
+
+/* ── Shared close (X) button for custom WModal headers ──────
+   Same look/affordance as WModalHeader's button so bespoke headers
+   (Games back-stack, Whiteboard tools, Chill queue) don't drift. */
+export function DCloseBtn({
+  onClose,
+  label = "Close",
+}: {
+  onClose: () => void;
+  label?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClose}
+      aria-label={label}
+      className="rounded-lg p-2 text-neutral-600 transition-colors hover:bg-black/[0.05] hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900/30"
+    >
+      <svg
+        viewBox="0 0 16 16"
+        className="size-4"
+        aria-hidden
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      >
+        <path d="M3 3l10 10M13 3L3 13" />
+      </svg>
+    </button>
+  );
+}
+
+/* ── Card + pill — shared white surfaces inside modals ────── */
+export function DCard({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn("rounded-2xl bg-white ring-1 ring-black/[0.07]", className)}
+    >
+      {children}
+    </div>
+  );
+}
+
+export function DPill({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "rounded-lg bg-white px-3 py-2 ring-1 ring-black/[0.08]",
+        className,
+      )}
+    >
+      {children}
+    </div>
   );
 }
 
@@ -311,8 +381,14 @@ export function DEmpty({ children }: { children: ReactNode }) {
 
 export function DLoading({ children }: { children: ReactNode }) {
   return (
-    <div className="flex items-center justify-center gap-2.5 px-4 py-10 text-[13px] text-neutral-500">
-      <span className="inline-block size-4 animate-spin rounded-full border-2 border-neutral-900/15 border-t-neutral-900" />
+    <div
+      role="status"
+      className="flex items-center justify-center gap-2.5 px-4 py-10 text-[13px] text-neutral-500"
+    >
+      <span
+        aria-hidden
+        className="inline-block size-4 animate-spin rounded-full border-2 border-neutral-900/15 border-t-neutral-900 motion-reduce:animate-none"
+      />
       {children}
     </div>
   );
@@ -326,13 +402,16 @@ export function DError({
   retry?: () => void;
 }) {
   return (
-    <div className="mx-4 my-4 flex items-start gap-2.5 rounded-lg border border-rose-500/30 bg-rose-50 px-3.5 py-3 text-[13px] text-rose-700">
+    <div
+      role="alert"
+      className="mx-4 my-4 flex items-start gap-2.5 rounded-lg border border-rose-500/30 bg-rose-50 px-3.5 py-3 text-[13px] text-rose-700"
+    >
       <div className="min-w-0 flex-1">{children}</div>
       {retry && (
         <button
           type="button"
           onClick={retry}
-          className="flex-shrink-0 font-semibold underline underline-offset-2 hover:text-rose-900"
+          className="flex-shrink-0 font-semibold underline underline-offset-2 hover:text-rose-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-700/40 rounded"
         >
           Retry
         </button>

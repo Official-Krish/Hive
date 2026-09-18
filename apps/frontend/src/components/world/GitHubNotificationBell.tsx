@@ -15,8 +15,7 @@ import { Bell, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useGitHubNotifications } from "@/hooks/useGitHubNotifications";
 import type { RealtimeClient } from "@/lib/realtime";
-import { formatDistanceToNow } from "date-fns";
-import { DIconBtn, EYEBROW, useDismiss } from "./chrome";
+import { DIconBtn, EYEBROW, timeAgo, useDismiss } from "./chrome";
 import { AnimatePresence, WPopover } from "./motion";
 
 const TYPE_ICONS: Record<string, ReactNode> = {
@@ -42,15 +41,7 @@ function groupOf(type: string): string {
   return "Other";
 }
 
-function timeLabel(iso: string): string {
-  const d = new Date(iso).getTime();
-  if (Number.isNaN(d)) return "";
-  try {
-    return formatDistanceToNow(new Date(d), { addSuffix: true });
-  } catch {
-    return "";
-  }
-}
+const timeLabel = timeAgo;
 
 interface GitHubNotificationBellProps {
   workspaceId: string;
@@ -72,6 +63,13 @@ export function GitHubNotificationBell({
   useEffect(() => {
     onOpenChange?.(open);
   }, [open, onOpenChange]);
+
+  // A mounting modal dismisses popovers so panels never linger behind it.
+  useEffect(() => {
+    const close = () => setOpen(false);
+    window.addEventListener("hive:close-popovers", close);
+    return () => window.removeEventListener("hive:close-popovers", close);
+  }, []);
 
   const { notifications, unreadCount, markAsRead, markAllAsRead } =
     useGitHubNotifications({
@@ -142,19 +140,19 @@ export function GitHubNotificationBell({
               aria-label="GitHub notifications"
               className="fixed top-16 right-4 z-30 w-96 max-w-[calc(100vw-2rem)]"
             >
-              <WPopover className="flex max-h-[500px] flex-col">
+              <WPopover className="flex max-h-[calc(100vh-8rem)] flex-col sm:max-h-[500px]">
                 <div className="flex items-center justify-between border-b border-black/[0.07] px-4 py-2.5">
                   <span className={EYEBROW}>GitHub notifications</span>
                   <button
                     type="button"
                     onClick={() => setOpen(false)}
                     aria-label="Close notifications"
-                    className="flex size-7 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-black/[0.05] hover:text-neutral-900"
+                    className="flex size-7 items-center justify-center rounded-lg text-neutral-600 transition-colors hover:bg-black/[0.05] hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900/30"
                   >
                     <X className="size-3.5" />
                   </button>
                 </div>
-                <div className="max-h-[400px] overflow-y-auto">
+                <div className="max-h-[calc(100vh-14rem)] overflow-y-auto sm:max-h-[400px]">
                   {grouped.length === 0 ? (
                     <div className="p-6 text-center text-sm text-neutral-500">
                       No notifications yet
@@ -163,7 +161,7 @@ export function GitHubNotificationBell({
                     <div className="divide-y divide-black/[0.05]">
                       {grouped.map(({ label, items }) => (
                         <div key={label}>
-                          <div className="px-4 pb-1 pt-2.5 text-[9px] font-semibold uppercase tracking-[0.16em] text-neutral-400">
+                          <div className="px-4 pb-1 pt-2.5 text-[10px] font-medium uppercase tracking-[0.18em] text-neutral-500">
                             {label}
                           </div>
                           <ul className="divide-y divide-black/[0.04]">

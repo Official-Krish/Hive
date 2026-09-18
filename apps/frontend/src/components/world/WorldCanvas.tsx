@@ -882,6 +882,22 @@ export function WorldCanvas({
     fleetOpen ||
     whiteboardId !== null ||
     pair.open;
+  // Modal subset (excludes chat/members/status/tour): mounting one dismisses
+  // the top-right popovers so inbox/bell panels never linger behind a modal.
+  const modalOpen =
+    openMemberId !== null ||
+    workspaceOpen ||
+    ciOpen ||
+    chillScreenOpen ||
+    gamesOpen ||
+    vendingOpen ||
+    reviewerOpen ||
+    fleetOpen ||
+    whiteboardId !== null ||
+    pair.open;
+  useEffect(() => {
+    if (modalOpen) window.dispatchEvent(new CustomEvent("hive:close-popovers"));
+  }, [modalOpen]);
   const fppBlockedRef = useRef(anyOverlayOpen);
   fppBlockedRef.current = anyOverlayOpen;
   useEffect(() => {
@@ -1530,68 +1546,70 @@ export function WorldCanvas({
 
       {/* Office ticker — latest pulse always visible (collapsed to one line
           during calls / on small screens); full stack when idle on desktop.
-          Empty workspaces show a quiet placeholder instead of a dead zone. */}
-      {(() => {
-        const fresh = feed.filter((f) => Date.now() - f.at < 60_000);
-        const inCall = nearIds.size > 0;
-        // Interaction row moved to bottom-24 — ticker drops to bottom-4, but
-        // lifts when a call stage is up so they never stack.
-        const items = inCall ? fresh.slice(0, 1) : fresh.slice(0, 3);
-        return (
-          <div
-            role="status"
-            className={`pointer-events-none absolute z-10 flex -translate-x-1/2 flex-col items-center gap-1.5 ${
-              inCall ? "bottom-32 left-1/2" : "bottom-4 left-1/2"
-            }`}
-          >
-            {items.length === 0 ? (
-              <div
-                className={`${CHIP} max-w-[420px] px-3.5 py-1.5 text-[11px] font-medium text-neutral-500`}
-              >
-                <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-neutral-300" />
-                <span className="truncate">
-                  Quiet — pushes and reviews appear here
-                </span>
-              </div>
-            ) : (
-              items.map((f, i) => (
+          Empty workspaces show a quiet placeholder instead of a dead zone.
+          Hidden (not announced) under modal backdrops. */}
+      {!anyOverlayOpen &&
+        (() => {
+          const fresh = feed.filter((f) => Date.now() - f.at < 60_000);
+          const inCall = nearIds.size > 0;
+          // Interaction row moved to bottom-24 — ticker drops to bottom-4, but
+          // lifts when a call stage is up so they never stack.
+          const items = inCall ? fresh.slice(0, 1) : fresh.slice(0, 3);
+          return (
+            <div
+              role="status"
+              className={`pointer-events-none absolute z-10 flex -translate-x-1/2 flex-col items-center gap-1.5 ${
+                inCall ? "bottom-32 left-1/2" : "bottom-4 left-1/2"
+              }`}
+            >
+              {items.length === 0 ? (
                 <div
-                  key={f.key}
-                  className={`${CHIP} max-w-[420px] bg-[#f4f2ed] px-3.5 py-1.5 text-[11px] font-medium text-neutral-800 shadow-[0_8px_24px_-8px_rgba(0,0,0,0.3)] ${
-                    i > 0 ? "hidden md:inline-flex" : ""
-                  } ${i === 0 ? "opacity-100" : i === 1 ? "opacity-80" : "opacity-70"}`}
-                  style={{ transform: `scale(${1 - i * 0.04})` }}
+                  className={`${CHIP} max-w-[420px] px-3.5 py-1.5 text-[11px] font-medium text-neutral-500`}
                 >
-                  <span className="shrink-0">
-                    {f.tone === "merge" ? (
-                      <Trophy className="size-3 text-amber-500" />
-                    ) : (
-                      <span
-                        className={`inline-block h-1.5 w-1.5 rounded-full ${
-                          f.tone === "test"
-                            ? "bg-emerald-500"
-                            : f.tone === "pr"
-                              ? "bg-sky-500"
-                              : f.tone === "bump"
-                                ? "bg-amber-500"
-                                : f.tone === "focusing"
-                                  ? "bg-violet-500"
-                                  : f.tone === "review"
-                                    ? "bg-teal-500"
-                                    : f.tone === "alert"
-                                      ? "bg-rose-500"
-                                      : "bg-emerald-500"
-                        }`}
-                      />
-                    )}
+                  <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-neutral-300" />
+                  <span className="truncate">
+                    Quiet — pushes and reviews appear here
                   </span>
-                  <span className="min-w-0 truncate">{f.text}</span>
                 </div>
-              ))
-            )}
-          </div>
-        );
-      })()}
+              ) : (
+                items.map((f, i) => (
+                  <div
+                    key={f.key}
+                    className={`${CHIP} max-w-[420px] bg-[#f4f2ed] px-3.5 py-1.5 text-[11px] font-medium text-neutral-800 shadow-[0_8px_24px_-8px_rgba(0,0,0,0.3)] ${
+                      i > 0 ? "hidden md:inline-flex" : ""
+                    } ${i === 0 ? "opacity-100" : i === 1 ? "opacity-80" : "opacity-70"}`}
+                    style={{ transform: `scale(${1 - i * 0.04})` }}
+                  >
+                    <span className="shrink-0">
+                      {f.tone === "merge" ? (
+                        <Trophy className="size-3 text-amber-500" />
+                      ) : (
+                        <span
+                          className={`inline-block h-1.5 w-1.5 rounded-full ${
+                            f.tone === "test"
+                              ? "bg-emerald-500"
+                              : f.tone === "pr"
+                                ? "bg-sky-500"
+                                : f.tone === "bump"
+                                  ? "bg-amber-500"
+                                  : f.tone === "focusing"
+                                    ? "bg-violet-500"
+                                    : f.tone === "review"
+                                      ? "bg-teal-500"
+                                      : f.tone === "alert"
+                                        ? "bg-rose-500"
+                                        : "bg-emerald-500"
+                          }`}
+                        />
+                      )}
+                    </span>
+                    <span className="min-w-0 truncate">{f.text}</span>
+                  </div>
+                ))
+              )}
+            </div>
+          );
+        })()}
 
       {/* Match-end card — "You won" (+ confetti) or "You lose", both games */}
       {endCelebration && (

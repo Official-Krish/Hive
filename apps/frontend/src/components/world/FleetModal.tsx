@@ -2,22 +2,12 @@ import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { http, type AgentSessionSummary } from "@/lib/http";
 import type { RealtimeClient } from "@/lib/realtime";
-import { WModal, WModalHeader } from "./motion";
+import { DCard, DError, DLoading, DModal, timeAgo } from "./chrome";
 
 interface FleetModalProps {
   workspaceId: string;
   client: RealtimeClient | null;
   onClose: () => void;
-}
-
-function ago(iso: string): string {
-  const s = Math.max(
-    1,
-    Math.floor((Date.now() - new Date(iso).getTime()) / 1000),
-  );
-  if (s < 60) return `${s}s`;
-  if (s < 3600) return `${Math.floor(s / 60)}m`;
-  return `${Math.floor(s / 3600)}h`;
 }
 
 function fmtMoney(cents: number | null): string {
@@ -33,16 +23,17 @@ const STATUS_TONE: Record<string, string> = {
 function SessionRow({ s }: { s: AgentSessionSummary }) {
   const status = (s.status ?? "running").toLowerCase();
   return (
-    <div className="rounded-2xl bg-white px-3.5 py-3 ring-1 ring-black/[0.07]">
+    <DCard className="px-3.5 py-3">
       <div className="flex items-center gap-2">
         <span
-          className={`size-2 shrink-0 rounded-full ${STATUS_TONE[status] ?? "bg-neutral-400"} ${status === "running" ? "animate-pulse" : ""}`}
+          aria-hidden
+          className={`size-2 shrink-0 rounded-full ${STATUS_TONE[status] ?? "bg-neutral-400"} ${status === "running" ? "animate-pulse motion-reduce:animate-none" : ""}`}
         />
         <span className="min-w-0 flex-1 truncate text-[13.5px] font-semibold text-neutral-900">
           {s.title || `${s.agent.name} session`}
         </span>
-        <span className="shrink-0 font-mono text-[11px] text-neutral-400">
-          {ago(s.startedAt)}
+        <span className="shrink-0 font-mono text-[11px] text-neutral-500">
+          {timeAgo(s.startedAt)}
         </span>
       </div>
       <div className="mt-1 flex flex-wrap items-center gap-x-2 text-[11.5px] font-medium text-neutral-500">
@@ -61,7 +52,7 @@ function SessionRow({ s }: { s: AgentSessionSummary }) {
           </>
         )}
       </div>
-    </div>
+    </DCard>
   );
 }
 
@@ -99,39 +90,31 @@ export function FleetModal({ workspaceId, client, onClose }: FleetModalProps) {
     return () => offs.forEach((off) => off());
   }, [client, live.refetch]);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
   const sessions: AgentSessionSummary[] = live.data ?? [];
 
   return (
-    <WModal label="Agent fleet" onClose={onClose}>
-      <WModalHeader
-        eyebrow="AI Lab · live"
-        title="Agent fleet"
-        onClose={onClose}
-        closeLabel="Close agent fleet"
-      />
-
+    <DModal
+      eyebrow="AI Lab · live"
+      title="Agent fleet"
+      onClose={onClose}
+      closeLabel="Close agent fleet"
+    >
       <div className="flex-1 overflow-y-auto p-4">
         {live.isLoading ? (
-          <div className="py-6 text-center text-[13px] text-neutral-500">
-            Scanning the lab…
-          </div>
+          <DLoading>Scanning the lab…</DLoading>
+        ) : live.isError ? (
+          <DError retry={() => void live.refetch()}>
+            Couldn&apos;t load the fleet board.
+          </DError>
         ) : sessions.length === 0 ? (
-          <div className="rounded-2xl bg-white px-4 py-8 text-center ring-1 ring-black/[0.07]">
+          <DCard className="px-4 py-8 text-center">
             <div className="text-[14px] font-semibold text-neutral-900">
               Fleet idle
             </div>
             <p className="mx-auto mt-1 max-w-[280px] text-[12.5px] text-neutral-500">
               No running, blocked, or waiting sessions right now.
             </p>
-          </div>
+          </DCard>
         ) : (
           <div className="flex flex-col gap-2">
             {sessions.map((s) => (
@@ -140,6 +123,6 @@ export function FleetModal({ workspaceId, client, onClose }: FleetModalProps) {
           </div>
         )}
       </div>
-    </WModal>
+    </DModal>
   );
 }

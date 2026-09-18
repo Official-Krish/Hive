@@ -361,9 +361,9 @@ export function CallStage({
               version={version}
             />
           ))}
-        {ids.length > 5 && (
+        {ids.length > 4 && (
           <span className="flex h-28 items-center rounded-xl bg-black/45 px-3 font-mono text-[11px] tabular-nums text-white/70 ring-1 ring-white/10">
-            +{ids.length - 5}
+            +{ids.length - 4}
           </span>
         )}
       </div>

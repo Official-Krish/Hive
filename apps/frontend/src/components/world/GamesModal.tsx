@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  FiX,
   FiEdit3,
   FiActivity,
   FiArrowLeft,
@@ -29,6 +28,7 @@ import { LudoBoard } from "./games/LudoBoard";
 import { UnoBoard } from "./games/UnoBoard";
 import { AnchorIcon, CrownIcon, DieIcon } from "./games/GameIcons";
 import { WModal } from "./motion";
+import { DCloseBtn, EYEBROW, useEscape } from "./chrome";
 import { isBoardMuted, setBoardMuted } from "./games/sound";
 
 interface GamesModalProps {
@@ -130,11 +130,7 @@ function initials(name: string): string {
 /* ── Small atoms ─────────────────────────────────────────────── */
 
 function Eyebrow({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="mb-2 text-[10px] font-medium uppercase tracking-[0.18em] text-neutral-500">
-      {children}
-    </div>
-  );
+  return <div className={cn(EYEBROW, "mb-2")}>{children}</div>;
 }
 
 /** Game glyph tile — knight, four-dot rack, die, card stack, crown, anchor. */
@@ -220,13 +216,7 @@ export function GamesModal({
   const [creating, setCreating] = useState(false);
   const [startingId, setStartingId] = useState<string | null>(null);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  useEscape(onClose);
 
   const openSession = games.openId
     ? (games.sessions.find((s) => s.id === games.openId) ?? null)
@@ -301,7 +291,7 @@ export function GamesModal({
       label={openSession ? KIND_LABEL[openSession.kind] : "Multiplayer games"}
       onClose={onClose}
       wide
-      className="h-[min(92vh,700px)] max-w-[min(720px,96vw)]"
+      className="h-[min(86vh,700px)] max-w-[min(720px,96vw)]"
     >
       {/* Header */}
       <div className="flex items-center justify-between border-b border-black/[0.07] px-4 py-3">
@@ -311,28 +301,19 @@ export function GamesModal({
               type="button"
               onClick={() => games.open(null)}
               aria-label="Back to lobby"
-              className="rounded-lg p-1.5 text-neutral-500 transition-colors hover:bg-black/[0.05] hover:text-neutral-900"
+              className="rounded-lg p-1.5 text-neutral-600 transition-colors hover:bg-black/[0.05] hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900/30"
             >
               <FiArrowLeft className="size-4" />
             </button>
           )}
           <div>
-            <div className="text-[10px] font-medium uppercase tracking-[0.18em] text-neutral-500">
-              Play Area
-            </div>
+            <div className={EYEBROW}>Play Area</div>
             <div className="text-[15px] font-semibold tracking-tight text-neutral-900">
               {openSession ? KIND_LABEL[openSession.kind] : "Multiplayer games"}
             </div>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Close games"
-          className="rounded-lg p-2 text-neutral-500 transition-colors hover:bg-black/[0.05] hover:text-neutral-900"
-        >
-          <FiX className="size-4" />
-        </button>
+        <DCloseBtn onClose={onClose} label="Close games" />
       </div>
 
       {/* Body — fixed height, never page-scrolls. Lobby scrolls
@@ -378,7 +359,7 @@ export function GamesModal({
                 className="group flex w-full items-center gap-3 rounded-2xl bg-neutral-950 px-4 py-3 text-left text-white shadow-lg transition-transform hover:scale-[1.01]"
               >
                 <span className="relative flex size-2.5">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60 motion-reduce:animate-none" />
                   <span className="relative inline-flex size-2.5 rounded-full bg-emerald-400" />
                 </span>
                 <span className="min-w-0 flex-1">
@@ -470,7 +451,7 @@ export function GamesModal({
                 )}
                 {/* Game picker — arcade art tiles */}
                 <div
-                  className="grid grid-cols-2 gap-2"
+                  className="grid grid-cols-1 gap-2 min-[400px]:grid-cols-2"
                   role="radiogroup"
                   aria-label="Game"
                 >
@@ -567,7 +548,7 @@ export function GamesModal({
                     </span>
                   )}
                 </div>
-                <div className="mt-2 grid max-h-40 grid-cols-2 gap-1.5 overflow-y-auto pr-0.5">
+                <div className="mt-2 grid max-h-40 grid-cols-1 gap-1.5 overflow-y-auto pr-0.5 min-[400px]:grid-cols-2">
                   {opponents.length === 0 && (
                     <div className="col-span-2 rounded-xl bg-white/[0.06] px-3 py-2.5 text-[12px] text-white/50 ring-1 ring-white/10">
                       No one else is around yet — invite a teammate to the
@@ -635,7 +616,7 @@ export function GamesModal({
             {/* On the bench */}
             <section>
               <Eyebrow>On the bench</Eyebrow>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 gap-2 min-[400px]:grid-cols-2">
                 {[
                   {
                     name: "Pictionary",
@@ -653,14 +634,14 @@ export function GamesModal({
                     aria-disabled="true"
                     className="flex cursor-not-allowed items-center gap-2.5 rounded-2xl bg-white px-3.5 py-3 opacity-70 ring-1 ring-black/[0.07]"
                   >
-                    <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-neutral-900/[0.05] text-neutral-400">
+                    <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-neutral-900/[0.05] text-neutral-500">
                       {g.icon}
                     </span>
                     <span className="min-w-0">
                       <span className="block truncate text-[13px] font-semibold text-neutral-800">
                         {g.name}
                       </span>
-                      <span className="block font-mono text-[10px] uppercase tracking-wide text-neutral-400">
+                      <span className="block font-mono text-[10px] uppercase tracking-wide text-neutral-500">
                         {g.seats} · soon
                       </span>
                     </span>
@@ -847,7 +828,7 @@ function MatchView({
               </li>
               <li className="flex items-center gap-1.5 rounded-full bg-white/[0.07] px-2.5 py-1 text-white/70 ring-1 ring-white/15">
                 <span className="relative flex size-1.5">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-300 opacity-70" />
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-300 opacity-70 motion-reduce:animate-none" />
                   <span className="relative inline-flex size-1.5 rounded-full bg-amber-300" />
                 </span>
                 <span>Opponent joins</span>
@@ -889,7 +870,7 @@ function MatchView({
       {/* Scoreboard */}
       <div className="shrink-0 rounded-2xl bg-neutral-950 px-4 py-3 text-white shadow-md">
         {session.members.length > 2 ? (
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 gap-2 min-[400px]:grid-cols-2">
             {session.members.map((m, i) => (
               <PlayerChip
                 key={m.userId}

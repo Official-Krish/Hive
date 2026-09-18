@@ -4,10 +4,8 @@ import { FiGithub, FiGrid, FiActivity } from "react-icons/fi";
 import { http, type MapOverlay } from "@/lib/http";
 import { useGitHubNotifications } from "@/hooks/useGitHubNotifications";
 import type { RealtimeClient } from "@/lib/realtime";
-import { DModal, formatTokens, timeAgo } from "./chrome";
+import { DModal, DPill, EYEBROW, formatTokens, timeAgo } from "./chrome";
 import { cn } from "@/lib/utils";
-
-const PILL = "rounded-lg bg-white px-3 py-2 ring-1 ring-black/[0.08]";
 
 type TabId = "github" | "workspace" | "activity";
 
@@ -104,7 +102,7 @@ function GitHubTab({
   }
   if (notifications.length === 0) {
     return (
-      <div className="py-10 text-center text-[12px] text-neutral-400">
+      <div className="py-10 text-center text-[12px] text-neutral-500">
         All caught up — no GitHub notifications.
       </div>
     );
@@ -180,7 +178,7 @@ function WorkspaceTab({
   }
   if (!data) {
     return (
-      <div className="py-10 text-center text-[12px] text-neutral-400">
+      <div className="py-10 text-center text-[12px] text-neutral-500">
         Nothing here yet.
       </div>
     );
@@ -190,10 +188,8 @@ function WorkspaceTab({
   const s = data.stats;
   return (
     <div className="flex flex-col gap-2">
-      <div className={PILL}>
-        <div className="text-[10px] font-medium uppercase tracking-[0.16em] text-neutral-500">
-          Active session
-        </div>
+      <DPill>
+        <div className={EYEBROW}>Active session</div>
         {session ? (
           <div className="mt-1">
             <div className="flex items-center gap-2 text-[14px] font-semibold text-neutral-900">
@@ -217,12 +213,10 @@ function WorkspaceTab({
             No active session — chat with an agent to start one.
           </div>
         )}
-      </div>
+      </DPill>
 
-      <div className={PILL}>
-        <div className="text-[10px] font-medium uppercase tracking-[0.16em] text-neutral-500">
-          This session
-        </div>
+      <DPill>
+        <div className={EYEBROW}>This session</div>
         <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12.5px] text-neutral-700">
           <span>
             <span className="font-semibold tabular-nums text-neutral-900">
@@ -245,13 +239,11 @@ function WorkspaceTab({
             cost
           </span>
         </div>
-      </div>
+      </DPill>
 
       {s && (
-        <div className={PILL}>
-          <div className="text-[10px] font-medium uppercase tracking-[0.16em] text-neutral-500">
-            Today
-          </div>
+        <DPill>
+          <div className={EYEBROW}>Today</div>
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12.5px] tabular-nums text-neutral-700">
             <span>
               <span className="font-semibold text-neutral-900">
@@ -298,7 +290,7 @@ function WorkspaceTab({
               ))}
             </div>
           )}
-        </div>
+        </DPill>
       )}
     </div>
   );
@@ -335,7 +327,7 @@ function ActivityTab({ workspaceId }: { workspaceId: string }) {
   }
   if (items.length === 0) {
     return (
-      <div className="py-10 text-center text-[12px] text-neutral-400">
+      <div className="py-10 text-center text-[12px] text-neutral-500">
         No recent activity across the workspace.
       </div>
     );
@@ -369,7 +361,7 @@ function ActivityTab({ workspaceId }: { workspaceId: string }) {
               {a.summary}
             </div>
           )}
-          <div className="mt-1 text-[10.5px] tabular-nums text-neutral-400">
+          <div className="mt-1 text-[10.5px] tabular-nums text-neutral-500">
             {a.repository?.name ?? "Workspace"} · {timeAgo(a.startedAt)} ·{" "}
             {formatTokens(a.inputTokens)} in
           </div>

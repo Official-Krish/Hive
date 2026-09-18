@@ -1,21 +1,12 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Gamepad2, X } from "lucide-react";
-import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
-import { DIconBtn, EYEBROW, useDismiss } from "./chrome";
+import { DIconBtn, EYEBROW, timeAgo, useDismiss } from "./chrome";
 import { AnimatePresence, WPopover } from "./motion";
 import { AnchorIcon, CrownIcon } from "./games/GameIcons";
 import type { UseGameSessionResult } from "@/hooks/useGameSession";
 
-function timeLabel(iso: string): string {
-  const d = new Date(iso).getTime();
-  if (Number.isNaN(d)) return "";
-  try {
-    return formatDistanceToNow(new Date(d), { addSuffix: true });
-  } catch {
-    return "";
-  }
-}
+const timeLabel = timeAgo;
 
 interface GameInviteInboxProps {
   games: UseGameSessionResult;
@@ -30,6 +21,12 @@ interface GameInviteInboxProps {
 export function GameInviteInbox({ games, onJoin }: GameInviteInboxProps) {
   const [open, setOpen] = useState(false);
   const panelRef = useDismiss<HTMLDivElement>(() => setOpen(false));
+  // A mounting modal dismisses popovers so panels never linger behind it.
+  useEffect(() => {
+    const close = () => setOpen(false);
+    window.addEventListener("hive:close-popovers", close);
+    return () => window.removeEventListener("hive:close-popovers", close);
+  }, []);
   const invites = games.pendingInvites;
 
   return (
@@ -61,19 +58,19 @@ export function GameInviteInbox({ games, onJoin }: GameInviteInboxProps) {
               aria-label="Game invites"
               className="fixed top-16 right-4 z-30 w-96 max-w-[calc(100vw-2rem)]"
             >
-              <WPopover className="flex max-h-[500px] flex-col">
+              <WPopover className="flex max-h-[calc(100vh-8rem)] flex-col sm:max-h-[500px]">
                 <div className="flex items-center justify-between border-b border-black/[0.07] px-4 py-2.5">
                   <span className={EYEBROW}>Game invites</span>
                   <button
                     type="button"
                     onClick={() => setOpen(false)}
                     aria-label="Close game invites"
-                    className="flex size-7 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-black/[0.05] hover:text-neutral-900"
+                    className="flex size-7 items-center justify-center rounded-lg text-neutral-600 transition-colors hover:bg-black/[0.05] hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900/30"
                   >
                     <X className="size-3.5" />
                   </button>
                 </div>
-                <div className="max-h-[400px] overflow-y-auto">
+                <div className="max-h-[calc(100vh-14rem)] overflow-y-auto sm:max-h-[400px]">
                   {invites.length === 0 ? (
                     <div className="p-6 text-center text-sm text-neutral-500">
                       No invites — challenge someone from the Play Area.

@@ -3,10 +3,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FiArrowUpRight, FiCheck, FiAlertTriangle } from "react-icons/fi";
 import { http } from "@/lib/http";
 import type { RealtimeClient } from "@/lib/realtime";
-import { DModal, timeAgo } from "./chrome";
+import { DError, DLoading, DModal, DPill, EYEBROW, timeAgo } from "./chrome";
 import { cn } from "@/lib/utils";
-
-const PILL = "rounded-lg bg-white px-3 py-2 ring-1 ring-black/[0.08]";
 
 interface CiDashboardModalProps {
   workspaceId: string;
@@ -107,46 +105,34 @@ export function CiDashboardModal({
   return (
     <DModal eyebrow="Engineering" title="CI" onClose={onClose} wide>
       <div className="flex-1 overflow-y-auto p-4">
-        {loading && (
-          <div className="flex items-center justify-center gap-2.5 py-12 text-[12px] text-neutral-500">
-            <span className="inline-block size-4 animate-spin rounded-full border-2 border-neutral-900/15 border-t-neutral-900" />
-            Reading engineering health…
-          </div>
-        )}
+        {loading && <DLoading>Reading engineering health…</DLoading>}
 
         {failed && (
-          <div className="mx-auto max-w-sm rounded-lg border border-rose-500/30 bg-rose-50 px-3.5 py-3 text-center text-[12px] text-rose-700">
-            Couldn&apos;t reach CI data.{" "}
-            <button
-              type="button"
-              onClick={() =>
-                void queryClient.invalidateQueries({
-                  queryKey: ["ci", workspaceId],
-                })
-              }
-              className="font-semibold underline underline-offset-2 hover:text-rose-900"
-            >
-              Retry
-            </button>
-          </div>
+          <DError
+            retry={() =>
+              void queryClient.invalidateQueries({
+                queryKey: ["ci", workspaceId],
+              })
+            }
+          >
+            Couldn&apos;t reach CI data.
+          </DError>
         )}
 
         {!loading && !failed && (
           <div className="flex flex-col gap-4">
             <section>
-              <div className="mb-2 text-[10px] font-medium uppercase tracking-[0.18em] text-neutral-500">
-                Branches
-              </div>
+              <div className={`${EYEBROW} mb-2`}>Branches</div>
               {repos.length === 0 ? (
-                <div className={PILL}>
+                <DPill>
                   <div className="text-[13px] text-neutral-500">
                     No repositories linked yet.
                   </div>
-                </div>
+                </DPill>
               ) : (
                 <div className="flex flex-col gap-1.5">
                   {repos.map((repo) => (
-                    <div key={repo.id} className={PILL}>
+                    <DPill key={repo.id}>
                       <div className="flex items-center justify-between gap-3">
                         <div className="min-w-0">
                           <div className="truncate text-[13.5px] font-semibold text-neutral-900">
@@ -168,30 +154,28 @@ export function CiDashboardModal({
                           </span>
                         </div>
                       </div>
-                    </div>
+                    </DPill>
                   ))}
                 </div>
               )}
             </section>
 
             <section>
-              <div className="mb-2 text-[10px] font-medium uppercase tracking-[0.18em] text-neutral-500">
-                Pull requests
-              </div>
+              <div className={`${EYEBROW} mb-2`}>Pull requests</div>
               {prs.length === 0 ? (
-                <div className={PILL}>
+                <DPill>
                   <div className="text-[13px] text-neutral-500">
                     No open pull requests.
                   </div>
-                </div>
+                </DPill>
               ) : (
                 <div className="flex flex-col gap-1.5">
                   {prs.map((pr) => (
-                    <div key={pr.id} className={PILL}>
+                    <DPill key={pr.id}>
                       <div className="flex items-center justify-between gap-3">
                         <div className="min-w-0">
                           <div className="flex items-center gap-2">
-                            <span className="shrink-0 font-mono text-[11px] tabular-nums text-neutral-400">
+                            <span className="shrink-0 font-mono text-[11px] tabular-nums text-neutral-500">
                               PR #{pr.number}
                             </span>
                             <span className="truncate text-[13px] font-medium text-neutral-900">
@@ -210,7 +194,7 @@ export function CiDashboardModal({
                           </span>
                         </div>
                       </div>
-                    </div>
+                    </DPill>
                   ))}
                 </div>
               )}
