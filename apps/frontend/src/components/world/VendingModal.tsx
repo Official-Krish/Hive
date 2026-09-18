@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { type UseVendingResult } from "@/hooks/useVending";
 import type { VendingAssignedKey, VendingAvailability } from "@hive/types";
-import { WModal, WModalHeader } from "./motion";
+import { DCard, DError, DLoading, DModal, EYEBROW } from "./chrome";
 import { cn } from "@/lib/utils";
 
 interface VendingModalProps {
@@ -28,14 +28,18 @@ function retryLabel(secs: number | null): string | null {
 function AssignedKeyRow({ entry }: { entry: VendingAssignedKey }) {
   const [shown, setShown] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [copyBlocked, setCopyBlocked] = useState(false);
   const meta = PROVIDER_META[entry.provider];
   const copy = async (): Promise<void> => {
     try {
       await navigator.clipboard.writeText(entry.secret);
       setCopied(true);
+      setCopyBlocked(false);
       window.setTimeout(() => setCopied(false), 2000);
     } catch {
-      /* clipboard blocked — select manually */
+      // Clipboard blocked (permissions/headdless) — reveal + select manually.
+      setCopyBlocked(true);
+      setShown(true);
     }
   };
   return (
@@ -55,11 +59,17 @@ function AssignedKeyRow({ entry }: { entry: VendingAssignedKey }) {
         <button
           type="button"
           onClick={() => void copy()}
+          aria-live="polite"
           className="rounded-lg px-2 py-1 text-[12px] font-semibold text-neutral-500 hover:bg-black/[0.05] hover:text-neutral-900"
         >
           {copied ? "Copied" : "Copy"}
         </button>
       </div>
+      {copyBlocked && (
+        <p className="mt-1 text-[11px] text-neutral-500">
+          Copy blocked — the key is shown above, select it manually.
+        </p>
+      )}
       {shown && (
         <div className="mt-1.5 break-all rounded-lg bg-neutral-900 px-2 py-1.5 font-mono text-[11.5px] text-emerald-300">
           {entry.secret}
@@ -74,15 +84,11 @@ function AssignedKeyRow({ entry }: { entry: VendingAssignedKey }) {
 
 export function VendingModal({ vending, onClose }: VendingModalProps) {
   const [copied, setCopied] = useState(false);
+  const [copyBlocked, setCopyBlocked] = useState(false);
 
   useEffect(() => {
     void vending.refresh();
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose, vending.refresh]);
+  }, [vending.refresh]);
 
   useEffect(() => {
     setCopied(false);
@@ -93,53 +99,45 @@ export function VendingModal({ vending, onClose }: VendingModalProps) {
     try {
       await navigator.clipboard.writeText(vending.revealed.secret);
       setCopied(true);
+      setCopyBlocked(false);
     } catch {
-      /* clipboard blocked — select manually */
+      // Clipboard blocked — the secret above is selectable, call it out.
+      setCopyBlocked(true);
     }
   };
 
   return (
-    <WModal label="API keys" onClose={onClose} className="w-[min(440px,96vw)]">
-      <WModalHeader
-        eyebrow="Vending machine"
-        title="API keys"
-        onClose={onClose}
-        closeLabel="Close vending machine"
-      />
-
+    <DModal
+      eyebrow="Vending machine"
+      title="API keys"
+      onClose={onClose}
+      closeLabel="Close vending machine"
+      className="w-[min(440px,96vw)]"
+    >
       <div className="flex-1 overflow-y-auto p-4">
         {vending.error && (
-          <div
-            role="alert"
-            className="mb-3 rounded-xl bg-rose-50 px-3.5 py-2 text-[12px] font-medium text-rose-700 ring-1 ring-rose-500/30"
-          >
-            {vending.error}
-          </div>
+          <DError retry={() => void vending.refresh()}>{vending.error}</DError>
         )}
 
         {vending.revealed ? (
-          <div className="flex flex-col items-center gap-3 rounded-2xl bg-white px-4 py-8 text-center ring-1 ring-black/[0.07]">
-            <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-neutral-500">
-              {vending.revealed.label} · shown once
+          <DCard className="flex flex-col items-center gap-3 px-4 py-8 text-center">
+            <div className={EYEBROW}>{vending.revealed.label} · shown once</div>
+            <div className="w-full break-all rounded-xl bg-neutral-900 px-3 py-3 font-mono text-[12.5px] text-emerald-300 select-all">
+              {vending.revealed.secret}
             </div>
             <button
               type="button"
               onClick={() => void copy()}
-              title="Copy to clipboard"
-              className="w-full break-all rounded-xl bg-neutral-900 px-3 py-3 font-mono text-[12.5px] text-emerald-300 transition-colors hover:bg-neutral-800"
-            >
-              {vending.revealed.secret}
-            </button>
-            <button
-              type="button"
-              onClick={() => void copy()}
-              className="rounded-xl bg-neutral-900 px-4 py-2 text-[13px] font-bold text-white transition-colors hover:bg-neutral-700"
+              aria-live="polite"
+              className="rounded-xl bg-neutral-900 px-4 py-2 text-[13px] font-bold text-white transition-colors hover:bg-neutral-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900/40"
             >
               {copied ? "Copied" : "Copy key"}
             </button>
             <p className="max-w-[300px] text-[12px] text-neutral-500">
               Copy it now — this key won't be shown again. Store it in your
               local env, never in chat.
+              {copyBlocked &&
+                " Copy was blocked: select the key above manually."}
             </p>
             <button
               type="button"
@@ -151,33 +149,29 @@ export function VendingModal({ vending, onClose }: VendingModalProps) {
             >
               Done
             </button>
-          </div>
+          </DCard>
         ) : (
           <div className="flex flex-col gap-2">
             {vending.loading && vending.providers.length === 0 && (
-              <div className="py-6 text-center text-[13px] text-neutral-500">
-                Contacting the machine…
-              </div>
+              <DLoading>Contacting the machine…</DLoading>
             )}
             {vending.assigned.length > 0 && (
-              <div className="rounded-2xl bg-white px-3.5 py-3 ring-1 ring-black/[0.07]">
-                <div className="mb-2 text-[10px] font-medium uppercase tracking-[0.18em] text-neutral-500">
-                  Assigned to you
-                </div>
+              <DCard className="px-3.5 py-3">
+                <div className={`${EYEBROW} mb-2`}>Assigned to you</div>
                 <div className="flex flex-col gap-1.5">
                   {vending.assigned.map((k) => (
                     <AssignedKeyRow key={k.poolId} entry={k} />
                   ))}
                 </div>
-              </div>
+              </DCard>
             )}
             {vending.providers.map((p) => {
               const meta = PROVIDER_META[p.provider];
               const wait = retryLabel(p.retryAfterSecs);
               return (
-                <div
+                <DCard
                   key={p.provider}
-                  className="flex items-center gap-3 rounded-2xl bg-white px-3.5 py-3 ring-1 ring-black/[0.07]"
+                  className="flex items-center gap-3 px-3.5 py-3"
                 >
                   <span
                     className={cn("size-3 shrink-0 rounded-full", meta.dot)}
@@ -200,11 +194,14 @@ export function VendingModal({ vending, onClose }: VendingModalProps) {
                     type="button"
                     disabled={!p.canCheckout}
                     onClick={() => void vending.checkout(p.provider)}
-                    className="shrink-0 rounded-xl bg-neutral-900 px-3.5 py-2 text-[12.5px] font-bold text-white transition-all hover:bg-neutral-700 disabled:cursor-not-allowed disabled:opacity-30"
+                    title={
+                      !p.canCheckout && p.reason ? p.reason : "Check out a key"
+                    }
+                    className="shrink-0 rounded-xl bg-neutral-900 px-3.5 py-2 text-[12.5px] font-bold text-white transition-all hover:bg-neutral-700 disabled:cursor-not-allowed disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900/40"
                   >
                     Get key
                   </button>
-                </div>
+                </DCard>
               );
             })}
             <p className="px-1 text-[11.5px] leading-relaxed text-neutral-500">
@@ -214,6 +211,6 @@ export function VendingModal({ vending, onClose }: VendingModalProps) {
           </div>
         )}
       </div>
-    </WModal>
+    </DModal>
   );
 }

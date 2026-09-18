@@ -20,6 +20,7 @@ import { StatusPage } from "./pages/static/StatusPage";
 import { AppBar } from "./components/layout/AppBar";
 import { Footer } from "./components/layout/Footer";
 import { ScrollToTop } from "./components/layout/ScrollToTop";
+import { TopProgressBar } from "./components/layout/TopProgressBar";
 import { NotFound } from "./pages/NotFound";
 import { DashboardLayout } from "./components/dashboard/DashboardLayout";
 import { Overview } from "./pages/dashboard/Overview";
@@ -52,6 +53,7 @@ function PublicLayout() {
   return (
     <div className="flex min-h-screen flex-col">
       <ScrollToTop />
+      <TopProgressBar />
       <AppBar />
       <main className="flex-1">
         <Outlet />
@@ -64,6 +66,7 @@ function PublicLayout() {
 function AuthLayout() {
   return (
     <div className="flex min-h-screen flex-col bg-[#f0efec]">
+      <TopProgressBar />
       <main className="flex-1">
         <AuthPage />
       </main>

@@ -1,6 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import {
-  FiX,
   FiPlay,
   FiPause,
   FiLink,
@@ -17,10 +16,8 @@ import {
 import { parseYouTubeUrl, type ChillQueueItem } from "@hive/types";
 import type { RealtimeClient } from "@/lib/realtime";
 import { WModal } from "./motion";
+import { DCloseBtn, EYEBROW, useEscape } from "./chrome";
 import { cn } from "@/lib/utils";
-
-const EYEBROW =
-  "text-[9px] font-semibold uppercase tracking-[0.16em] text-neutral-400";
 
 interface ChillMediaState {
   videoUrl: string | null;
@@ -55,13 +52,7 @@ export function ChillScreenModal({
   const [dropAfter, setDropAfter] = useState(false);
   const dragIdRef = useRef<string | null>(null);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  useEscape(onClose);
 
   const submit = () => {
     const parsed = parseYouTubeUrl(url.trim());
@@ -137,26 +128,19 @@ export function ChillScreenModal({
       {/* Header */}
       <div className="flex items-center justify-between border-b border-black/[0.07] px-4 py-3">
         <div>
-          <div className={cn(EYEBROW, "text-neutral-500")}>Chill Space</div>
+          <div className={EYEBROW}>Chill Space</div>
           <div className="text-[15px] font-semibold leading-tight tracking-tight text-neutral-900">
             Shared screen
           </div>
         </div>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Close shared screen"
-          className="rounded-lg p-2 text-neutral-500 transition-colors hover:bg-black/[0.05] hover:text-neutral-900"
-        >
-          <FiX className="size-4" />
-        </button>
+        <DCloseBtn onClose={onClose} label="Close shared screen" />
       </div>
 
       {/* Body */}
       <div className="flex-1 overflow-y-auto p-4">
         {/* Now playing / idle */}
         <div className="rounded-xl bg-white p-3.5 ring-1 ring-black/[0.07]">
-          <div className={cn(EYEBROW, "text-neutral-500")}>
+          <div className={EYEBROW}>
             {state.videoId ? "Now playing" : "Screen is idle"}
           </div>
           {state.videoId ? (
@@ -240,17 +224,18 @@ export function ChillScreenModal({
 
         {/* Add to queue */}
         <div className="mt-4">
-          <div className={cn(EYEBROW, "mb-2 text-neutral-500")}>
+          <div className={cn(EYEBROW, "mb-2")}>
             Add to queue — everyone sees it on the screen
           </div>
           <div className="flex items-center gap-2">
             <div className="relative flex-1">
               <FiLink className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-neutral-500" />
               <input
+                autoFocus
                 value={url}
                 onChange={(e) => {
                   setUrl(e.target.value);
-                  setInputChanged(e.target.value.length > 0);
+                  setInputChanged(e.target.value.trim().length > 0);
                 }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") submit();
@@ -269,14 +254,16 @@ export function ChillScreenModal({
             </button>
           </div>
           {error && (
-            <div className="mt-2 text-[11.5px] text-rose-700">{error}</div>
+            <div role="alert" className="mt-2 text-[11.5px] text-rose-700">
+              {error}
+            </div>
           )}
         </div>
 
         {/* Queue */}
         <div className="mt-4">
           <div className="mb-2 flex items-center justify-between">
-            <div className={cn(EYEBROW, "text-neutral-500")}>
+            <div className={EYEBROW}>
               <span className="inline-flex items-center gap-1.5">
                 <FiList className="size-3" />
                 Up next{queue.length > 0 ? ` · ${queue.length}` : ""}
@@ -285,8 +272,22 @@ export function ChillScreenModal({
             {queue.length > 0 && (
               <button
                 type="button"
-                onClick={() => client?.sendChillQueueClear()}
-                className="text-[11px] font-semibold text-neutral-500 transition-colors hover:text-rose-700"
+                onClick={(e) => {
+                  // Two-step confirm — this nukes the shared queue for all.
+                  const btn = e.currentTarget;
+                  if (btn.dataset.armed === "1") {
+                    client?.sendChillQueueClear();
+                    return;
+                  }
+                  btn.dataset.armed = "1";
+                  btn.textContent = "Sure?";
+                  window.setTimeout(() => {
+                    btn.dataset.armed = "";
+                    btn.textContent = "Clear all";
+                  }, 2500);
+                }}
+                aria-live="polite"
+                className="text-[11px] font-semibold text-neutral-500 transition-colors hover:text-rose-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-700/40 rounded"
               >
                 Clear all
               </button>

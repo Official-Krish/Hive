@@ -1,6 +1,7 @@
 import { Shell } from "./Shell";
 import { Furnishings } from "./Furnishings";
 import { Fittings } from "./Fittings";
+import { GalleryFrames } from "./GalleryFrames";
 import { Courtyard } from "./Courtyard";
 import { Stairs } from "./Stairs";
 import { Level2 } from "./Level2";
@@ -17,16 +18,17 @@ import { ChillSpace } from "./ChillSpace";
  * The lobby's reflective floor lives in Shell so there is exactly one plane
  * there (no z-fighting) and reflection stays capped to a single room.
  */
-export function OfficeBuilding() {
+export function OfficeBuilding({ simple = false }: { simple?: boolean }) {
   return (
     <group name="office-building">
       <Shell />
       <Fittings />
+      <GalleryFrames />
       <Furnishings />
       <ChillSpace />
       <Stairs />
       <Level2 />
-      <Courtyard />
+      <Courtyard simple={simple} />
     </group>
   );
 }

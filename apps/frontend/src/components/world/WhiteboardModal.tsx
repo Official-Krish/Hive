@@ -2,15 +2,16 @@ import { useEffect, useRef, useState } from "react";
 import type { RealtimeClient } from "@/lib/realtime";
 import { useWhiteboard, type WhiteboardPoint } from "@/hooks/useWhiteboard";
 import { WModal } from "./motion";
+import { DBtn, EYEBROW, useEscape } from "./chrome";
 import { cn } from "@/lib/utils";
 
-const COLORS = [
-  "#1c1917",
-  "#d97706",
-  "#b91c1c",
-  "#2563eb",
-  "#059669",
-  "#7c3aed",
+const COLORS: Array<{ hex: string; name: string }> = [
+  { hex: "#1c1917", name: "Ink black" },
+  { hex: "#d97706", name: "Amber" },
+  { hex: "#b91c1c", name: "Red" },
+  { hex: "#2563eb", name: "Blue" },
+  { hex: "#059669", name: "Green" },
+  { hex: "#7c3aed", name: "Violet" },
 ];
 const STROKE_WIDTH = 3;
 const DRAW_LEN = 1440;
@@ -37,7 +38,7 @@ export function WhiteboardModal({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const drawingRef = useRef(false);
   const pointsRef = useRef<WhiteboardPoint[]>([]);
-  const [color, setColor] = useState<string>(COLORS[0] ?? "#1c1917");
+  const [color, setColor] = useState<string>(COLORS[0]?.hex ?? "#1c1917");
   const [confirmClear, setConfirmClear] = useState(false);
 
   useEffect(() => {
@@ -83,13 +84,7 @@ export function WhiteboardModal({
     return () => clearTimeout(t);
   }, [confirmClear]);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  useEscape(onClose);
 
   const localPoint = (
     e: React.PointerEvent<HTMLCanvasElement>,
@@ -158,64 +153,89 @@ export function WhiteboardModal({
       label={`Whiteboard ${boardId}`}
       onClose={onClose}
       wide
-      className="h-[min(92vh,860px)] max-w-6xl"
+      className="h-[min(86vh,860px)] max-w-[min(1024px,96vw)]"
     >
       {/* Header */}
       <div className="flex items-center justify-between gap-3 border-b border-black/[0.07] px-4 py-2.5">
         <div className="flex items-center gap-2.5">
-          <span className="text-[9px] font-semibold uppercase tracking-[0.16em] text-neutral-400">
-            Whiteboard
-          </span>
+          <span className={EYEBROW}>Whiteboard</span>
           <span className="rounded-full bg-white px-2.5 py-0.5 font-mono text-[11px] text-neutral-600 ring-1 ring-black/[0.08]">
             {boardId}
           </span>
-          {isLive && (
+          {isLive ? (
             <span className="flex items-center gap-1.5 text-[11px] font-medium text-emerald-700">
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
+              <span
+                aria-hidden
+                className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500 motion-reduce:animate-none"
+              />
               live
+            </span>
+          ) : (
+            <span className="flex items-center gap-1.5 text-[11px] font-medium text-neutral-500">
+              <span
+                aria-hidden
+                className="h-1.5 w-1.5 rounded-full bg-neutral-300"
+              />
+              offline — changes won&apos;t sync
             </span>
           )}
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={handleClear}
-            className="rounded-lg bg-white px-2.5 py-1 text-[12px] font-semibold text-neutral-700 ring-1 ring-black/[0.09] transition-colors hover:bg-neutral-100"
-          >
-            {confirmClear ? "Sure?" : "Clear"}
-          </button>
-          <button
-            type="button"
+        <div className="flex items-center gap-2" aria-live="polite">
+          {confirmClear ? (
+            <DBtn
+              variant="danger"
+              onClick={handleClear}
+              className="px-2.5 py-1 text-[12px]"
+            >
+              Sure?
+            </DBtn>
+          ) : (
+            <DBtn
+              variant="ghost"
+              onClick={handleClear}
+              className="px-2.5 py-1 text-[12px]"
+            >
+              Clear
+            </DBtn>
+          )}
+          <DBtn
+            variant="ghost"
             onClick={onClose}
-            className="rounded-lg bg-neutral-950 px-2.5 py-1 text-[12px] font-semibold text-white transition-colors hover:bg-neutral-800"
+            className="px-2.5 py-1 text-[12px]"
           >
             Close
-          </button>
+          </DBtn>
         </div>
       </div>
 
       {/* Tray + board */}
       <div className="flex min-h-0 flex-col">
-        <div className="flex items-center gap-2 px-4 py-2">
+        <div
+          className="flex items-center gap-2 px-4 py-2"
+          role="radiogroup"
+          aria-label="Ink color"
+        >
           {COLORS.map((c) => (
             <button
-              key={c}
+              key={c.hex}
               type="button"
-              title={c}
-              aria-label={`Ink color ${c}`}
-              aria-pressed={color === c}
-              onClick={() => setColor(c)}
+              title={c.name}
+              aria-label={c.name}
+              aria-pressed={color === c.hex}
+              onClick={() => setColor(c.hex)}
               className={cn(
-                "h-5 w-5 rounded-full ring-2 ring-offset-1 ring-offset-[#f4f2ed] transition-transform hover:scale-110",
-                color === c ? "ring-zinc-900" : "ring-transparent",
+                "h-5 w-5 rounded-full ring-2 ring-offset-1 ring-offset-[#f4f2ed] transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-zinc-900",
+                color === c.hex ? "ring-zinc-900" : "ring-transparent",
               )}
-              style={{ backgroundColor: c }}
+              style={{ backgroundColor: c.hex }}
             />
           ))}
         </div>
         <div className="min-h-0 flex-1 px-4 pb-4">
           <canvas
             ref={canvasRef}
+            role="img"
+            aria-label={`Shared whiteboard ${boardId}. Use ink color ${COLORS.find((c) => c.hex === color)?.name ?? "selected"}; drawing needs a pointer or touch.`}
             width={DRAW_LEN}
             height={DRAW_HEIGHT}
             onPointerDown={onPointerDown}

@@ -2,12 +2,21 @@ import { useEffect, useState } from "react";
 import { Check, X, Zap } from "lucide-react";
 import { useMapOverlay } from "@/hooks/useRealtimeMap";
 import { type MapOverlay } from "@/lib/http";
-import { formatDuration, formatTokens, statusLabel, timeAgo } from "./chrome";
+import {
+  DError,
+  DLoading,
+  EYEBROW,
+  formatDuration,
+  formatTokens,
+  statusLabel,
+  timeAgo,
+  useEscape,
+} from "./chrome";
 import { WModal } from "./motion";
+import { ReactionIcon } from "./reactions";
 import { cn } from "@/lib/utils";
 
-const LABEL =
-  "text-[10px] font-medium uppercase tracking-[0.18em] text-neutral-500";
+const LABEL = EYEBROW;
 
 const MIX_COLORS = [
   "bg-emerald-600",
@@ -25,6 +34,10 @@ interface MemberDetailPopupProps {
   client: import("@/lib/realtime").RealtimeClient | null;
   developerId: string | null;
   onClose: () => void;
+  onWave?: (developerId: string) => void;
+  onLocate?: (developerId: string) => void;
+  onFollow?: (developerId: string) => void;
+  following?: boolean;
 }
 
 /**
@@ -37,15 +50,12 @@ export function MemberDetailPopup({
   client,
   developerId,
   onClose,
+  onWave,
+  onLocate,
+  onFollow,
+  following,
 }: MemberDetailPopupProps) {
-  useEffect(() => {
-    if (!developerId) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [developerId, onClose]);
+  useEscape(onClose);
 
   if (!developerId) return null;
 
@@ -57,6 +67,10 @@ export function MemberDetailPopup({
         client={client}
         developerId={developerId}
         onClose={onClose}
+        onWave={onWave}
+        onLocate={onLocate}
+        onFollow={onFollow}
+        following={following}
       />
     </WModal>
   );
@@ -68,12 +82,20 @@ function MemberModalInner({
   client,
   developerId,
   onClose,
+  onWave,
+  onLocate,
+  onFollow,
+  following,
 }: {
   workspaceId: string;
   myUserId: string;
   client: import("@/lib/realtime").RealtimeClient | null;
   developerId: string;
   onClose: () => void;
+  onWave?: (developerId: string) => void;
+  onLocate?: (developerId: string) => void;
+  onFollow?: (developerId: string) => void;
+  following?: boolean;
 }) {
   const overlay = useMapOverlay(workspaceId, developerId, client, true);
 
@@ -122,31 +144,61 @@ function MemberModalInner({
           type="button"
           onClick={onClose}
           aria-label="Close member details"
-          className="flex size-8 flex-shrink-0 items-center justify-center rounded-full text-neutral-500 transition-colors hover:bg-black/[0.05] hover:text-neutral-950"
+          className="flex size-8 flex-shrink-0 items-center justify-center rounded-full text-neutral-600 transition-colors hover:bg-black/[0.05] hover:text-neutral-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900/30"
         >
           <X className="size-3.5" />
         </button>
       </div>
 
-      {/* body */}
-      <div className="space-y-5 px-5 py-4 text-[13px]">
-        {overlay.isLoading && !data && !overlay.error && (
-          <div className="flex items-center gap-2.5 py-2 text-neutral-500">
-            <span className="inline-block size-4 animate-spin rounded-full border-2 border-black/[0.09] border-t-neutral-900" />
-            Loading activity…
-          </div>
-        )}
-        {overlay.error && !data && (
-          <div className="rounded-lg border border-rose-600/25 bg-rose-600/[0.06] px-3.5 py-3 text-[13px] text-rose-800">
-            Couldn't load this member's activity.{" "}
+      {/* presence actions — wave, locate, follow (hidden for yourself) */}
+      {!isMe && (onWave || onLocate || onFollow) && (
+        <div className="flex items-center gap-1.5 border-b border-black/[0.07] px-5 py-2.5">
+          {onWave && (
             <button
               type="button"
-              onClick={() => overlay.refetch?.()}
-              className="font-semibold text-rose-700 underline underline-offset-2 hover:text-neutral-950"
+              onClick={() => onWave(developerId)}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-white px-2.5 py-1.5 text-[12px] font-semibold text-neutral-700 ring-1 ring-black/[0.09] transition-colors hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900/30"
             >
-              Retry
+              <ReactionIcon id="wave" />
+              Wave
             </button>
-          </div>
+          )}
+          {onLocate && (
+            <button
+              type="button"
+              onClick={() => onLocate(developerId)}
+              className="rounded-lg bg-white px-2.5 py-1.5 text-[12px] font-semibold text-neutral-700 ring-1 ring-black/[0.09] transition-colors hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900/30"
+            >
+              Locate
+            </button>
+          )}
+          {onFollow && (
+            <button
+              type="button"
+              onClick={() => onFollow(developerId)}
+              aria-pressed={following ?? false}
+              className={cn(
+                "rounded-lg px-2.5 py-1.5 text-[12px] font-semibold ring-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900/30",
+                following
+                  ? "bg-neutral-950 text-white ring-neutral-950 hover:bg-neutral-800"
+                  : "bg-white text-neutral-700 ring-black/[0.09] hover:bg-neutral-100",
+              )}
+            >
+              {following ? "Following" : "Follow"}
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* body — scrollable so long profiles never clip on short screens */}
+      <div className="flex-1 space-y-5 overflow-y-auto px-5 py-4 text-[13px]">
+        {overlay.isLoading && !data && !overlay.error && (
+          <DLoading>Loading activity…</DLoading>
+        )}
+        {overlay.error && !data && (
+          <DError retry={() => overlay.refetch?.()}>
+            Couldn&apos;t load this member&apos;s activity.
+          </DError>
         )}
 
         {data?.developer.workingOn && (
@@ -342,7 +394,7 @@ function MemberModalInner({
                   <span className="truncate font-mono text-neutral-600">
                     {e.label}
                   </span>
-                  <span className="flex-shrink-0 text-[10.5px] tabular-nums text-neutral-400">
+                  <span className="flex-shrink-0 text-[10.5px] tabular-nums text-neutral-500">
                     {timeAgo(e.at)}
                   </span>
                 </li>

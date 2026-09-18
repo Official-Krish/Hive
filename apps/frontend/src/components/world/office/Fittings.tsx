@@ -1,4 +1,4 @@
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Billboard, Instances, Instance } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
@@ -12,14 +12,20 @@ import {
   SLAT_WALLS,
   TV_PANELS,
   WHITEBOARDS,
+  WALL_ART,
   ROOM_SIGNS,
   PODS,
   RUGS,
   CEILING_Y,
+  CEILING_Y2,
+  INTERIOR,
+  MEZZ,
   EXT_H,
+  type WallArt,
   type WallPanel,
 } from "./layout";
 import { M } from "./materials";
+import { ASSET_BASE_URL } from "@/lib/config";
 import { bladeTexture, directoryTexture } from "./signage";
 import { PodDoorPlate } from "./Level2";
 
@@ -151,6 +157,79 @@ function Whiteboard({ p, index = 0 }: { p: WallPanel; index?: number }) {
       <mesh position={[0, -h / 2 - 0.09, 0.06]}>
         <boxGeometry args={[w * 0.55, 0.04, 0.1]} />
         <primitive object={M.metalBrushed} attach="material" />
+      </mesh>
+    </group>
+  );
+}
+
+/**
+ * Framed gallery art — walnut frame + canvas face. Images come from the
+ * team-curated pack (`${ASSET_BASE_URL}/art/<artId>.jpg`) so CORS and
+ * licensing stay deterministic. Missing/failed images fall back to a blank
+ * canvas (wallAccent) instead of breaking the wall.
+ */
+const artCache = new Map<string, THREE.Texture | null>();
+
+function useArtTexture(artId: string): THREE.Texture | null {
+  const [tex, setTex] = useState<THREE.Texture | null>(
+    () => artCache.get(artId) ?? null,
+  );
+  useEffect(() => {
+    if (artCache.has(artId)) {
+      setTex(artCache.get(artId) ?? null);
+      return;
+    }
+    let live = true;
+    new THREE.TextureLoader()
+      .setCrossOrigin("anonymous")
+      .loadAsync(`${ASSET_BASE_URL}/art/${artId}.jpg`)
+      .then((t) => {
+        t.colorSpace = THREE.SRGBColorSpace;
+        t.anisotropy = 8;
+        artCache.set(artId, t);
+        if (live) setTex(t);
+      })
+      .catch(() => {
+        artCache.set(artId, null);
+      });
+    return () => {
+      live = false;
+    };
+  }, [artId]);
+  return tex;
+}
+
+function FramedArt({ p }: { p: WallArt }) {
+  const [w, h] = p.size;
+  const tex = useArtTexture(p.artId);
+  const face = useMemo(
+    () =>
+      tex
+        ? new THREE.MeshStandardMaterial({
+            map: tex,
+            roughness: 0.85,
+            metalness: 0,
+          })
+        : M.wallAccent,
+    [tex],
+  );
+  useEffect(() => {
+    // Dispose only textures we created (never the shared fallback).
+    return () => {
+      if (tex && face !== M.wallAccent) face.dispose();
+    };
+  }, [face, tex]);
+  return (
+    <group position={p.position} rotation={p.rotation}>
+      {/* walnut frame */}
+      <mesh castShadow>
+        <boxGeometry args={[w + 0.12, h + 0.12, 0.06]} />
+        <primitive object={M.walnut} attach="material" />
+      </mesh>
+      {/* canvas face */}
+      <mesh position={[0, 0, 0.036]}>
+        <planeGeometry args={[w, h]} />
+        <primitive object={face} attach="material" />
       </mesh>
     </group>
   );
@@ -331,6 +410,56 @@ function DirectoryTotem({
   );
 }
 
+/** T-bar grid + vents: thin dark lines every 1.2m so the big ceiling planes
+ *  read as tiled, plus sprinkler/vent discs. One instanced draw per axis. */
+function CeilingGrid({ y, z0, z1 }: { y: number; z0: number; z1: number }) {
+  const xs = useMemo(() => {
+    const out: number[] = [];
+    for (let x = INTERIOR.minX + 0.6; x < INTERIOR.maxX; x += 1.2) out.push(x);
+    return out;
+  }, []);
+  const zs = useMemo(() => {
+    const out: number[] = [];
+    for (let z = z0 + 0.6; z < z1; z += 1.2) out.push(z);
+    return out;
+  }, [z0, z1]);
+  const depth = z1 - z0;
+  const width = INTERIOR.maxX - INTERIOR.minX;
+  return (
+    <group name="ceiling-grid">
+      <Instances range={xs.length} limit={xs.length}>
+        <boxGeometry args={[0.02, 0.015, depth]} />
+        <primitive object={M.precastDark} attach="material" />
+        {xs.map((x) => (
+          <Instance key={x} position={[x, y - 0.008, (z0 + z1) / 2]} />
+        ))}
+      </Instances>
+      <Instances range={zs.length} limit={zs.length}>
+        <boxGeometry args={[width, 0.015, 0.02]} />
+        <primitive object={M.precastDark} attach="material" />
+        {zs.map((z) => (
+          <Instance key={z} position={[0, y - 0.008, z]} />
+        ))}
+      </Instances>
+      {/* Vents / sprinklers — small dark discs scattered on the grid */}
+      <Instances range={10} limit={10}>
+        <cylinderGeometry args={[0.09, 0.09, 0.02, 12]} />
+        <primitive object={M.metalDark} attach="material" />
+        {Array.from({ length: 10 }, (_, i) => (
+          <Instance
+            key={i}
+            position={[
+              INTERIOR.minX + 3 + ((i * 7.3) % width),
+              y - 0.015,
+              z0 + 1 + ((i * 4.1) % depth),
+            ]}
+          />
+        ))}
+      </Instances>
+    </group>
+  );
+}
+
 /**
  * Everything mounted to the ceilings and walls: lighting fixtures that actually
  * sit in the ceiling plane, acoustic baffles, timber feature walls, displays,
@@ -341,6 +470,9 @@ export function Fittings() {
 
   return (
     <group name="fittings">
+      {/* T-bar grids over the wing ceilings (lobby stays open to the roof) */}
+      <CeilingGrid y={CEILING_Y} z0={INTERIOR.minZ} z1={MEZZ.z0} />
+      <CeilingGrid y={CEILING_Y2} z0={INTERIOR.minZ} z1={MEZZ.z0} />
       {/* Recessed ceiling runs — level 1 wings + corridor, then level 2 */}
       {[...CEILING_RUNS, ...CEILING_RUNS_L2].map((r, i) => (
         <CeilingRun
@@ -412,6 +544,11 @@ export function Fittings() {
       ))}
       {WHITEBOARDS.map((p, i) => (
         <Whiteboard key={i} p={p} index={i} />
+      ))}
+
+      {/* Gallery wall art (interactive poster boards — see interactions.ts) */}
+      {WALL_ART.map((p) => (
+        <FramedArt key={p.artId} p={p} />
       ))}
 
       {/* Room signage */}

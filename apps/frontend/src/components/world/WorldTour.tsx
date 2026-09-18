@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 
 const STORAGE_KEY = "hive-tour-seen-v1";
@@ -22,7 +22,11 @@ export function markTourSeen() {
 const STEPS = [
   {
     title: "Move around",
-    body: "WASD or arrows to walk (hold Shift to run, Space to jump). Drag to look, scroll to zoom, V for first-person. Try it now — this card never blocks you.",
+    body: "WASD or arrows to walk — hold Shift to run, Space to jump. Best on desktop with a keyboard.",
+  },
+  {
+    title: "Look around",
+    body: "Drag to look, scroll to zoom, V for first-person. Try it now — this card never blocks you.",
   },
   {
     title: "Touch the office",
@@ -34,7 +38,7 @@ const STEPS = [
   },
 ];
 
-/** First-run coachmark: non-blocking, three steps, then gone. */
+/** First-run coachmark: non-blocking, four steps, then gone. */
 export function WorldTour({ onClose }: { onClose: (seen: boolean) => void }) {
   const [i, setI] = useState(0);
   const [dir, setDir] = useState(1);
@@ -45,9 +49,23 @@ export function WorldTour({ onClose }: { onClose: (seen: boolean) => void }) {
     setDir(next > i ? 1 : -1);
     setI(next);
   };
+  const nextRef = useRef<HTMLButtonElement>(null);
+  // Esc dismisses (permanently — it's a first-run coachmark, not a snooze);
+  // initial focus lands on the primary action for keyboard users.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose(true);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  useEffect(() => {
+    nextRef.current?.focus();
+  }, [i]);
   return (
     <motion.div
       role="dialog"
+      aria-modal="false"
       aria-label="Hive tour"
       className="pointer-events-auto w-[320px] overflow-hidden rounded-2xl bg-[#f4f2ed]/97 p-4 ring-1 ring-black/[0.09] backdrop-blur-md shadow-[0_16px_40px_-12px_rgba(0,0,0,0.35)]"
       initial={reduce ? { opacity: 1 } : { opacity: 0, y: 16, scale: 0.97 }}
@@ -91,6 +109,7 @@ export function WorldTour({ onClose }: { onClose: (seen: boolean) => void }) {
       <div className="mt-3 flex items-center gap-1.5">
         {!last ? (
           <button
+            ref={nextRef}
             type="button"
             onClick={() => go(i + 1)}
             className="flex-1 rounded-lg bg-neutral-950 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-neutral-800"
@@ -99,6 +118,7 @@ export function WorldTour({ onClose }: { onClose: (seen: boolean) => void }) {
           </button>
         ) : (
           <button
+            ref={nextRef}
             type="button"
             onClick={() => onClose(true)}
             className="flex-1 rounded-lg bg-emerald-600 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-emerald-700"
@@ -117,10 +137,11 @@ export function WorldTour({ onClose }: { onClose: (seen: boolean) => void }) {
         )}
         <button
           type="button"
-          onClick={() => onClose(false)}
+          onClick={() => onClose(true)}
+          title="Hide the tour permanently"
           className="rounded-lg px-2.5 py-1.5 text-[12px] font-medium text-neutral-400 transition-colors hover:text-neutral-700"
         >
-          Later
+          Don&apos;t show again
         </button>
       </div>
     </motion.div>

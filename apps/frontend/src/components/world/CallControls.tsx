@@ -7,6 +7,7 @@ import {
 } from "react-icons/fi";
 import { motion, useReducedMotion } from "motion/react";
 import { cn } from "@/lib/utils";
+import { WorldTip } from "./chrome";
 
 interface CallControlsProps {
   micOn: boolean;
@@ -44,43 +45,50 @@ export function CallControls({
       aria-label="Call controls"
       className="flex items-center gap-1.5 rounded-full bg-[#f4f2ed]/95 px-2 py-1.5 ring-1 ring-black/[0.08] backdrop-blur-md shadow-[0_8px_24px_-8px_rgba(0,0,0,0.4)]"
     >
-      <motion.button
-        type="button"
-        onClick={toggleMic}
-        aria-label={micOn ? "Mute microphone" : "Unmute microphone"}
-        aria-pressed={micOn}
-        title={micOn ? "Mute microphone" : "Unmute microphone"}
-        className={btn(micOn)}
-        whileTap={press}
-      >
-        {micOn ? <FiMic className="size-4" /> : <FiMicOff className="size-4" />}
-      </motion.button>
-      <motion.button
-        type="button"
-        onClick={toggleCamera}
-        aria-label={cameraOn ? "Turn camera off" : "Turn camera on"}
-        aria-pressed={cameraOn}
-        title={cameraOn ? "Turn camera off" : "Turn camera on"}
-        className={btn(cameraOn)}
-        whileTap={press}
-      >
-        {cameraOn ? (
-          <FiVideo className="size-4" />
-        ) : (
-          <FiVideoOff className="size-4" />
-        )}
-      </motion.button>
-      <motion.button
-        type="button"
-        onClick={toggleShare}
-        aria-label={sharing ? "Stop sharing screen" : "Share screen"}
-        aria-pressed={sharing}
-        title={sharing ? "Stop sharing screen" : "Share screen"}
-        className={btn(sharing)}
-        whileTap={press}
-      >
-        <FiMonitor className="size-4" />
-      </motion.button>
+      <WorldTip content={micOn ? "Mute microphone" : "Unmute microphone"}>
+        <motion.button
+          type="button"
+          onClick={toggleMic}
+          aria-label={micOn ? "Mute microphone" : "Unmute microphone"}
+          aria-pressed={micOn}
+          className={btn(micOn)}
+          whileTap={press}
+        >
+          {micOn ? (
+            <FiMic className="size-4" />
+          ) : (
+            <FiMicOff className="size-4" />
+          )}
+        </motion.button>
+      </WorldTip>
+      <WorldTip content={cameraOn ? "Turn camera off" : "Turn camera on"}>
+        <motion.button
+          type="button"
+          onClick={toggleCamera}
+          aria-label={cameraOn ? "Turn camera off" : "Turn camera on"}
+          aria-pressed={cameraOn}
+          className={btn(cameraOn)}
+          whileTap={press}
+        >
+          {cameraOn ? (
+            <FiVideo className="size-4" />
+          ) : (
+            <FiVideoOff className="size-4" />
+          )}
+        </motion.button>
+      </WorldTip>
+      <WorldTip content={sharing ? "Stop sharing screen" : "Share screen"}>
+        <motion.button
+          type="button"
+          onClick={toggleShare}
+          aria-label={sharing ? "Stop sharing screen" : "Share screen"}
+          aria-pressed={sharing}
+          className={btn(sharing)}
+          whileTap={press}
+        >
+          <FiMonitor className="size-4" />
+        </motion.button>
+      </WorldTip>
     </div>
   );
 }

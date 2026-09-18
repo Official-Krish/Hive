@@ -15,16 +15,19 @@ const RING_COLOR: Record<Interactable["icon"], string> = {
   coffee: "#fb923c",
   water: "#38bdf8",
   monitor: "#818cf8",
-  board: "#e8eaf0",
+  board: "#64748b",
   ci: "#34d399",
   chill: "#f472b6",
   arcade: "#a78bfa",
   vending: "#fbbf24",
   reviewer: "#2dd4bf",
   fleet: "#22d3ee",
+  art: "#f59e0b",
 };
 
-const RANGE = 8;
+// 7m global range (was 8) — trims clutter in the dense AI-lab cluster while
+// keeping discoverability elsewhere. Hysteresis +0.6 below is unchanged.
+const RANGE = 7;
 const DESK_DOT_RANGE = 5;
 const DESK_DOT_MAX = 3;
 
@@ -134,6 +137,14 @@ function drawGlyph(ctx: CanvasRenderingContext2D, icon: Interactable["icon"]) {
       ctx.lineTo(62, 46);
       ctx.stroke();
       break;
+    case "art": // picture frame + inner canvas + hanger
+      ctx.strokeRect(24, 34, 80, 64);
+      ctx.strokeRect(36, 46, 56, 40);
+      ctx.beginPath();
+      ctx.moveTo(64, 34);
+      ctx.lineTo(64, 22);
+      ctx.stroke();
+      break;
     case "fleet": // server stack
       ctx.strokeRect(34, 30, 60, 20);
       ctx.strokeRect(34, 54, 60, 20);
@@ -157,10 +168,10 @@ function iconTexture(icon: Interactable["icon"]): THREE.CanvasTexture {
   const hit = iconCache.get(icon);
   if (hit) return hit;
   const el = document.createElement("canvas");
-  el.width = 400;
-  el.height = 400;
+  el.width = 300;
+  el.height = 300;
   const c = el.getContext("2d")!;
-  c.scale(400 / 128, 400 / 128); // glyph paths are authored in 128-space
+  c.scale(300 / 128, 300 / 128); // glyph paths are authored in 128-space
   drawGlyph(c, icon);
   const tex = new THREE.CanvasTexture(el);
   tex.colorSpace = THREE.SRGBColorSpace;
@@ -227,8 +238,19 @@ function MarkerSpot({
           depthWrite={false}
         />
       </mesh>
-      {/* floating icon */}
+      {/* floating icon — dark disc backing keeps the white glyph legible
+          over bright floors/sky; targeted markers pop slightly larger */}
       <Billboard position={[0, 1.7, 0]}>
+        <mesh position={[0, 0, -0.01]}>
+          <circleGeometry args={[0.32, 32]} />
+          <meshBasicMaterial
+            color="#111827"
+            transparent
+            opacity={targeted ? 0.85 : 0.72}
+            toneMapped={false}
+            depthWrite={false}
+          />
+        </mesh>
         <mesh>
           <planeGeometry args={[0.5, 0.5]} />
           <meshBasicMaterial
@@ -236,7 +258,7 @@ function MarkerSpot({
             transparent
             toneMapped={false}
             depthWrite={false}
-            opacity={targeted ? 1 : 0.9}
+            opacity={targeted ? 1 : 0.95}
           />
         </mesh>
       </Billboard>
@@ -335,8 +357,15 @@ export function Markers({
       window.matchMedia("(prefers-reduced-motion: reduce)").matches,
     [],
   );
+  // Image frames (curated posters + community gallery) show no floating
+  // marker — the E prompt on approach is the indicator. Everything else
+  // keeps the full ring + icon.
   const spots = useMemo(
-    () => INTERACTABLES.filter((s) => s.kind !== "monitor"),
+    () =>
+      INTERACTABLES.filter(
+        (s) =>
+          s.kind !== "monitor" && s.kind !== "poster" && s.kind !== "gallery",
+      ),
     [],
   );
   return (

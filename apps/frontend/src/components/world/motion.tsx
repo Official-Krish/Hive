@@ -1,5 +1,5 @@
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 /* ─────────────────────────────────────────────────────────────
@@ -14,7 +14,11 @@ import { cn } from "@/lib/utils";
 export const WORLD_EASE = [0.22, 1, 0.36, 1] as const;
 const WORLD_SPRING = { stiffness: 380, damping: 34, mass: 0.9 };
 
-/* ── Modal (centered dialogs) ───────────────────────────────── */
+/* ── Modal (centered dialogs) ─────────────────────────────────
+   Owns focus while open: initial focus lands on the first control (or
+   the panel itself), Tab cycles inside, and focus returns to the
+   opener on unmount — keyboard users never drop back into the 3D
+   scene behind the backdrop. */
 export function WModal({
   children,
   label,
@@ -29,6 +33,54 @@ export function WModal({
   className?: string;
 }) {
   const reduce = useReducedMotion();
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const panel = panelRef.current;
+    if (!panel) return;
+    const prev = document.activeElement as HTMLElement | null;
+    const focusables = () =>
+      Array.from(
+        panel.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((el) => el.getAttribute("aria-hidden") !== "true");
+    // Respect an explicit autoFocus inside the panel (React flushes it
+    // before effects); otherwise start on the first control so keyboard
+    // users don't begin behind the backdrop.
+    if (!panel.contains(document.activeElement)) {
+      const first = focusables()[0];
+      if (first) first.focus();
+      else {
+        panel.tabIndex = -1;
+        panel.focus({ preventScroll: true });
+      }
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Tab") return;
+      const items = focusables();
+      if (items.length === 0) {
+        e.preventDefault();
+        return;
+      }
+      const head = items[0];
+      const tail = items[items.length - 1];
+      if (!head || !tail) return;
+      if (e.shiftKey && document.activeElement === head) {
+        e.preventDefault();
+        tail.focus();
+      } else if (!e.shiftKey && document.activeElement === tail) {
+        e.preventDefault();
+        head.focus();
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      prev?.focus?.();
+    };
+  }, []);
+
   return (
     <motion.div
       className="pointer-events-auto fixed inset-0 z-40 grid place-items-center bg-black/30 p-4 backdrop-blur-[2px]"
@@ -42,6 +94,7 @@ export function WModal({
       transition={{ duration: reduce ? 0 : 0.18 }}
     >
       <motion.div
+        ref={panelRef}
         onClick={(e) => e.stopPropagation()}
         className={cn(
           "flex max-h-[86vh] w-full flex-col overflow-hidden rounded-2xl bg-[#f4f2ed] ring-1 ring-black/[0.09] shadow-[0_28px_70px_-12px_rgba(0,0,0,0.45)]",
@@ -86,7 +139,7 @@ export function WModalHeader({
         type="button"
         onClick={onClose}
         aria-label={closeLabel}
-        className="rounded-lg p-2 text-neutral-500 transition-colors hover:bg-black/[0.05] hover:text-neutral-900"
+        className="rounded-lg p-2 text-neutral-600 transition-colors hover:bg-black/[0.05] hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900/30"
       >
         <svg
           viewBox="0 0 16 16"

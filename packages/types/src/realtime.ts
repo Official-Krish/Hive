@@ -33,6 +33,18 @@ export const pairSessionCreateSchema = z.object({
 });
 export type PairSessionCreate = z.infer<typeof pairSessionCreateSchema>;
 
+/** Social reaction ids (Font Awesome iconography, see world/reactions). */
+export const socialReactionSchema = z.enum([
+  "applause",
+  "heart",
+  "laugh",
+  "party",
+  "like",
+  "fire",
+  "wave",
+]);
+export type SocialReaction = z.infer<typeof socialReactionSchema>;
+
 /**
  * Realtime events sent from the server to clients over WebSocket.
  *
@@ -376,6 +388,53 @@ export const realtimeEventSchema = z.discriminatedUnion("type", [
     timestamp: z.number(),
   }),
   z.object({
+    type: z.literal("gallery.updated"),
+    workspaceId: z.string(),
+    frameId: z.string().min(1).max(40),
+    imageUrl: z.string().url().max(2048).nullable(),
+    updatedBy: z.string(),
+    timestamp: z.number(),
+  }),
+  z.object({
+    type: z.literal("gallery.state"),
+    workspaceId: z.string(),
+    frames: z.array(
+      z.object({
+        frameId: z.string().min(1).max(40),
+        imageUrl: z.string().url().max(2048).nullable(),
+      }),
+    ),
+    timestamp: z.number(),
+  }),
+  z.object({
+    type: z.literal("social.wave"),
+    workspaceId: z.string(),
+    developerId: z.string(),
+    toId: z.string(),
+    timestamp: z.number(),
+  }),
+  z.object({
+    type: z.literal("social.react"),
+    workspaceId: z.string(),
+    developerId: z.string(),
+    reaction: socialReactionSchema,
+    timestamp: z.number(),
+  }),
+  z.object({
+    type: z.literal("social.hand"),
+    workspaceId: z.string(),
+    developerId: z.string(),
+    raised: z.boolean(),
+    timestamp: z.number(),
+  }),
+  z.object({
+    type: z.literal("space.spotlight"),
+    workspaceId: z.string(),
+    developerId: z.string(),
+    message: z.string().min(1).max(200),
+    timestamp: z.number(),
+  }),
+  z.object({
     type: z.literal("whiteboard.stroke"),
     workspaceId: z.string(),
     boardId: z.string().min(1).max(120),
@@ -506,6 +565,30 @@ export const realtimeClientMessageSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("social.bump"),
     roomId: z.string().min(1).max(100).nullable(),
+  }),
+  z.object({
+    type: z.literal("gallery.set"),
+    frameId: z.string().min(1).max(40),
+    imageUrl: z.string().url().max(2048).nullable(),
+  }),
+  z.object({
+    type: z.literal("gallery.state.request"),
+  }),
+  z.object({
+    type: z.literal("social.wave"),
+    toId: z.string().min(1),
+  }),
+  z.object({
+    type: z.literal("social.react"),
+    reaction: socialReactionSchema,
+  }),
+  z.object({
+    type: z.literal("social.hand"),
+    raised: z.boolean(),
+  }),
+  z.object({
+    type: z.literal("space.spotlight"),
+    message: z.string().min(1).max(200),
   }),
   z.object({
     type: z.literal("whiteboard.stroke"),

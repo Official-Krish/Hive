@@ -12,9 +12,13 @@ import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import * as SkeletonUtils from "three/examples/jsm/utils/SkeletonUtils.js";
 import { ASSET_BASE_URL } from "../../lib/config";
+import { ReactionIcon, reactionLabel } from "./reactions";
 
 /** Uniform scale applied to every avatar GLB. */
 const SCALE = 0.55;
+/** Badge height — reaction + raised-hand floaters anchor here (world units
+ *  above the feet). Tweak freely: higher = further above the head. */
+const BADGE_HEIGHT = 2.3;
 /** Mixamo FBX files are authored in centimeters — scale to meters. */
 const FBX_SCALE = 0.01;
 /** Default model (also the GLB fallback while an FBX URL loads). */
@@ -67,6 +71,10 @@ interface AvatarProps {
   hideNameplate?: boolean;
   /** When true, the nameplate badge shows a chair icon to indicate seated. */
   sitting?: boolean;
+  /** Big emoji floater above the name (reactions, waves) — parent expires it. */
+  reaction?: string | null;
+  /** Raised-hand badge next to the name. */
+  handRaised?: boolean;
 }
 
 const META_TONE: Record<string, string> = {
@@ -88,6 +96,32 @@ const TAG_META = 8;
 
 /** Max meta pills under a nameplate — the rest collapse into a +n pill. */
 const TAG_META_MAX = 2;
+
+/** Floating reaction badge (also used standalone for the local player,
+ *  whose nameplate is hidden — otherwise your own reacts are invisible). */
+function ReactionBadge({ reaction }: { reaction: string }) {
+  const reduce = useReducedMotion();
+  return (
+    <AnimatePresence initial={false}>
+      <motion.div
+        key={`reaction-${reaction}`}
+        className="flex size-9 items-center justify-center rounded-full bg-neutral-950/85 text-[19px] leading-none text-amber-300 shadow-lg ring-1 ring-white/20 backdrop-blur-[2px] select-none"
+        role="img"
+        aria-label={`Reacted with ${reactionLabel(reaction)}`}
+        initial={reduce ? { opacity: 1 } : { opacity: 0, scale: 0.4, y: 8 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={reduce ? { opacity: 1 } : { opacity: 0, scale: 0.6, y: -6 }}
+        transition={
+          reduce
+            ? { duration: 0 }
+            : { type: "spring", stiffness: 500, damping: 22 }
+        }
+      >
+        <ReactionIcon id={reaction} />
+      </motion.div>
+    </AnimatePresence>
+  );
+}
 /** Nameplate with wall occlusion + proximity fade (meta <8m, gone past 14m). */
 function Nameplate({
   labelY,
@@ -230,6 +264,8 @@ export default function Avatar({
   meta,
   hideNameplate = false,
   sitting: sittingProp = false,
+  reaction = null,
+  handRaised = false,
 }: AvatarProps) {
   // Dual loader: GLB avatars go through useGLTF, FBX characters through
   // useFBX. Both hooks stay unconditional (rules of hooks) — only the URL
@@ -328,7 +364,7 @@ export default function Avatar({
       const m = obj as THREE.Mesh;
       if (m.isMesh) {
         m.castShadow = true;
-        m.receiveShadow = false;
+        m.receiveShadow = true;
         if (m.geometry) {
           m.geometry.computeBoundingSphere();
           const sphere = m.geometry.boundingSphere;
@@ -671,7 +707,7 @@ export default function Avatar({
       const m = obj as THREE.Mesh;
       if (m.isMesh) {
         m.castShadow = true;
-        m.receiveShadow = false;
+        m.receiveShadow = true;
         if (m.geometry) {
           m.geometry.computeBoundingSphere();
           const sphere = m.geometry.boundingSphere;
@@ -913,6 +949,35 @@ export default function Avatar({
           meta={meta}
           sittingRef={sittingRef}
         />
+      )}
+      {/* Presence badges — one layer for local and remote avatars alike,
+          anchored at BADGE_HEIGHT (tweak the const at the top of file). */}
+      {(reaction || handRaised) && (
+        <group position={[0, BADGE_HEIGHT, 0]}>
+          <Html
+            center
+            occlude
+            zIndexRange={[50, 0]}
+            style={{ pointerEvents: "none" }}
+          >
+            <div className="flex flex-col items-center gap-0.5">
+              {reaction && <ReactionBadge reaction={reaction} />}
+              {handRaised && (
+                <div
+                  role="img"
+                  aria-label={
+                    hideNameplate ? "Your hand is raised" : "Hand raised"
+                  }
+                  title="Hand raised"
+                  className="flex items-center gap-1 whitespace-nowrap rounded-full bg-amber-400/95 px-1.5 py-[2px] text-[9px] font-semibold leading-none text-neutral-900 shadow-sm ring-1 ring-black/20 select-none"
+                >
+                  <ReactionIcon id="wave" />
+                  <span>Raised</span>
+                </div>
+              )}
+            </div>
+          </Html>
+        </group>
       )}
     </group>
   );

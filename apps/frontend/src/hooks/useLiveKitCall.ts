@@ -58,6 +58,25 @@ export function useLiveKitCall(
   const [cameraOn, setCameraOn] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [room, setRoom] = useState<Room | null>(null);
+  // Peers actually connected over LiveKit (a subset of world proximity).
+  // The call cluster (tiles + controls) renders off this — never off raw
+  // proximity — so a stale world id can't leave orphaned controls behind
+  // with no camera frame.
+  const [liveIds, setLiveIds] = useState<ReadonlySet<string>>(new Set());
+  const nearIdsRef = useRef(nearIds);
+  nearIdsRef.current = nearIds;
+  const recomputeLive = useCallback(() => {
+    const r = roomRef.current;
+    if (!r || r.state !== ConnectionState.Connected) {
+      setLiveIds(new Set());
+      return;
+    }
+    const live = new Set<string>();
+    for (const id of nearIdsRef.current) {
+      if (r.remoteParticipants.has(id)) live.add(id);
+    }
+    setLiveIds(live);
+  }, []);
 
   const roomRef = useRef<Room | null>(null);
   const micIntent = useRef(true);
@@ -225,6 +244,24 @@ export function useLiveKitCall(
     };
   }, [nearKey, room, connected]);
 
+  // Keep live membership in sync: world proximity changes plus LiveKit
+  // join/leave events. A disconnect drops the id immediately instead of
+  // waiting for the next world tick.
+  useEffect(() => {
+    recomputeLive();
+  }, [nearKey, room, connected, recomputeLive]);
+  useEffect(() => {
+    const r = roomRef.current;
+    if (!r) return;
+    const onPeer = () => recomputeLive();
+    r.on(RoomEvent.ParticipantConnected, onPeer);
+    r.on(RoomEvent.ParticipantDisconnected, onPeer);
+    return () => {
+      r.off(RoomEvent.ParticipantConnected, onPeer);
+      r.off(RoomEvent.ParticipantDisconnected, onPeer);
+    };
+  }, [room, recomputeLive]);
+
   // Focus rooms: any peer standing inside a focus pod stays muted on my side
   // unless they're my accepted focus partner. Set per-participant volume based
   // on the current mute policy so only `volumePeers` are audible.
@@ -293,6 +330,6 @@ export function useLiveKitCall(
     toggleCamera,
     toggleShare,
     room,
-    visibleIds: nearIds,
+    visibleIds: liveIds,
   };
 }

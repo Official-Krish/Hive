@@ -10,6 +10,7 @@ import { ApiError, http, type InviteCreatedResult } from "@/lib/http";
 import { notifyError, notifySuccess } from "@/lib/toast";
 import {
   BaselineField,
+  BaselineSelect,
   Btn,
   Empty,
   PageHead,
@@ -153,18 +154,16 @@ export function InviteUser() {
                   label="Which workspace are they joining?"
                   hint="You can invite into workspaces you own, administer, or maintain."
                 >
-                  <select
-                    className={baselineInputClass}
+                  <BaselineSelect
                     value={workspaceId}
-                    onChange={(e) => setWorkspaceId(e.target.value)}
                     autoFocus
-                  >
-                    {manageable.map((w) => (
-                      <option key={w.id} value={w.id}>
-                        {w.name}
-                      </option>
-                    ))}
-                  </select>
+                    ariaLabel="Which workspace are they joining?"
+                    options={manageable.map((w) => ({
+                      value: w.id,
+                      label: w.name,
+                    }))}
+                    onValueChange={setWorkspaceId}
+                  />
                 </BaselineField>
               )}
 

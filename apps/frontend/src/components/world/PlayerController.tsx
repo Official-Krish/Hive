@@ -45,6 +45,12 @@ interface PlayerControllerProps {
   onSitChange?: (sitting: boolean) => void;
   /** Receives the sit toggle so HUD pills can trigger it on click/tap. */
   sitToggleRef?: React.MutableRefObject<(() => void) | null>;
+  /** Bump to teleport back to spawn (R / respawn button). */
+  respawnSignal?: number;
+  /** Current reaction id for the local avatar's floater (null = none). */
+  reaction?: string | null;
+  /** Raised-hand badge for the local avatar (nameplate is hidden). */
+  handRaised?: boolean;
 }
 
 // --- Movement tuning --------------------------------------------------------
@@ -106,6 +112,9 @@ export function PlayerController({
   sitSpots = [],
   onSitChange,
   sitToggleRef,
+  respawnSignal = 0,
+  reaction = null,
+  handRaised = false,
 }: PlayerControllerProps) {
   const internalGroupRef = useRef<THREE.Group>(null);
   const groupRef = playerRef || internalGroupRef;
@@ -178,16 +187,28 @@ export function PlayerController({
     const inEditable = () => {
       const el = document.activeElement as HTMLElement | null;
       if (!el) return false;
+      // NOTE: BUTTON is intentionally excluded — clicking the E/F pills
+      // focuses a button, and treating it as editable froze WASD/Space until
+      // blur. Buttons blur themselves on movement keys below.
       return (
         el.tagName === "INPUT" ||
         el.tagName === "TEXTAREA" ||
         el.tagName === "SELECT" ||
-        el.tagName === "BUTTON" ||
         el.isContentEditable
       );
     };
     const down = (e: KeyboardEvent) => {
       if (inEditable()) return;
+      // Clicking E/F leaves focus on the pill — drop it so held WASD keeps
+      // driving on the next frame instead of waiting for an outside click.
+      if (
+        document.activeElement instanceof HTMLButtonElement &&
+        (e.code.startsWith("Key") ||
+          e.code.startsWith("Arrow") ||
+          e.code === "Space")
+      ) {
+        document.activeElement.blur();
+      }
       // F toggles sitting near a chair (never while a modal owns input).
       if (e.code === "KeyF") {
         toggleSit();
@@ -245,6 +266,21 @@ export function PlayerController({
       sitToggleRef.current = null;
     };
   }, [sitToggleRef, toggleSit]);
+
+  // Respawn: snap back to the entrance, zero velocity, feet planted.
+  const lastRespawn = useRef(respawnSignal);
+  useEffect(() => {
+    if (respawnSignal === lastRespawn.current) return;
+    lastRespawn.current = respawnSignal;
+    sittingRef.current = null;
+    motionRef.current.sitting = false;
+    onSitChangeRef.current?.(false);
+    posRef.current = [...spawn];
+    velRef.current = { x: 0, z: 0 };
+    vyRef.current = 0;
+    groundedRef.current = true;
+    rotYRef.current = Math.PI + MODEL_YAW_OFFSET;
+  }, [respawnSignal, spawn]);
 
   /**
    * XZ overlap test, filtered by the vertical band each box blocks. `feetY` is
@@ -478,6 +514,8 @@ export function PlayerController({
             status={status}
             badgeColor={badgeColor}
             hideNameplate
+            reaction={reaction}
+            handRaised={handRaised}
           />
           {coffee && <CoffeeCup />}
         </>

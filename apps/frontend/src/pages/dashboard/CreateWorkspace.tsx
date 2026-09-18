@@ -16,6 +16,7 @@ import {
 import { notifyError, notifyInfo, notifySuccess } from "@/lib/toast";
 import {
   BaselineField,
+  BaselineSelect,
   Btn,
   LiveDot,
   PageHead,
@@ -189,22 +190,18 @@ export function CreateWorkspace() {
               )}
 
               <div className="mt-3 flex flex-wrap items-center gap-2">
-                <select
-                  className={baselineInputClass}
+                <BaselineSelect
                   value={repositoryId}
-                  onChange={(e) => setRepositoryId(e.target.value)}
-                  aria-label="Choose a repository"
-                >
-                  <option value="">Choose a repository…</option>
-                  {repoOptions
+                  placeholder="Choose a repository…"
+                  ariaLabel="Choose a repository"
+                  options={repoOptions
                     .filter((r) => !linkedNames.has(r.fullName))
-                    .map((r) => (
-                      <option key={r.id} value={String(r.id)}>
-                        {r.fullName}
-                        {r.private ? " · private" : ""}
-                      </option>
-                    ))}
-                </select>
+                    .map((r) => ({
+                      value: String(r.id),
+                      label: `${r.fullName}${r.private ? " · private" : ""}`,
+                    }))}
+                  onValueChange={setRepositoryId}
+                />
                 <Btn
                   disabled={linkMutation.isPending || !repositoryId}
                   onClick={() => {

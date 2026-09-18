@@ -342,6 +342,88 @@ describe("realtime hub", () => {
     }
   });
 
+  test("relays social presence signals without persisting them", async () => {
+    const { socket: a, userId: aliceId } = await connect("Alice", workspaceId);
+    const { socket: b, userId: bobId } = await connect("Bob", workspaceId);
+    try {
+      b.send({ type: "social.wave", toId: aliceId });
+      const wave = await a.waitFor(
+        "social.wave",
+        (e) => e.developerId === bobId,
+      );
+      expect(wave.toId).toBe(aliceId);
+
+      b.send({ type: "social.react", reaction: "applause" });
+      const react = await a.waitFor(
+        "social.react",
+        (e) => e.developerId === bobId,
+      );
+      expect(react.reaction).toBe("applause");
+
+      b.send({ type: "social.hand", raised: true });
+      const hand = await a.waitFor(
+        "social.hand",
+        (e) => e.developerId === bobId,
+      );
+      expect(hand.raised).toBe(true);
+
+      b.send({ type: "space.spotlight", message: "Demo in 5" });
+      const spotlight = await a.waitFor(
+        "space.spotlight",
+        (e) => e.developerId === bobId,
+      );
+      expect(spotlight.message).toBe("Demo in 5");
+    } finally {
+      a.close();
+      b.close();
+      await a.waitClose();
+      await b.waitClose();
+    }
+  });
+
+  test("syncs community gallery frames across peers", async () => {
+    const { socket: a } = await connect("Alice", workspaceId);
+    const { socket: b } = await connect("Bob", workspaceId);
+    try {
+      b.send({
+        type: "gallery.set",
+        frameId: "g1",
+        imageUrl: "https://picsum.photos/seed/hive/800/600",
+      });
+      const updated = await a.waitFor(
+        "gallery.updated",
+        (e) => e.frameId === "g1",
+      );
+      expect(updated.imageUrl).toBe("https://picsum.photos/seed/hive/800/600");
+
+      // Late joiners pull the full state on demand.
+      const { socket: c } = await connect("Cara", workspaceId);
+      try {
+        c.send({ type: "gallery.state.request" });
+        const state = await c.waitFor("gallery.state");
+        expect(
+          state.frames.some((f) => f.frameId === "g1" && f.imageUrl !== null),
+        ).toBe(true);
+      } finally {
+        c.close();
+        await c.waitClose();
+      }
+
+      // Clearing removes the frame for everyone.
+      b.send({ type: "gallery.set", frameId: "g1", imageUrl: null });
+      const cleared = await a.waitFor(
+        "gallery.updated",
+        (e) => e.frameId === "g1" && e.imageUrl === null,
+      );
+      expect(cleared.imageUrl).toBeNull();
+    } finally {
+      a.close();
+      b.close();
+      await a.waitClose();
+      await b.waitClose();
+    }
+  });
+
   test("broadcasts presence.changed offline when a peer disconnects", async () => {
     const { socket: a } = await connect("Alice", workspaceId);
     const { socket: b, userId: bobId } = await connect("Bob", workspaceId);

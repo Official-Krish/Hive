@@ -3,12 +3,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError, http, type OrgMemberPublic } from "@/lib/http";
 import {
   Avatar,
+  BaselineSelect,
   Btn,
   ConfirmBtn,
   Note,
   RoleBadge,
   Spinner,
-  baselineInputClass,
 } from "@/components/dashboard/kit";
 import { notifyError, notifySuccess } from "@/lib/toast";
 import type { OrgOutletContext } from "./OrgDetail";
@@ -111,23 +111,16 @@ export function OrgMembers() {
                 <div className="flex flex-shrink-0 items-center gap-2">
                   {isOwner ? (
                     <>
-                      <select
-                        className={`${baselineInputClass} h-8 w-auto px-0 text-xs`}
+                      <BaselineSelect
+                        className="w-28 py-1 text-xs"
                         value={m.role}
                         disabled={rowBusy}
-                        onChange={(e) =>
-                          changeRole.mutate({
-                            userId: m.userId,
-                            role: e.target.value,
-                          })
+                        ariaLabel={`${m.name}'s role`}
+                        options={ROLES.map((r) => ({ value: r, label: r }))}
+                        onValueChange={(role) =>
+                          changeRole.mutate({ userId: m.userId, role })
                         }
-                      >
-                        {ROLES.map((r) => (
-                          <option key={r} value={r}>
-                            {r}
-                          </option>
-                        ))}
-                      </select>
+                      />
                       <ConfirmBtn
                         variant="ghost"
                         confirmLabel="Remove"

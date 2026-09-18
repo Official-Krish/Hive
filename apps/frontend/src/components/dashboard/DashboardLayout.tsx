@@ -11,6 +11,7 @@ import { useQuery } from "@tanstack/react-query";
 import { http } from "@/lib/http";
 import { DASHBOARD_NAV, Sidebar, useReceivedInviteCount } from "./Sidebar";
 import { ScrollToTop } from "../layout/ScrollToTop";
+import { TopProgressBar } from "../layout/TopProgressBar";
 import { LiveDot } from "./kit";
 import { cn } from "@/lib/utils";
 
@@ -19,6 +20,7 @@ export function DashboardLayout() {
   return (
     <div className="relative min-h-screen bg-[#F4F3EF] text-neutral-900">
       <ScrollToTop />
+      <TopProgressBar />
       <Sidebar />
       <MobileBar />
 

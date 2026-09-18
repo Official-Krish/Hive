@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { FiGithub, FiX } from "react-icons/fi";
+import { FiGithub } from "react-icons/fi";
 import { http } from "@/lib/http";
 import { WModal } from "./motion";
+import { DCloseBtn, DError, EYEBROW, useEscape } from "./chrome";
 import { cn } from "@/lib/utils";
 
 interface PairSessionModalProps {
@@ -32,13 +33,7 @@ export function PairSessionModal({
 
   useEffect(() => () => setStarting(false), []);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  useEscape(onClose);
 
   const begin = (repositoryId: string | null) => {
     setStarting(true);
@@ -53,21 +48,12 @@ export function PairSessionModal({
     >
       <div className="flex items-start justify-between border-b border-black/[0.06] px-5 pb-3 pt-4">
         <div>
-          <span className="text-[10.5px] font-semibold tracking-[0.14em] text-neutral-500 uppercase">
-            Pair programming
-          </span>
+          <span className={EYEBROW}>Pair programming</span>
           <h2 className="mt-0.5 text-[17px] font-semibold leading-tight tracking-tight text-neutral-900">
             Start a session with {partnerName}
           </h2>
         </div>
-        <button
-          type="button"
-          onClick={onClose}
-          title="Close"
-          className="grid size-7 place-items-center rounded-lg text-neutral-500 transition-colors hover:bg-black/[0.05] hover:text-neutral-800"
-        >
-          <FiX className="size-4" />
-        </button>
+        <DCloseBtn onClose={onClose} label="Close pair session setup" />
       </div>
 
       <div className="flex flex-col gap-2 px-5 py-4">
@@ -80,9 +66,9 @@ export function PairSessionModal({
           )}
         </label>
         {repos.isError && (
-          <p className="rounded-lg bg-rose-50 px-3 py-2 text-[11.5px] font-medium text-rose-700 ring-1 ring-rose-500/30">
-            Couldn't load repositories.
-          </p>
+          <DError retry={() => void repos.refetch()}>
+            Couldn&apos;t load repositories.
+          </DError>
         )}
         {repos.data?.length === 0 && (
           <p className="rounded-lg bg-neutral-100 px-3 py-2 text-[11.5px] font-medium text-neutral-500 ring-1 ring-black/[0.06]">
@@ -94,6 +80,7 @@ export function PairSessionModal({
             <button
               key={r.id}
               type="button"
+              aria-pressed={repo === r.id}
               onClick={() => setRepo(repo === r.id ? null : r.id)}
               className={cn(
                 "flex items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-[12.5px] transition-colors",
