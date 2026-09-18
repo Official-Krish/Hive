@@ -53,6 +53,9 @@ export class RealtimeHub {
   private readonly deviceSockets = new Map<Socket, DeviceSocketData>();
   /** Per-board whiteboard stroke history (in-memory relay for late joiners). */
   private readonly whiteboardHistory = new Map<string, WhiteboardStroke[]>();
+  /** Community gallery frames: workspaceId → frameId → imageUrl. In-memory
+   *  like whiteboard history — anyone can set/clear any frame. */
+  private readonly gallery = new Map<string, Map<string, string>>();
   private server: WsServer | null = null;
 
   constructor(private readonly options: RealtimeHubOptions) {}
@@ -499,6 +502,32 @@ export class RealtimeHub {
         this.publishToWorkspace(workspaceId, event);
         break;
       }
+      case "social.wave":
+      case "social.react":
+      case "social.hand":
+      case "space.spotlight": {
+        // Relay-only presence signals (wave, emoji react, hand, announce).
+        // Ephemeral by design: no DB write, late joiners don't see history.
+        const base = {
+          workspaceId,
+          developerId: client.userId,
+          timestamp,
+        } as const;
+        const event: RealtimeEvent =
+          parsed.type === "social.wave"
+            ? { ...base, type: "social.wave", toId: parsed.toId }
+            : parsed.type === "social.react"
+              ? {
+                  ...base,
+                  type: "social.react",
+                  reaction: parsed.reaction,
+                }
+              : parsed.type === "social.hand"
+                ? { ...base, type: "social.hand", raised: parsed.raised }
+                : { ...base, type: "space.spotlight", message: parsed.message };
+        this.publishToWorkspace(workspaceId, event);
+        break;
+      }
       case "whiteboard.stroke": {
         const MAX_STROKES_PER_BOARD = 200;
         const board = this.whiteboardHistory.get(parsed.boardId) ?? [];
@@ -535,6 +564,41 @@ export class RealtimeHub {
           workspaceId,
           boardId: parsed.boardId,
           strokes: this.whiteboardHistory.get(parsed.boardId) ?? [],
+          timestamp,
+        };
+        ws.send(JSON.stringify(event));
+        break;
+      }
+      case "gallery.set": {
+        let frames = this.gallery.get(workspaceId);
+        if (!frames) {
+          frames = new Map();
+          this.gallery.set(workspaceId, frames);
+        }
+        if (parsed.imageUrl) frames.set(parsed.frameId, parsed.imageUrl);
+        else frames.delete(parsed.frameId);
+        const event: RealtimeEvent = {
+          type: "gallery.updated",
+          workspaceId,
+          frameId: parsed.frameId,
+          imageUrl: parsed.imageUrl,
+          updatedBy: client.userId,
+          timestamp,
+        };
+        this.publishToWorkspace(workspaceId, event);
+        break;
+      }
+      case "gallery.state.request": {
+        const frames = this.gallery.get(workspaceId);
+        const event: RealtimeEvent = {
+          type: "gallery.state",
+          workspaceId,
+          frames: frames
+            ? [...frames.entries()].map(([frameId, imageUrl]) => ({
+                frameId,
+                imageUrl,
+              }))
+            : [],
           timestamp,
         };
         ws.send(JSON.stringify(event));

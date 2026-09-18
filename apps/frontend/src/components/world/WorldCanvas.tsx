@@ -32,8 +32,13 @@ import {
   CAMERA_COLLIDERS,
   SPAWN,
   STEP_UP,
+  WALL_ART,
+  GALLERY_FRAMES,
+  ROOM_KIND,
   roomAt,
   supportAt,
+  type GalleryFrame,
+  type WallArt,
 } from "./office/layout";
 import { AVATARS } from "./AvatarConfig";
 import { ASSET_BASE_URL } from "@/lib/config";
@@ -64,7 +69,8 @@ import { PairModeBar } from "./PairModeBar";
 import { PeerCursorOverlay } from "./PeerCursorOverlay";
 import { Confetti, type ConfettiRef } from "@/components/ui/confetti";
 import { cn } from "@/lib/utils";
-import { STATUS_DOT, statusLabel, useDismiss } from "./chrome";
+import { STATUS_DOT, WorldTip, statusLabel, useDismiss } from "./chrome";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { useChillMedia } from "@/hooks/useChillMedia";
 import { ChillScreenProjection } from "./ChillScreenProjection";
 import { ChillScreenModal } from "./ChillScreenModal";
@@ -72,6 +78,16 @@ import { GamesModal } from "./GamesModal";
 import { FleetModal } from "./FleetModal";
 import { ReviewerModal } from "./ReviewerModal";
 import { VendingModal } from "./VendingModal";
+import { PosterModal } from "./PosterModal";
+import { SpotlightModal } from "./SpotlightModal";
+import { GalleryModal } from "./GalleryModal";
+import { setGalleryFrame, setGalleryState } from "./office/GalleryFrames";
+import {
+  PICKER_REACTIONS,
+  ReactionIcon,
+  reactionLabel,
+  type ReactionId,
+} from "./reactions";
 import { useVending } from "@/hooks/useVending";
 import { useChat } from "@/hooks/useChat";
 import { useWatchdogAlerts } from "@/hooks/useWatchdogAlerts";
@@ -81,13 +97,17 @@ import {
   Coffee,
   Clapperboard,
   Droplets,
+  Feather,
+  Frame,
   Gamepad2,
   Gauge,
   KeyRound,
+  Megaphone,
   Monitor,
   PenLine,
   SearchCheck,
   Server,
+  Smile,
   Volume2,
   Zap,
   Trophy,
@@ -125,6 +145,7 @@ const INTERACTABLE_ICONS: Record<InteractableIcon, LucideIcon> = {
   vending: KeyRound,
   reviewer: SearchCheck,
   fleet: Server,
+  art: Frame,
 };
 
 /* r3f v9.7 `events.connect(target)` can fire with a null container during a
@@ -196,6 +217,7 @@ function AssetGate({ onReady }: { onReady: () => void }) {
 function MembersPopup({
   roster,
   onlineCount,
+  hands,
   onClose,
   onOpenMember,
 }: {
@@ -208,6 +230,7 @@ function MembersPopup({
     isMe: boolean;
   }>;
   onlineCount: number;
+  hands?: ReadonlySet<string>;
   onClose: () => void;
   onOpenMember: (userId: string) => void;
 }) {
@@ -254,6 +277,16 @@ function MembersPopup({
                   STATUS_DOT[row.status] ?? "bg-neutral-300",
                 )}
               />
+              {hands?.has(row.userId) && (
+                <span
+                  role="img"
+                  aria-label="Hand raised"
+                  title="Hand raised"
+                  className="text-[11px] leading-none text-amber-700"
+                >
+                  <ReactionIcon id="wave" />
+                </span>
+              )}
               <div className="min-w-0 flex-1">
                 <span className="block truncate text-[12.5px] font-medium text-neutral-900">
                   {row.name}
@@ -272,6 +305,40 @@ function MembersPopup({
             </button>
           ))}
         </div>
+      </WPopover>
+    </div>
+  );
+}
+
+/** Reaction picker — icon floats over your avatar for 4s, workspace-wide. */
+function EmotePicker({
+  onPick,
+  onClose,
+}: {
+  onPick: (reaction: ReactionId) => void;
+  onClose: () => void;
+}) {
+  const ref = useDismiss<HTMLDivElement>(onClose);
+  return (
+    <div
+      ref={ref}
+      role="dialog"
+      aria-label="Send a reaction"
+      className="absolute right-0 top-full z-20 mt-2"
+    >
+      <WPopover className="flex items-center gap-1 p-2">
+        {PICKER_REACTIONS.map((id) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => onPick(id)}
+            aria-label={`React with ${reactionLabel(id)}`}
+            title={reactionLabel(id)}
+            className="rounded-lg px-2 py-1.5 text-[20px] leading-none text-neutral-700 transition-transform hover:scale-125 hover:text-neutral-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900/30"
+          >
+            <ReactionIcon id={id} />
+          </button>
+        ))}
       </WPopover>
     </div>
   );
@@ -779,6 +846,42 @@ export function WorldCanvas({
   const [vendingOpen, setVendingOpen] = useState(false);
   const [reviewerOpen, setReviewerOpen] = useState(false);
   const [fleetOpen, setFleetOpen] = useState(false);
+  const [posterArt, setPosterArt] = useState<WallArt | null>(null);
+  const [galleryFrameOpen, setGalleryFrameOpen] = useState<GalleryFrame | null>(
+    null,
+  );
+  // Social presence (Gather parity): raised hands, emoji reactions, follow.
+  const [hands, setHands] = useState<ReadonlySet<string>>(new Set());
+  const [reactions, setReactions] = useState<
+    Readonly<Record<string, { reaction: string; at: number }>>
+  >({});
+  const [followId, setFollowId] = useState<string | null>(null);
+  const [locateAt, setLocateAt] = useState<{
+    pos: [number, number, number];
+    seq: number;
+  } | null>(null);
+  // Applause detector: 3+ distinct applauders inside 3s → room-wide celebration.
+  const clapWindow = useRef<Array<{ id: string; at: number }>>([]);
+  // My raised hand, emote/spotlight popovers, simplified view, respawn.
+  const [handRaised, setHandRaised] = useState(false);
+  const [emoteOpen, setEmoteOpen] = useState(false);
+  const [spotlightOpen, setSpotlightOpen] = useState(false);
+  const [respawnSeq, setRespawnSeq] = useState(0);
+  const [simple, setSimple] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      window.localStorage.getItem("hive-simple-view") === "1",
+  );
+  const toggleSimple = useCallback(() => {
+    setSimple((v) => {
+      try {
+        window.localStorage.setItem("hive-simple-view", v ? "0" : "1");
+      } catch {
+        /* private mode */
+      }
+      return !v;
+    });
+  }, []);
   // Onboarding: renderer ready, spawn fade, first-run tour.
   const [worldReady, setWorldReady] = useState(false);
   const [spawnFaded, setSpawnFaded] = useState(false);
@@ -881,6 +984,9 @@ export function WorldCanvas({
     reviewerOpen ||
     fleetOpen ||
     whiteboardId !== null ||
+    posterArt !== null ||
+    galleryFrameOpen !== null ||
+    spotlightOpen ||
     pair.open;
   // Modal subset (excludes chat/members/status/tour): mounting one dismisses
   // the top-right popovers so inbox/bell panels never linger behind a modal.
@@ -894,6 +1000,9 @@ export function WorldCanvas({
     reviewerOpen ||
     fleetOpen ||
     whiteboardId !== null ||
+    posterArt !== null ||
+    galleryFrameOpen !== null ||
+    spotlightOpen ||
     pair.open;
   useEffect(() => {
     if (modalOpen) window.dispatchEvent(new CustomEvent("hive:close-popovers"));
@@ -971,6 +1080,16 @@ export function WorldCanvas({
         case "whiteboard":
           setWhiteboardId(it.id);
           break;
+        case "poster": {
+          const art = WALL_ART.find((a) => `poster-${a.artId}` === it.id);
+          if (art) setPosterArt(art);
+          break;
+        }
+        case "gallery": {
+          const frame = GALLERY_FRAMES.find((g) => `gallery-${g.id}` === it.id);
+          if (frame) setGalleryFrameOpen(frame);
+          break;
+        }
       }
     },
     [client, currentRoom, myUserId, addBubble, pushFeed, showToast],
@@ -1040,6 +1159,81 @@ export function WorldCanvas({
           "bump",
         );
       }),
+      client.on("social.wave", (e) => {
+        // A wave at me → toast; my own wave echoes back as confirmation.
+        if (e.toId === myUserId) {
+          showToast(
+            <span className="inline-flex items-center gap-1.5">
+              <ReactionIcon id="wave" />
+              {nameOf(e.developerId)} waved at you
+            </span>,
+          );
+          setReactions((prev) => ({
+            ...prev,
+            [e.developerId]: { reaction: "wave", at: Date.now() },
+          }));
+        } else if (e.developerId === myUserId) {
+          showToast(
+            <span className="inline-flex items-center gap-1.5">
+              <ReactionIcon id="wave" />
+              Waved at {nameOf(e.toId)}
+            </span>,
+          );
+          setReactions((prev) => ({
+            ...prev,
+            [e.toId]: { reaction: "wave", at: Date.now() },
+          }));
+        }
+      }),
+      client.on("social.react", (e) => {
+        setReactions((prev) => ({
+          ...prev,
+          [e.developerId]: { reaction: e.reaction, at: Date.now() },
+        }));
+        // Applause: 3+ distinct clappers inside 3s → everyone celebrates.
+        if (e.reaction === "applause") {
+          const now = Date.now();
+          clapWindow.current = [
+            ...clapWindow.current.filter((c) => now - c.at < 3000),
+            { id: e.developerId, at: now },
+          ];
+          const distinct = new Set(clapWindow.current.map((c) => c.id));
+          if (distinct.size >= 3) {
+            clapWindow.current = [];
+            push("Applause broke out in the office", "bump");
+            fireConfetti();
+          }
+        }
+      }),
+      client.on("social.hand", (e) => {
+        setHands((prev) => {
+          const next = new Set(prev);
+          if (e.raised) next.add(e.developerId);
+          else next.delete(e.developerId);
+          return next;
+        });
+        if (e.raised && e.developerId !== myUserId) {
+          push(`${nameOf(e.developerId)} raised a hand`, "bump");
+        }
+      }),
+      client.on("gallery.updated", (e) => {
+        setGalleryFrame(e.frameId, e.imageUrl);
+      }),
+      client.on("gallery.state", (e) => {
+        setGalleryState(e.frames);
+      }),
+      client.on("space.spotlight", (e) => {
+        push(
+          `${e.developerId === myUserId ? "You" : nameOf(e.developerId)} announced: ${e.message}`,
+          "alert",
+        );
+        showToast(
+          <span className="inline-flex items-center gap-1.5">
+            <Megaphone className="size-3.5" />
+            {e.message}
+          </span>,
+        );
+      }),
       client.on("chill.media.state", (e) => {
         if (!e.videoUrl || !e.setByName) return;
         showToast(`${e.setByName} put up a video in Chill Space`);
@@ -1050,6 +1244,20 @@ export function WorldCanvas({
           // Departed members take their "working on" with them — otherwise
           // it re-fires stale when they reconnect.
           workingOnSeenRef.current.delete(e.developerId);
+          // ...plus their hand, reaction, and any follow on them.
+          setHands((prev) => {
+            if (!prev.has(e.developerId)) return prev;
+            const next = new Set(prev);
+            next.delete(e.developerId);
+            return next;
+          });
+          setReactions((prev) => {
+            if (!prev[e.developerId]) return prev;
+            const next = { ...prev };
+            delete next[e.developerId];
+            return next;
+          });
+          setFollowId((prev) => (prev === e.developerId ? null : prev));
           return;
         }
         if (e.status === "focusing") {
@@ -1074,11 +1282,127 @@ export function WorldCanvas({
       () => setFeed((prev) => prev.filter((f) => Date.now() - f.at < 60_000)),
       10_000,
     );
+    // Pull shared gallery frames (in-memory on the hub — late joiners sync).
+    client.requestGalleryState();
     return () => {
       offs.forEach((off) => off());
       clearInterval(prune);
     };
   }, [client, myUserId, pushFeed, addBubble, fireConfetti, showToast]);
+
+  // Reactions fade after 4s — emoji floaters are moments, not state.
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      const now = Date.now();
+      setReactions((prev) => {
+        const entries = Object.entries(prev).filter(
+          ([, r]) => now - r.at < 4000,
+        );
+        return entries.length === Object.keys(prev).length
+          ? prev
+          : Object.fromEntries(entries);
+      });
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  // Locate: swing the lens to a teammate for 2.5s, then release.
+  const locateMember = useCallback(
+    (id: string) => {
+      const a = avatarsRef.current.get(id);
+      if (!a) {
+        showToast("They're not in the world right now");
+        return;
+      }
+      const y = supportAt(a.x, a.y, 0);
+      setLocateAt({ pos: [a.x, y, a.y], seq: Date.now() });
+      showToast(`Showing ${a.name ?? "teammate"} on camera`);
+    },
+    [showToast],
+  );
+
+  const toggleFollow = useCallback(
+    (id: string) => {
+      setFollowId((prev) => {
+        if (prev === id) return null;
+        const a = avatarsRef.current.get(id);
+        showToast(
+          a ? `Following ${a.name ?? "teammate"} — move to stop` : "Following",
+        );
+        return id;
+      });
+    },
+    [showToast],
+  );
+
+  // Camera override: follow target (live) wins over one-shot locate.
+  const followTarget = followId ? avatars.get(followId) : undefined;
+  const cameraOverride: [number, number, number] | null = followTarget
+    ? [
+        followTarget.x,
+        supportAt(followTarget.x, followTarget.y, 0),
+        followTarget.y,
+      ]
+    : (locateAt?.pos ?? null);
+
+  // Locate releases after 2.5s; any locomotion key ends follow mode.
+  useEffect(() => {
+    if (!locateAt) return;
+    const t = window.setTimeout(() => setLocateAt(null), 2500);
+    return () => window.clearTimeout(t);
+  }, [locateAt]);
+  useEffect(() => {
+    if (!followId) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (
+        e.code === "KeyW" ||
+        e.code === "KeyA" ||
+        e.code === "KeyS" ||
+        e.code === "KeyD" ||
+        e.code.startsWith("Arrow") ||
+        e.code === "Space"
+      ) {
+        setFollowId(null);
+        showToast("Stopped following");
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [followId, showToast]);
+
+  // Respawn (R): back to the entrance. Same guards as first-person toggle.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code !== "KeyR") return;
+      const t = e.target as HTMLElement | null;
+      if (t?.closest?.("input,textarea,select,[contenteditable]")) return;
+      if (anyOverlayOpen || fpp) return;
+      setRespawnSeq((s) => s + 1);
+      setFollowId(null);
+      setLocateAt(null);
+      showToast("Back at the entrance");
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [anyOverlayOpen, fpp, showToast]);
+
+  // Private-zone hints (Gather parity): entering a focus/pair room explains
+  // the room once per session — the mic/visibility rules aren't obvious.
+  const announcedRooms = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const kind = ROOM_KIND[currentRoom];
+    if (
+      (kind === "focus" || kind === "pair") &&
+      !announcedRooms.current.has(currentRoom)
+    ) {
+      announcedRooms.current.add(currentRoom);
+      showToast(
+        kind === "focus"
+          ? `${currentRoom} is a focus room — invite someone to focus together`
+          : `${currentRoom} is a pair room — pick a repo to start a session`,
+      );
+    }
+  }, [currentRoom, showToast]);
 
   // Watchdog: worker-created alerts never hit the WS (separate process), so
   // poll the alerts API and push newly-seen OPEN alerts into the ticker.
@@ -1093,971 +1417,1148 @@ export function WorldCanvas({
   }, [watchdog.items, pushFeed]);
 
   return (
-    <div className="relative w-full h-screen overflow-hidden font-sans select-none">
-      {/* Loading overlay — lifts only once the office assets are actually
+    <TooltipProvider delayDuration={350}>
+      <div className="relative w-full h-screen overflow-hidden font-sans select-none">
+        {/* Loading overlay — lifts only once the office assets are actually
           ready (not just renderer creation), with a timeout fallback so a
           hung fetch can never trap the player. */}
-      {!worldReady && (
-        <div
-          role="status"
-          aria-live="polite"
-          className="absolute inset-0 z-40 flex flex-col items-center justify-center gap-3 bg-[#F4F3EF]"
-        >
-          <div className="text-[11px] font-medium uppercase tracking-[0.22em] text-neutral-500">
-            Loading Hive
-          </div>
+        {!worldReady && (
           <div
-            className="h-1 w-44 overflow-hidden rounded-full bg-black/[0.08]"
-            role="progressbar"
-            aria-valuenow={loadProgress}
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-label="World loading progress"
+            role="status"
+            aria-live="polite"
+            className="absolute inset-0 z-40 flex flex-col items-center justify-center gap-3 bg-[#F4F3EF]"
           >
+            <div className="text-[11px] font-medium uppercase tracking-[0.22em] text-neutral-500">
+              Loading Hive
+            </div>
             <div
-              className="h-full rounded-full bg-emerald-600 transition-[width] duration-300"
-              style={{ width: `${Math.max(4, loadProgress)}%` }}
-            />
-          </div>
-          <div className="font-mono text-[10.5px] tabular-nums text-neutral-500">
-            {loadStalled ? "Still loading…" : `${loadProgress}%`}
-          </div>
-          <div className="max-w-[320px] text-center text-[12px] text-neutral-500">
-            {
-              [
-                "Tip: walk north (W) through the glass entrance.",
-                "Tip: press E at any glowing marker to open it.",
-                "Tip: the west-end stairs lead up to L2.",
-                "Tip: V toggles first-person, F sits near chairs.",
-                "Tip: the members button (top right) opens the directory.",
-              ][loadingTip % 5]
-            }
-          </div>
-          {loadStalled && (
-            <button
-              type="button"
-              onClick={() => window.location.reload()}
-              className="mt-1 rounded-lg bg-neutral-950 px-3.5 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-neutral-800"
+              className="h-1 w-44 overflow-hidden rounded-full bg-black/[0.08]"
+              role="progressbar"
+              aria-valuenow={loadProgress}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-label="World loading progress"
             >
-              Retry loading
-            </button>
-          )}
-        </div>
-      )}
-      {/* Spawn fade — warm paper veil instead of a grey flash */}
-      {worldReady && (
-        <div
-          aria-hidden
-          className={`pointer-events-none absolute inset-0 z-30 bg-[#F4F3EF]/60 transition-opacity duration-700 motion-reduce:hidden ${
-            spawnFaded ? "opacity-0" : "opacity-100"
-          }`}
-        />
-      )}
-      {/* Exit veil — instant feedback on back-press while the Canvas
-          unmounts and dashboard queries resolve underneath. */}
-      {leaving && (
-        <div
-          role="status"
-          aria-live="polite"
-          className="absolute inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-[#F4F3EF]"
-        >
-          <span className="inline-block size-5 animate-spin rounded-full border-2 border-neutral-900/15 border-t-neutral-900" />
-          <span className="text-[13px] font-medium text-neutral-600">
-            Returning to dashboard…
-          </span>
-        </div>
-      )}
-      {/* Top bar: back · breadcrumb · you */}
-      <div className="absolute top-4 left-4 right-4 z-10 flex flex-wrap items-center gap-2 pointer-events-none">
-        <button
-          type="button"
-          onClick={goBack}
-          onMouseEnter={prefetchDashboard}
-          onFocus={prefetchDashboard}
-          aria-label="Back to dashboard"
-          className={`${CHIP} pointer-events-auto px-3 py-2 text-[12px] font-medium text-neutral-700 transition-colors hover:text-neutral-950 hover:bg-white/70`}
-        >
-          <FiArrowLeft className="size-3.5" aria-hidden />
-        </button>
-
-        <div className={`${CHIP} min-w-0 px-4 py-2`}>
-          <span
-            className={`h-1.5 w-1.5 shrink-0 rounded-full ${
-              connectionStatus === "open"
-                ? "bg-emerald-500"
-                : connectionStatus === "connecting" ||
-                    connectionStatus === "reconnecting"
-                  ? "bg-amber-500"
-                  : "bg-rose-500"
-            }`}
-            aria-label={`Connection: ${connectionStatus}`}
-          />
-          <span className="max-w-[140px] truncate text-[13px] font-medium leading-none text-neutral-500">
-            {workspaceName}
-          </span>
-          <span
+              <div
+                className="h-full rounded-full bg-emerald-600 transition-[width] duration-300"
+                style={{ width: `${Math.max(4, loadProgress)}%` }}
+              />
+            </div>
+            <div className="font-mono text-[10.5px] tabular-nums text-neutral-500">
+              {loadStalled ? "Still loading…" : `${loadProgress}%`}
+            </div>
+            <div className="max-w-[320px] text-center text-[12px] text-neutral-500">
+              {
+                [
+                  "Tip: walk north (W) through the glass entrance.",
+                  "Tip: press E at any glowing marker to open it.",
+                  "Tip: the west-end stairs lead up to L2.",
+                  "Tip: V toggles first-person, F sits near chairs.",
+                  "Tip: the members button (top right) opens the directory.",
+                ][loadingTip % 5]
+              }
+            </div>
+            {loadStalled && (
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="mt-1 rounded-lg bg-neutral-950 px-3.5 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-neutral-800"
+              >
+                Retry loading
+              </button>
+            )}
+          </div>
+        )}
+        {/* Spawn fade — warm paper veil instead of a grey flash */}
+        {worldReady && (
+          <div
             aria-hidden
-            className="text-[13px] leading-none text-neutral-300"
-          >
-            /
-          </span>
-          <span className="max-w-[140px] truncate text-[13px] font-semibold leading-none text-neutral-900">
-            {currentRoom}
-          </span>
-          <span className="rounded bg-white px-1 py-px font-mono text-[9px] font-semibold text-neutral-600 ring-1 ring-black/[0.09]">
-            {playerPos[1] > 3.1 ? "L2" : "L1"}
-          </span>
-        </div>
-
-        {/* Agents waiting on a human — click opens, advances on multiples */}
-        {needsAttention.length > 0 && (
-          <button
-            type="button"
-            onClick={() => {
-              const idx = attentionIdx % needsAttention.length;
-              setOpenMemberId(needsAttention[idx]?.[0] ?? null);
-              setAttentionIdx((i) => (i + 1) % needsAttention.length);
-            }}
-            title={`${needsAttention.length} agent${needsAttention.length === 1 ? "" : "s"} need${needsAttention.length === 1 ? "s" : ""} you — ${needsAttention
-              .map(([, a]) => a.name || "member")
-              .join(", ")}. Click to open the next one.`}
-            className={`${CHIP} pointer-events-auto border-amber-500/40 bg-amber-50/95 py-2 shadow-[0_0_0_1px_rgba(245,158,11,0.25),0_8px_24px_-8px_rgba(245,158,11,0.5)] transition-all hover:scale-[1.02] hover:bg-amber-100/95 active:scale-[0.98]`}
-          >
-            <span className="relative flex h-1.5 w-1.5">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-500 opacity-70" />
-              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-amber-500" />
-            </span>
-            <span className="text-[12px] font-semibold tabular-nums text-amber-900">
-              {needsAttention.length} agent
-              {needsAttention.length === 1 ? "" : "s"} need you
-              {needsAttention.length > 1 &&
-                ` · ${needsAttention[attentionIdx % needsAttention.length]?.[1]?.name ?? "next"}`}
-            </span>
-          </button>
+            className={`pointer-events-none absolute inset-0 z-30 bg-[#F4F3EF]/60 transition-opacity duration-700 motion-reduce:hidden ${
+              spawnFaded ? "opacity-0" : "opacity-100"
+            }`}
+          />
         )}
-
-        <div className="pointer-events-auto ml-auto flex items-center gap-2">
-          {/* Tour — reopens the first-run walkthrough */}
-          <button
-            type="button"
-            onClick={() => setTourOpen(true)}
-            aria-label="Show tour"
-            title="Show tour"
-            className={`${CHIP} min-h-10 min-w-10 justify-center px-3 py-2 text-[13px] font-semibold text-neutral-700 transition-colors hover:bg-white/70`}
+        {/* Exit veil — instant feedback on back-press while the Canvas
+          unmounts and dashboard queries resolve underneath. */}
+        {leaving && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="absolute inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-[#F4F3EF]"
           >
-            <span aria-hidden className="text-[15px] font-bold leading-none">
-              ?
+            <span className="inline-block size-5 animate-spin rounded-full border-2 border-neutral-900/15 border-t-neutral-900" />
+            <span className="text-[13px] font-medium text-neutral-600">
+              Returning to dashboard…
             </span>
-          </button>
-          {/* GitHub notifications */}
-          <GitHubNotificationBell
-            workspaceId={workspaceId}
-            client={client}
-            onOpenChange={setNotifOpen}
-          />
-
-          {/* Game invites inbox — the only place to accept a challenge */}
-          <GameInviteInbox
-            games={games}
-            onJoin={(id) => {
-              void games.accept(id);
-              setGamesOpen(true);
-            }}
-          />
-
-          {/* Members directory */}
-          <button
-            type="button"
-            onClick={() => {
-              void chat.refreshMembers();
-              setMembersOpen((v) => !v);
-            }}
-            aria-label="Members — who's in this workplace"
-            aria-expanded={membersOpen}
-            className={`${CHIP} relative min-h-10 min-w-10 justify-center px-3 py-2 transition-colors hover:bg-white/70`}
-          >
-            <FiUsers className="size-4 text-neutral-700" />
-            {onlineCount > 0 && (
-              <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-emerald-600 px-1 text-[9.5px] font-bold tabular-nums text-white ring-2 ring-[#faf9f6]">
-                {onlineCount}
-              </span>
-            )}
-          </button>
-
-          <AnimatePresence>
-            {membersOpen && (
-              <MembersPopup
-                roster={roster}
-                onlineCount={onlineCount}
-                onClose={() => setMembersOpen(false)}
-                onOpenMember={(id) => setOpenMemberId(id)}
-              />
-            )}
-          </AnimatePresence>
-
-          {/* Chat toggle */}
-          <button
-            type="button"
-            onClick={() => setChatOpen((v) => !v)}
-            aria-label="Messages"
-            aria-expanded={chatOpen}
-            className={`${CHIP} relative min-h-10 min-w-10 justify-center px-3 py-2 transition-colors hover:bg-white/70`}
-          >
-            <FiMessageSquare className="size-4 text-neutral-700" />
-            {chat.totalUnread > 0 && (
-              <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-emerald-600 px-1 text-[9.5px] font-bold tabular-nums text-white ring-2 ring-[#faf9f6]">
-                {chat.totalUnread > 9 ? "9+" : chat.totalUnread}
-              </span>
-            )}
-          </button>
-
-          {/* Status picker + identity */}
-          <div className="relative">
+          </div>
+        )}
+        {/* Top bar: back · breadcrumb · you */}
+        <div className="absolute top-4 left-4 right-4 z-10 flex flex-wrap items-center gap-2 pointer-events-none">
+          <WorldTip content="Back to dashboard">
             <button
               type="button"
-              onClick={() => setStatusMenu((v) => !v)}
-              aria-label={`${myStatusLabel} — change status`}
-              aria-expanded={statusMenu}
-              className={`${CHIP} py-2 transition-colors hover:bg-white/70`}
+              onClick={goBack}
+              onMouseEnter={prefetchDashboard}
+              onFocus={prefetchDashboard}
+              aria-label="Back to dashboard"
+              className={`${CHIP} pointer-events-auto px-3 py-2 text-[12px] font-medium text-neutral-700 transition-colors hover:text-neutral-950 hover:bg-white/70`}
             >
-              <span
-                className={cn(
-                  "h-1.5 w-1.5 rounded-full",
-                  STATUS_DOT[myPresence?.status ?? "online"] ??
-                    "bg-emerald-500",
-                )}
-              />
-              <span className="max-w-[120px] truncate text-[13px] font-medium leading-none text-neutral-900">
-                {meName}
-              </span>
-              {myPresence?.label && (
-                <span className="hidden max-w-[140px] truncate text-[11px] font-medium text-neutral-600 lg:inline">
-                  · {myPresence.label}
-                </span>
-              )}
-              {myPresence?.workingOn && (
-                <span className="hidden max-w-[150px] items-center gap-1 truncate text-[11px] font-medium text-violet-600 lg:inline-flex">
-                  <Zap className="size-3 shrink-0" />
-                  <span className="truncate">{myPresence.workingOn}</span>
-                </span>
-              )}
+              <FiArrowLeft className="size-3.5" aria-hidden />
             </button>
+          </WorldTip>
 
-            <AnimatePresence>
-              {statusMenu && (
-                <StatusMenu
-                  status={myPresence?.status ?? "online"}
-                  currentLabel={myPresence?.label ?? null}
-                  currentWorkingOn={myPresence?.workingOn ?? null}
-                  onPick={(value) => {
-                    client?.sendPresence(value);
-                    setStatusMenu(false);
-                  }}
-                  onLabel={(label) => {
-                    client?.sendPresence(
-                      (myPresence?.status as
-                        "online" | "away" | "on_call" | "busy" | "focusing") ??
-                        "online",
-                      label,
-                    );
-                    setStatusMenu(false);
-                  }}
-                  onWorkingOn={(workingOn) => {
-                    client?.sendPresence(
-                      (myPresence?.status as
-                        "online" | "away" | "on_call" | "busy" | "focusing") ??
-                        "online",
-                      myPresence?.label ?? undefined,
-                      workingOn,
-                    );
-                    setStatusMenu(false);
-                  }}
-                  onClearWorkingOn={() => {
-                    client?.sendPresence(
-                      (myPresence?.status as
-                        "online" | "away" | "on_call" | "busy" | "focusing") ??
-                        "online",
-                      myPresence?.label ?? undefined,
-                      null,
-                    );
-                    setStatusMenu(false);
-                  }}
-                  onFocusChange={setStatusInputFocused}
-                  onClose={() => setStatusMenu(false)}
-                />
-              )}
-            </AnimatePresence>
+          <div className={`${CHIP} min-w-0 px-4 py-2`}>
+            <span
+              className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                connectionStatus === "open"
+                  ? "bg-emerald-500"
+                  : connectionStatus === "connecting" ||
+                      connectionStatus === "reconnecting"
+                    ? "bg-amber-500"
+                    : "bg-rose-500"
+              }`}
+              aria-label={`Connection: ${connectionStatus}`}
+            />
+            <span className="max-w-[140px] truncate text-[13px] font-medium leading-none text-neutral-500">
+              {workspaceName}
+            </span>
+            <span
+              aria-hidden
+              className="text-[13px] leading-none text-neutral-300"
+            >
+              /
+            </span>
+            <span className="max-w-[140px] truncate text-[13px] font-semibold leading-none text-neutral-900">
+              {currentRoom}
+            </span>
+            <span className="rounded bg-white px-1 py-px font-mono text-[9px] font-semibold text-neutral-600 ring-1 ring-black/[0.09]">
+              {playerPos[1] > 3.1 ? "L2" : "L1"}
+            </span>
           </div>
-        </div>
-      </div>
 
-      {/* Persistent interaction row (bottom-center, above ticker) — never
-          shifts when transient toasts fire. Separate stack below for toasts. */}
-      {!workspaceOpen &&
-        !ciOpen &&
-        !whiteboardId &&
-        (interaction.near || nearChair) && (
-          <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 flex -translate-x-1/2 items-center gap-2">
-            {interaction.near &&
-              (() => {
-                const Icon = INTERACTABLE_ICONS[interaction.near.icon];
-                return (
-                  <WToast id="interact" tone="neutral">
-                    <button
-                      type="button"
-                      onClick={() => interaction.press()}
-                      className="flex cursor-pointer items-center gap-2"
-                      aria-label={`Interact: ${interaction.near.prompt}`}
-                    >
-                      <kbd className="rounded-md bg-white px-1.5 py-0.5 font-mono text-[10px] font-semibold text-neutral-800 ring-1 ring-black/[0.09]">
-                        E
-                      </kbd>
-                      <Icon className="size-3.5 shrink-0 text-neutral-700" />
-                      <span className="text-[12px] font-semibold text-neutral-800">
-                        {interaction.near.prompt}
-                      </span>
-                    </button>
-                  </WToast>
-                );
-              })()}
-            {/* Sit pill shows alongside (not instead of) the E pill — every
-              chair sits inside a monitor spot's radius, so gating on
-              !interaction.near hid it exactly when it was relevant. */}
-            {nearChair && (
-              <WToast key="sit" id="sit" tone="neutral">
-                <button
-                  type="button"
-                  onClick={() => sitToggleRef.current?.()}
-                  className="flex cursor-pointer items-center gap-2"
-                  aria-label={sitting ? "Stand up" : "Sit down"}
-                >
-                  <kbd className="rounded-md bg-white px-1.5 py-0.5 font-mono text-[10px] font-semibold text-neutral-800 ring-1 ring-black/[0.09]">
-                    F
-                  </kbd>
-                  <span className="text-[12px] font-semibold text-neutral-800">
-                    {sitting ? "Seated — stand up" : "Sit down"}
-                  </span>
-                </button>
-              </WToast>
-            )}
-          </div>
-        )}
-      {/* Transient toasts (bottom-left, above legend) — layout-animated but
-          isolated from the interaction row so E/F never shifts mid-aim. */}
-      {!workspaceOpen && !ciOpen && !whiteboardId && toasts.length > 0 && (
-        <WToastStack>
-          {toasts.map((t) => (
-            <WToast key={t.key} id={t.key} tone={t.tone}>
-              <span>{t.node}</span>
-            </WToast>
-          ))}
-        </WToastStack>
-      )}
-
-      {/* Controls legend — contextual hint follows room + target */}
-      <div className="absolute bottom-4 left-4 z-10 pointer-events-none">
-        <div
-          className={`${CHIP} rounded-full px-4 py-2.5 text-[11px] font-medium text-neutral-500`}
-          aria-label="Controls and current hint"
-        >
-          {isCoarsePointer ? (
-            <>
-              <span>
-                <span className="font-semibold text-neutral-900">
-                  Best on desktop
-                </span>{" "}
-                · drag to look around
+          {/* Agents waiting on a human — click opens, advances on multiples */}
+          {needsAttention.length > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                const idx = attentionIdx % needsAttention.length;
+                setOpenMemberId(needsAttention[idx]?.[0] ?? null);
+                setAttentionIdx((i) => (i + 1) % needsAttention.length);
+              }}
+              title={`${needsAttention.length} agent${needsAttention.length === 1 ? "" : "s"} need${needsAttention.length === 1 ? "s" : ""} you — ${needsAttention
+                .map(([, a]) => a.name || "member")
+                .join(", ")}. Click to open the next one.`}
+              className={`${CHIP} pointer-events-auto border-amber-500/40 bg-amber-50/95 py-2 shadow-[0_0_0_1px_rgba(245,158,11,0.25),0_8px_24px_-8px_rgba(245,158,11,0.5)] transition-all hover:scale-[1.02] hover:bg-amber-100/95 active:scale-[0.98]`}
+            >
+              <span className="relative flex h-1.5 w-1.5">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-500 opacity-70" />
+                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-amber-500" />
               </span>
-              <span className="h-3.5 w-px bg-black/[0.09]" />
-              <span className="max-w-[220px] truncate font-semibold text-neutral-700">
-                {currentRoom === "Courtyard"
-                  ? "Walk north → entrance"
-                  : playerPos[1] > 3.1
-                    ? "Upper floor — stairs go back down"
-                    : "Stairs at lobby west end → L2"}
+              <span className="text-[12px] font-semibold tabular-nums text-amber-900">
+                {needsAttention.length} agent
+                {needsAttention.length === 1 ? "" : "s"} need you
+                {needsAttention.length > 1 &&
+                  ` · ${needsAttention[attentionIdx % needsAttention.length]?.[1]?.name ?? "next"}`}
               </span>
-            </>
-          ) : (
-            <>
-              {["W", "A", "S", "D"].map((k) => (
-                <kbd
-                  key={k}
-                  className="rounded-md bg-white px-1.5 py-0.5 font-mono text-[10px] font-semibold text-neutral-800 ring-1 ring-black/[0.09]"
-                >
-                  {k}
-                </kbd>
-              ))}
-              <span className="ml-0.5">
-                Move · Shift run · Space jump · F sit
-              </span>
-              <span className="h-3.5 w-px bg-black/[0.09]" />
-              {!interaction.near && (
-                <>
-                  <span className="max-w-[220px] truncate font-semibold text-neutral-700">
-                    {currentRoom === "Courtyard"
-                      ? "Walk north → entrance"
-                      : playerPos[1] > 3.1
-                        ? "Upper floor — stairs go back down"
-                        : "Stairs at lobby west end → L2"}
-                  </span>
-                  <span className="h-3.5 w-px bg-black/[0.09]" />
-                </>
-              )}
-              <span className="hidden sm:inline">
-                <span className="font-semibold text-neutral-900">Drag</span>{" "}
-                Look ·{" "}
-                <span className="font-semibold text-neutral-900">Scroll</span>{" "}
-                Zoom
-              </span>
-              <span className="hidden h-3.5 w-px bg-black/[0.09] sm:inline" />
-              <span>
-                <kbd className="rounded-md bg-white px-1.5 py-0.5 font-mono text-[10px] font-semibold text-neutral-800 ring-1 ring-black/[0.09]">
-                  V
-                </kbd>{" "}
-                <span className="font-semibold text-neutral-900">
-                  {fpp ? "Exit first-person (Esc)" : "First-person"}
-                </span>
-              </span>
-            </>
+            </button>
           )}
-        </div>
-      </div>
 
-      {/* First-person crosshair — dark core + white ring reads on light stone */}
-      {fpp && (
-        <div className="pointer-events-none absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2">
-          <div className="h-2 w-2 rounded-full bg-neutral-950 ring-2 ring-white/90" />
-        </div>
-      )}
+          <div className="pointer-events-auto ml-auto flex items-center gap-2">
+            {/* Tour — reopens the first-run walkthrough */}
+            <WorldTip content="Show tour">
+              <button
+                type="button"
+                onClick={() => setTourOpen(true)}
+                aria-label="Show tour"
+                className={`${CHIP} min-h-10 min-w-10 justify-center px-3 py-2 text-[13px] font-semibold text-neutral-700 transition-colors hover:bg-white/70`}
+              >
+                <span
+                  aria-hidden
+                  className="text-[15px] font-bold leading-none"
+                >
+                  ?
+                </span>
+              </button>
+            </WorldTip>
+            {/* GitHub notifications */}
+            <GitHubNotificationBell
+              workspaceId={workspaceId}
+              client={client}
+              onOpenChange={setNotifOpen}
+            />
 
-      {/* First-run tour — bottom-right card, off the ticker/interaction zone */}
-      <AnimatePresence>
-        {tourOpen && (
-          <div className="absolute bottom-6 right-6 z-20">
-            <WorldTour
-              onClose={(seen) => {
-                if (seen) markTourSeen();
-                setTourOpen(false);
+            {/* Game invites inbox — the only place to accept a challenge */}
+            <GameInviteInbox
+              games={games}
+              onJoin={(id) => {
+                void games.accept(id);
+                setGamesOpen(true);
               }}
             />
-          </div>
-        )}
-      </AnimatePresence>
 
-      {/* Office ticker — latest pulse always visible (collapsed to one line
-          during calls / on small screens); full stack when idle on desktop.
-          Empty workspaces show a quiet placeholder instead of a dead zone.
-          Hidden (not announced) under modal backdrops. */}
-      {!anyOverlayOpen &&
-        (() => {
-          const fresh = feed.filter((f) => Date.now() - f.at < 60_000);
-          const inCall = nearIds.size > 0;
-          // Interaction row moved to bottom-24 — ticker drops to bottom-4, but
-          // lifts when a call stage is up so they never stack.
-          const items = inCall ? fresh.slice(0, 1) : fresh.slice(0, 3);
-          return (
-            <div
-              role="status"
-              className={`pointer-events-none absolute z-10 flex -translate-x-1/2 flex-col items-center gap-1.5 ${
-                inCall ? "bottom-32 left-1/2" : "bottom-4 left-1/2"
-              }`}
-            >
-              {items.length === 0 ? (
-                <div
-                  className={`${CHIP} max-w-[420px] px-3.5 py-1.5 text-[11px] font-medium text-neutral-500`}
+            {/* React — emoji floater over your avatar for 4s */}
+            <div className="relative">
+              <WorldTip content="Send a reaction">
+                <button
+                  type="button"
+                  onClick={() => setEmoteOpen((v) => !v)}
+                  aria-label="Send a reaction"
+                  aria-expanded={emoteOpen}
+                  className={`${CHIP} min-h-10 min-w-10 justify-center px-3 py-2 transition-colors hover:bg-white/70`}
                 >
-                  <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-neutral-300" />
-                  <span className="truncate">
-                    Quiet — pushes and reviews appear here
-                  </span>
-                </div>
-              ) : (
-                items.map((f, i) => (
-                  <div
-                    key={f.key}
-                    className={`${CHIP} max-w-[420px] bg-[#f4f2ed] px-3.5 py-1.5 text-[11px] font-medium text-neutral-800 shadow-[0_8px_24px_-8px_rgba(0,0,0,0.3)] ${
-                      i > 0 ? "hidden md:inline-flex" : ""
-                    } ${i === 0 ? "opacity-100" : i === 1 ? "opacity-80" : "opacity-70"}`}
-                    style={{ transform: `scale(${1 - i * 0.04})` }}
-                  >
-                    <span className="shrink-0">
-                      {f.tone === "merge" ? (
-                        <Trophy className="size-3 text-amber-500" />
-                      ) : (
-                        <span
-                          className={`inline-block h-1.5 w-1.5 rounded-full ${
-                            f.tone === "test"
-                              ? "bg-emerald-500"
-                              : f.tone === "pr"
-                                ? "bg-sky-500"
-                                : f.tone === "bump"
-                                  ? "bg-amber-500"
-                                  : f.tone === "focusing"
-                                    ? "bg-violet-500"
-                                    : f.tone === "review"
-                                      ? "bg-teal-500"
-                                      : f.tone === "alert"
-                                        ? "bg-rose-500"
-                                        : "bg-emerald-500"
-                          }`}
-                        />
-                      )}
-                    </span>
-                    <span className="min-w-0 truncate">{f.text}</span>
-                  </div>
-                ))
-              )}
+                  <Smile className="size-4 text-neutral-700" />
+                </button>
+              </WorldTip>
+              <AnimatePresence>
+                {emoteOpen && (
+                  <EmotePicker
+                    onPick={(id) => {
+                      client?.sendReact(id);
+                      // Optimistic: show instantly instead of waiting for the
+                      // relay echo (which then just confirms the same value).
+                      setReactions((prev) => ({
+                        ...prev,
+                        [myUserId]: { reaction: id, at: Date.now() },
+                      }));
+                      setEmoteOpen(false);
+                    }}
+                    onClose={() => setEmoteOpen(false)}
+                  />
+                )}
+              </AnimatePresence>
             </div>
-          );
-        })()}
 
-      {/* Match-end card — "You won" (+ confetti) or "You lose", both games */}
-      {endCelebration && (
-        <div className="pointer-events-none absolute left-1/2 top-16 z-10 flex -translate-x-1/2 flex-col items-center gap-1.5">
-          <div className="pointer-events-auto flex items-center gap-3 rounded-2xl bg-neutral-950 px-5 py-3.5 text-white shadow-2xl ring-1 ring-amber-300/50">
-            <span
-              className={
-                endCelebration.won
-                  ? "flex size-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-amber-300 to-amber-500 text-neutral-950 shadow-lg"
-                  : "flex size-11 shrink-0 items-center justify-center rounded-full bg-white/10 text-white/60"
-              }
-            >
-              {endCelebration.won ? (
-                <FiAward className="size-5" />
-              ) : (
-                <FiFlag className="size-5" />
-              )}
-            </span>
-            <span className="min-w-0">
-              <span className="block text-[16px] font-bold tracking-tight">
-                {endCelebration.won ? "You won!" : "You lose"}
-              </span>
-              <span className="block max-w-[260px] truncate text-[12px] font-medium text-white/60">
-                {endCelebration.won
-                  ? `${endCelebration.otherName} · ${endReason(endCelebration.kind, endCelebration.reason, true)}`
-                  : `${endCelebration.otherName} won · ${endReason(endCelebration.kind, endCelebration.reason, false)}`}
-              </span>
-            </span>
-            <span className="flex shrink-0 gap-1.5">
+            {/* Raise hand — ephemeral badge on your avatar + roster */}
+            <WorldTip content={handRaised ? "Lower hand" : "Raise hand"}>
               <button
                 type="button"
                 onClick={() => {
-                  games.open(endCelebration.sessionId);
-                  setGamesOpen(true);
-                  setEndCelebration(null);
+                  const next = !handRaised;
+                  setHandRaised(next);
+                  client?.sendHand(next);
+                  if (!next) {
+                    setHands((prev) => {
+                      if (!prev.has(myUserId)) return prev;
+                      const s = new Set(prev);
+                      s.delete(myUserId);
+                      return s;
+                    });
+                  }
                 }}
-                className={
-                  endCelebration.won
-                    ? "rounded-lg bg-emerald-500 px-2.5 py-1.5 text-[11.5px] font-bold text-neutral-950 transition-colors hover:bg-emerald-400"
-                    : "rounded-lg bg-white/10 px-2.5 py-1.5 text-[11.5px] font-semibold text-white/70 transition-colors hover:bg-white/20 hover:text-white"
-                }
+                aria-label={handRaised ? "Lower hand" : "Raise hand"}
+                aria-pressed={handRaised}
+                className={`${CHIP} min-h-10 min-w-10 justify-center px-3 py-2 transition-colors hover:bg-white/70 ${
+                  handRaised ? "bg-amber-100/95" : ""
+                }`}
               >
-                View board
+                <span
+                  className={`text-[15px] leading-none ${handRaised ? "text-amber-700" : "text-neutral-700"}`}
+                >
+                  <ReactionIcon id="wave" />
+                </span>
               </button>
+            </WorldTip>
+
+            {/* Spotlight — space-wide announcement */}
+            <WorldTip content="Announce to everyone">
               <button
                 type="button"
-                onClick={() => setEndCelebration(null)}
-                aria-label="Dismiss"
-                className="rounded-lg bg-white/10 px-2.5 py-1.5 text-[11.5px] font-semibold text-white/70 transition-colors hover:bg-white/20 hover:text-white"
+                onClick={() => setSpotlightOpen(true)}
+                aria-label="Announce to everyone"
+                className={`${CHIP} min-h-10 min-w-10 justify-center px-3 py-2 transition-colors hover:bg-white/70`}
               >
-                ✕
+                <Megaphone className="size-4 text-neutral-700" />
               </button>
-            </span>
+            </WorldTip>
+
+            {/* Simplified view — drops skyline/traffic for weak GPUs */}
+            <WorldTip
+              content={simple ? "Exit simplified view" : "Simplified view"}
+            >
+              <button
+                type="button"
+                onClick={toggleSimple}
+                aria-label={
+                  simple ? "Exit simplified view" : "Enter simplified view"
+                }
+                aria-pressed={simple}
+                className={`${CHIP} min-h-10 min-w-10 justify-center px-3 py-2 transition-colors hover:bg-white/70 ${
+                  simple ? "bg-sky-100/95" : ""
+                }`}
+              >
+                <Feather
+                  className={`size-4 ${simple ? "text-sky-700" : "text-neutral-700"}`}
+                />
+              </button>
+            </WorldTip>
+
+            {/* Members directory */}
+            <WorldTip content="Members — who's in this workplace">
+              <button
+                type="button"
+                onClick={() => {
+                  void chat.refreshMembers();
+                  setMembersOpen((v) => !v);
+                }}
+                aria-label="Members — who's in this workplace"
+                aria-expanded={membersOpen}
+                className={`${CHIP} relative min-h-10 min-w-10 justify-center px-3 py-2 transition-colors hover:bg-white/70`}
+              >
+                <FiUsers className="size-4 text-neutral-700" />
+                {onlineCount > 0 && (
+                  <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-emerald-600 px-1 text-[9.5px] font-bold tabular-nums text-white ring-2 ring-[#faf9f6]">
+                    {onlineCount}
+                  </span>
+                )}
+              </button>
+            </WorldTip>
+
+            <AnimatePresence>
+              {membersOpen && (
+                <MembersPopup
+                  roster={roster}
+                  onlineCount={onlineCount}
+                  hands={hands}
+                  onClose={() => setMembersOpen(false)}
+                  onOpenMember={(id) => setOpenMemberId(id)}
+                />
+              )}
+            </AnimatePresence>
+
+            {/* Chat toggle */}
+            <WorldTip content="Messages">
+              <button
+                type="button"
+                onClick={() => setChatOpen((v) => !v)}
+                aria-label="Messages"
+                aria-expanded={chatOpen}
+                className={`${CHIP} relative min-h-10 min-w-10 justify-center px-3 py-2 transition-colors hover:bg-white/70`}
+              >
+                <FiMessageSquare className="size-4 text-neutral-700" />
+                {chat.totalUnread > 0 && (
+                  <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-emerald-600 px-1 text-[9.5px] font-bold tabular-nums text-white ring-2 ring-[#faf9f6]">
+                    {chat.totalUnread > 9 ? "9+" : chat.totalUnread}
+                  </span>
+                )}
+              </button>
+            </WorldTip>
+
+            {/* Status picker + identity */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setStatusMenu((v) => !v)}
+                aria-label={`${myStatusLabel} — change status`}
+                aria-expanded={statusMenu}
+                className={`${CHIP} py-2 transition-colors hover:bg-white/70`}
+              >
+                <span
+                  className={cn(
+                    "h-1.5 w-1.5 rounded-full",
+                    STATUS_DOT[myPresence?.status ?? "online"] ??
+                      "bg-emerald-500",
+                  )}
+                />
+                <span className="max-w-[120px] truncate text-[13px] font-medium leading-none text-neutral-900">
+                  {meName}
+                </span>
+                {myPresence?.label && (
+                  <span className="hidden max-w-[140px] truncate text-[11px] font-medium text-neutral-600 lg:inline">
+                    · {myPresence.label}
+                  </span>
+                )}
+                {myPresence?.workingOn && (
+                  <span className="hidden max-w-[150px] items-center gap-1 truncate text-[11px] font-medium text-violet-600 lg:inline-flex">
+                    <Zap className="size-3 shrink-0" />
+                    <span className="truncate">{myPresence.workingOn}</span>
+                  </span>
+                )}
+              </button>
+
+              <AnimatePresence>
+                {statusMenu && (
+                  <StatusMenu
+                    status={myPresence?.status ?? "online"}
+                    currentLabel={myPresence?.label ?? null}
+                    currentWorkingOn={myPresence?.workingOn ?? null}
+                    onPick={(value) => {
+                      client?.sendPresence(value);
+                      setStatusMenu(false);
+                    }}
+                    onLabel={(label) => {
+                      client?.sendPresence(
+                        (myPresence?.status as
+                          | "online"
+                          | "away"
+                          | "on_call"
+                          | "busy"
+                          | "focusing") ?? "online",
+                        label,
+                      );
+                      setStatusMenu(false);
+                    }}
+                    onWorkingOn={(workingOn) => {
+                      client?.sendPresence(
+                        (myPresence?.status as
+                          | "online"
+                          | "away"
+                          | "on_call"
+                          | "busy"
+                          | "focusing") ?? "online",
+                        myPresence?.label ?? undefined,
+                        workingOn,
+                      );
+                      setStatusMenu(false);
+                    }}
+                    onClearWorkingOn={() => {
+                      client?.sendPresence(
+                        (myPresence?.status as
+                          | "online"
+                          | "away"
+                          | "on_call"
+                          | "busy"
+                          | "focusing") ?? "online",
+                        myPresence?.label ?? undefined,
+                        null,
+                      );
+                      setStatusMenu(false);
+                    }}
+                    onFocusChange={setStatusInputFocused}
+                    onClose={() => setStatusMenu(false)}
+                  />
+                )}
+              </AnimatePresence>
+            </div>
           </div>
         </div>
-      )}
 
-      {/* Focus pod widget — presence, mute state and pairing (only inside a focus room) */}
-      {focus.inFocus && (
-        <div className="pointer-events-none absolute left-1/2 top-[4.5rem] z-10 flex -translate-x-1/2 flex-col items-center gap-1.5">
-          {focus.partnerId ? (
-            <div className={`${CHIP} pointer-events-auto px-3.5 py-2`}>
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-violet-500" />
-              <span className="max-w-[220px] truncate text-[12px] font-semibold text-neutral-800">
-                Focusing with {nameOf(focus.partnerId)}
-              </span>
-              <button
-                type="button"
-                onClick={focus.endPartner}
-                className="cursor-pointer rounded-lg bg-white px-2 py-1 text-[11px] font-semibold text-neutral-700 ring-1 ring-black/[0.09] transition-colors hover:bg-neutral-100"
-              >
-                End
-              </button>
-            </div>
-          ) : focus.pendingInvite ? (
-            <div
-              className={`${CHIP} pointer-events-auto border-violet-500/30 bg-violet-50/95 px-3.5 py-2`}
-            >
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-violet-500" />
-              <span className="max-w-[220px] truncate text-[12px] font-semibold text-neutral-800">
-                {focus.pendingInvite.name} wants to focus together
-              </span>
-              <button
-                type="button"
-                onClick={() => focus.accept(focus.pendingInvite!.id)}
-                className="rounded-lg bg-violet-600 px-2.5 py-1 text-[11px] font-semibold text-white transition-colors hover:bg-violet-700"
-              >
-                Accept
-              </button>
-              <button
-                type="button"
-                onClick={() => focus.decline(focus.pendingInvite!.id)}
-                className="rounded-lg bg-white px-2.5 py-1 text-[11px] font-semibold text-neutral-700 ring-1 ring-black/[0.09] transition-colors hover:bg-neutral-100"
-              >
-                Decline
-              </button>
-            </div>
-          ) : (
-            <>
-              {focus.invitedId && (
-                <div className={`${CHIP} pointer-events-auto px-3.5 py-2`}>
-                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-violet-500" />
-                  <span className="text-[12px] font-semibold text-neutral-800">
-                    Invite sent to {nameOf(focus.invitedId)}…
-                  </span>
+        {/* Persistent interaction row (bottom-center, above ticker) — never
+          shifts when transient toasts fire. Separate stack below for toasts. */}
+        {!workspaceOpen &&
+          !ciOpen &&
+          !whiteboardId &&
+          !posterArt &&
+          !galleryFrameOpen &&
+          (interaction.near || nearChair) && (
+            <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 flex -translate-x-1/2 items-center gap-2">
+              {interaction.near &&
+                (() => {
+                  const Icon = INTERACTABLE_ICONS[interaction.near.icon];
+                  return (
+                    <WToast id="interact" tone="neutral">
+                      <button
+                        type="button"
+                        onClick={() => interaction.press()}
+                        className="flex cursor-pointer items-center gap-2"
+                        aria-label={`Interact: ${interaction.near.prompt}`}
+                      >
+                        <kbd className="rounded-md bg-white px-1.5 py-0.5 font-mono text-[10px] font-semibold text-neutral-800 ring-1 ring-black/[0.09]">
+                          E
+                        </kbd>
+                        <Icon className="size-3.5 shrink-0 text-neutral-700" />
+                        <span className="text-[12px] font-semibold text-neutral-800">
+                          {interaction.near.prompt}
+                        </span>
+                      </button>
+                    </WToast>
+                  );
+                })()}
+              {/* Sit pill shows alongside (not instead of) the E pill — every
+              chair sits inside a monitor spot's radius, so gating on
+              !interaction.near hid it exactly when it was relevant. */}
+              {nearChair && (
+                <WToast key="sit" id="sit" tone="neutral">
                   <button
                     type="button"
-                    onClick={() => focus.decline(focus.invitedId!)}
-                    title="Cancel invite"
-                    className="rounded-lg bg-white px-2 py-1 text-[11px] font-semibold text-neutral-700 ring-1 ring-black/[0.09] transition-colors hover:bg-neutral-100"
+                    onClick={() => sitToggleRef.current?.()}
+                    className="flex cursor-pointer items-center gap-2"
+                    aria-label={sitting ? "Stand up" : "Sit down"}
                   >
-                    Cancel
+                    <kbd className="rounded-md bg-white px-1.5 py-0.5 font-mono text-[10px] font-semibold text-neutral-800 ring-1 ring-black/[0.09]">
+                      F
+                    </kbd>
+                    <span className="text-[12px] font-semibold text-neutral-800">
+                      {sitting ? "Seated — stand up" : "Sit down"}
+                    </span>
                   </button>
-                </div>
+                </WToast>
               )}
-              {focus.suggestPartnerId && !focus.invitedId && (
-                <div className={`${CHIP} pointer-events-auto px-3.5 py-2`}>
-                  <span className="h-1.5 w-1.5 rounded-full bg-violet-500" />
-                  <span className="text-[12px] font-semibold text-neutral-800">
-                    {nameOf(focus.suggestPartnerId)} is focusing in here
+            </div>
+          )}
+        {/* Transient toasts (bottom-left, above legend) — layout-animated but
+          isolated from the interaction row so E/F never shifts mid-aim. */}
+        {!workspaceOpen &&
+          !ciOpen &&
+          !whiteboardId &&
+          !posterArt &&
+          !galleryFrameOpen &&
+          toasts.length > 0 && (
+            <WToastStack>
+              {toasts.map((t) => (
+                <WToast key={t.key} id={t.key} tone={t.tone}>
+                  <span>{t.node}</span>
+                </WToast>
+              ))}
+            </WToastStack>
+          )}
+
+        {/* Controls legend — contextual hint follows room + target */}
+        <div className="absolute bottom-4 left-4 z-10 pointer-events-none">
+          <div
+            className={`${CHIP} rounded-full px-4 py-2.5 text-[11px] font-medium text-neutral-500`}
+            aria-label="Controls and current hint"
+          >
+            {isCoarsePointer ? (
+              <>
+                <span>
+                  <span className="font-semibold text-neutral-900">
+                    Best on desktop
+                  </span>{" "}
+                  · drag to look around
+                </span>
+                <span className="h-3.5 w-px bg-black/[0.09]" />
+                <span className="max-w-[220px] truncate font-semibold text-neutral-700">
+                  {currentRoom === "Courtyard"
+                    ? "Walk north → entrance"
+                    : playerPos[1] > 3.1
+                      ? "Upper floor — stairs go back down"
+                      : "Stairs at lobby west end → L2"}
+                </span>
+              </>
+            ) : (
+              <>
+                {["W", "A", "S", "D"].map((k) => (
+                  <kbd
+                    key={k}
+                    className="rounded-md bg-white px-1.5 py-0.5 font-mono text-[10px] font-semibold text-neutral-800 ring-1 ring-black/[0.09]"
+                  >
+                    {k}
+                  </kbd>
+                ))}
+                <span className="ml-0.5">
+                  Move · Shift run · Space jump · F sit · R respawn
+                </span>
+                <span className="h-3.5 w-px bg-black/[0.09]" />
+                {!interaction.near && (
+                  <>
+                    <span className="max-w-[220px] truncate font-semibold text-neutral-700">
+                      {currentRoom === "Courtyard"
+                        ? "Walk north → entrance"
+                        : playerPos[1] > 3.1
+                          ? "Upper floor — stairs go back down"
+                          : "Stairs at lobby west end → L2"}
+                    </span>
+                    <span className="h-3.5 w-px bg-black/[0.09]" />
+                  </>
+                )}
+                <span className="hidden sm:inline">
+                  <span className="font-semibold text-neutral-900">Drag</span>{" "}
+                  Look ·{" "}
+                  <span className="font-semibold text-neutral-900">Scroll</span>{" "}
+                  Zoom
+                </span>
+                <span className="hidden h-3.5 w-px bg-black/[0.09] sm:inline" />
+                <span>
+                  <kbd className="rounded-md bg-white px-1.5 py-0.5 font-mono text-[10px] font-semibold text-neutral-800 ring-1 ring-black/[0.09]">
+                    V
+                  </kbd>{" "}
+                  <span className="font-semibold text-neutral-900">
+                    {fpp ? "Exit first-person (Esc)" : "First-person"}
                   </span>
-                  <button
-                    type="button"
-                    onClick={() => focus.invite(focus.suggestPartnerId!)}
-                    className="rounded-lg bg-violet-600 px-2.5 py-1 text-[11px] font-semibold text-white transition-colors hover:bg-violet-700"
+                </span>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* First-person crosshair — dark core + white ring reads on light stone */}
+        {fpp && (
+          <div className="pointer-events-none absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2">
+            <div className="h-2 w-2 rounded-full bg-neutral-950 ring-2 ring-white/90" />
+          </div>
+        )}
+
+        {/* First-run tour — bottom-right card, off the ticker/interaction zone */}
+        <AnimatePresence>
+          {tourOpen && (
+            <div className="absolute bottom-6 right-6 z-20">
+              <WorldTour
+                onClose={(seen) => {
+                  if (seen) markTourSeen();
+                  setTourOpen(false);
+                }}
+              />
+            </div>
+          )}
+        </AnimatePresence>
+
+        {/* Office ticker — bottom-right stack (collapsed to one line during
+          calls / on small screens); full stack when idle on desktop. Dodges
+          left of the chat panel when it's open. Empty workspaces show a quiet
+          placeholder instead of a dead zone. Hidden under modal backdrops. */}
+        {!anyOverlayOpen &&
+          (() => {
+            const fresh = feed.filter((f) => Date.now() - f.at < 60_000);
+            const inCall = nearIds.size > 0;
+            const items = inCall ? fresh.slice(0, 1) : fresh.slice(0, 3);
+            return (
+              <div
+                role="status"
+                className={`pointer-events-none absolute z-10 flex flex-col items-end gap-1.5 ${
+                  inCall ? "bottom-32 right-4" : "bottom-4 right-4"
+                } ${chatOpen ? "md:right-[392px]" : ""}`}
+              >
+                {items.length === 0 ? (
+                  <div
+                    className={`${CHIP} max-w-[320px] px-3.5 py-1.5 text-[11px] font-medium text-neutral-500`}
                   >
-                    Invite
-                  </button>
-                </div>
-              )}
-              {!focus.partnerId &&
-                !focus.pendingInvite &&
-                !focus.suggestPartnerId && (
-                  <div className={`${CHIP} pointer-events-none px-3.5 py-2`}>
-                    <span className="h-1.5 w-1.5 rounded-full bg-violet-500" />
-                    <span className="text-[11.5px] font-semibold text-neutral-700">
-                      Focusing — mic muted until someone joins
+                    <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-neutral-300" />
+                    <span className="truncate">
+                      Quiet — pushes and reviews appear here
                     </span>
                   </div>
+                ) : (
+                  items.map((f, i) => (
+                    <div
+                      key={f.key}
+                      className={`${CHIP} max-w-[320px] bg-[#f4f2ed] px-3.5 py-1.5 text-[11px] font-medium text-neutral-800 shadow-[0_8px_24px_-8px_rgba(0,0,0,0.3)] ${
+                        i > 0 ? "hidden md:inline-flex" : ""
+                      } ${i === 0 ? "opacity-100" : i === 1 ? "opacity-80" : "opacity-70"}`}
+                      style={{ transform: `scale(${1 - i * 0.04})` }}
+                    >
+                      <span className="shrink-0">
+                        {f.tone === "merge" ? (
+                          <Trophy className="size-3 text-amber-500" />
+                        ) : (
+                          <span
+                            className={`inline-block h-1.5 w-1.5 rounded-full ${
+                              f.tone === "test"
+                                ? "bg-emerald-500"
+                                : f.tone === "pr"
+                                  ? "bg-sky-500"
+                                  : f.tone === "bump"
+                                    ? "bg-amber-500"
+                                    : f.tone === "focusing"
+                                      ? "bg-violet-500"
+                                      : f.tone === "review"
+                                        ? "bg-teal-500"
+                                        : f.tone === "alert"
+                                          ? "bg-rose-500"
+                                          : "bg-emerald-500"
+                            }`}
+                          />
+                        )}
+                      </span>
+                      <span className="min-w-0 truncate">{f.text}</span>
+                    </div>
+                  ))
                 )}
-            </>
-          )}
-        </div>
-      )}
+              </div>
+            );
+          })()}
 
-      {/* Pair-programming session bar (only inside an active pair room) */}
-      {pair.active && (
-        <div className="pointer-events-none absolute left-1/2 top-16 z-10 flex -translate-x-1/2 flex-col items-center gap-1.5">
-          <PairModeBar
-            repoName={repoName}
-            memberNames={pair.active.members
-              .filter((m) => m.userId !== myUserId)
-              .map((m) => m.name)}
-            onEnd={() => void pair.end()}
-          />
-        </div>
-      )}
-
-      {/* Collaborative cursors while pairing */}
-      <PeerCursorOverlay
-        cursors={pair.peerCursors}
-        nameOf={nameOf}
-        colorOf={cursorColorOf}
-      />
-
-      {/* Pair-session setup modal (auto-shown when two people meet in a
-          pair-programming room without a session) */}
-      <AnimatePresence>
-        {pair.open && pair.suggestedPartnerId && (
-          <PairSessionModal
-            workspaceId={workspaceId}
-            partnerName={nameOf(pair.suggestedPartnerId)}
-            onStart={(repositoryId) => void pair.start(repositoryId)}
-            onClose={pair.close}
-          />
+        {/* Match-end card — "You won" (+ confetti) or "You lose", both games */}
+        {endCelebration && (
+          <div className="pointer-events-none absolute left-1/2 top-16 z-10 flex -translate-x-1/2 flex-col items-center gap-1.5">
+            <div className="pointer-events-auto flex items-center gap-3 rounded-2xl bg-neutral-950 px-5 py-3.5 text-white shadow-2xl ring-1 ring-amber-300/50">
+              <span
+                className={
+                  endCelebration.won
+                    ? "flex size-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-amber-300 to-amber-500 text-neutral-950 shadow-lg"
+                    : "flex size-11 shrink-0 items-center justify-center rounded-full bg-white/10 text-white/60"
+                }
+              >
+                {endCelebration.won ? (
+                  <FiAward className="size-5" />
+                ) : (
+                  <FiFlag className="size-5" />
+                )}
+              </span>
+              <span className="min-w-0">
+                <span className="block text-[16px] font-bold tracking-tight">
+                  {endCelebration.won ? "You won!" : "You lose"}
+                </span>
+                <span className="block max-w-[260px] truncate text-[12px] font-medium text-white/60">
+                  {endCelebration.won
+                    ? `${endCelebration.otherName} · ${endReason(endCelebration.kind, endCelebration.reason, true)}`
+                    : `${endCelebration.otherName} won · ${endReason(endCelebration.kind, endCelebration.reason, false)}`}
+                </span>
+              </span>
+              <span className="flex shrink-0 gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    games.open(endCelebration.sessionId);
+                    setGamesOpen(true);
+                    setEndCelebration(null);
+                  }}
+                  className={
+                    endCelebration.won
+                      ? "rounded-lg bg-emerald-500 px-2.5 py-1.5 text-[11.5px] font-bold text-neutral-950 transition-colors hover:bg-emerald-400"
+                      : "rounded-lg bg-white/10 px-2.5 py-1.5 text-[11.5px] font-semibold text-white/70 transition-colors hover:bg-white/20 hover:text-white"
+                  }
+                >
+                  View board
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEndCelebration(null)}
+                  aria-label="Dismiss"
+                  className="rounded-lg bg-white/10 px-2.5 py-1.5 text-[11.5px] font-semibold text-white/70 transition-colors hover:bg-white/20 hover:text-white"
+                >
+                  ✕
+                </button>
+              </span>
+            </div>
+          </div>
         )}
-      </AnimatePresence>
 
-      {/* 3D world */}
-      <Canvas
-        shadows
-        // Desktop: dpr ≤1.5 + MSAA for crisp mullions/screens. Cheap path
-        // (coarse/small/reduced-motion) keeps dpr 1.15 + no MSAA.
-        dpr={highQuality ? [1, 1.5] : [1, 1.15]}
-        camera={{ position: [0, 3, 46], fov: 50, near: 0.1, far: 900 }}
-        gl={{
-          antialias: highQuality,
-          stencil: false,
-          alpha: false,
-          powerPreference: "high-performance",
-          toneMapping: THREE.ACESFilmicToneMapping,
-          toneMappingExposure: 1.0,
-        }}
-        events={safePointerEvents}
-        className="w-full h-full"
-      >
-        <color attach="background" args={["#cdd8e3"]} />
-        <AssetGate onReady={handleWorldReady} />
-        <ThumbnailCapture workspaceId={workspaceId} />
+        {/* Focus pod widget — presence, mute state and pairing (only inside a focus room) */}
+        {focus.inFocus && (
+          <div className="pointer-events-none absolute left-1/2 top-[4.5rem] z-10 flex -translate-x-1/2 flex-col items-center gap-1.5">
+            {focus.partnerId ? (
+              <div className={`${CHIP} pointer-events-auto px-3.5 py-2`}>
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-violet-500" />
+                <span className="max-w-[220px] truncate text-[12px] font-semibold text-neutral-800">
+                  Focusing with {nameOf(focus.partnerId)}
+                </span>
+                <button
+                  type="button"
+                  onClick={focus.endPartner}
+                  className="cursor-pointer rounded-lg bg-white px-2 py-1 text-[11px] font-semibold text-neutral-700 ring-1 ring-black/[0.09] transition-colors hover:bg-neutral-100"
+                >
+                  End
+                </button>
+              </div>
+            ) : focus.pendingInvite ? (
+              <div
+                className={`${CHIP} pointer-events-auto border-violet-500/30 bg-violet-50/95 px-3.5 py-2`}
+              >
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-violet-500" />
+                <span className="max-w-[220px] truncate text-[12px] font-semibold text-neutral-800">
+                  {focus.pendingInvite.name} wants to focus together
+                </span>
+                <button
+                  type="button"
+                  onClick={() => focus.accept(focus.pendingInvite!.id)}
+                  className="rounded-lg bg-violet-600 px-2.5 py-1 text-[11px] font-semibold text-white transition-colors hover:bg-violet-700"
+                >
+                  Accept
+                </button>
+                <button
+                  type="button"
+                  onClick={() => focus.decline(focus.pendingInvite!.id)}
+                  className="rounded-lg bg-white px-2.5 py-1 text-[11px] font-semibold text-neutral-700 ring-1 ring-black/[0.09] transition-colors hover:bg-neutral-100"
+                >
+                  Decline
+                </button>
+              </div>
+            ) : (
+              <>
+                {focus.invitedId && (
+                  <div className={`${CHIP} pointer-events-auto px-3.5 py-2`}>
+                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-violet-500" />
+                    <span className="text-[12px] font-semibold text-neutral-800">
+                      Invite sent to {nameOf(focus.invitedId)}…
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => focus.decline(focus.invitedId!)}
+                      title="Cancel invite"
+                      className="rounded-lg bg-white px-2 py-1 text-[11px] font-semibold text-neutral-700 ring-1 ring-black/[0.09] transition-colors hover:bg-neutral-100"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                )}
+                {focus.suggestPartnerId && !focus.invitedId && (
+                  <div className={`${CHIP} pointer-events-auto px-3.5 py-2`}>
+                    <span className="h-1.5 w-1.5 rounded-full bg-violet-500" />
+                    <span className="text-[12px] font-semibold text-neutral-800">
+                      {nameOf(focus.suggestPartnerId)} is focusing in here
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => focus.invite(focus.suggestPartnerId!)}
+                      className="rounded-lg bg-violet-600 px-2.5 py-1 text-[11px] font-semibold text-white transition-colors hover:bg-violet-700"
+                    >
+                      Invite
+                    </button>
+                  </div>
+                )}
+                {!focus.partnerId &&
+                  !focus.pendingInvite &&
+                  !focus.suggestPartnerId && (
+                    <div className={`${CHIP} pointer-events-none px-3.5 py-2`}>
+                      <span className="h-1.5 w-1.5 rounded-full bg-violet-500" />
+                      <span className="text-[11.5px] font-semibold text-neutral-700">
+                        Focusing — mic muted until someone joins
+                      </span>
+                    </div>
+                  )}
+              </>
+            )}
+          </div>
+        )}
 
-        <Suspense fallback={null}>
-          <OfficeLighting
-            level={playerPos[1] > 3.1 ? 2 : 1}
-            highQuality={highQuality}
-          />
-          <OfficeBuilding />
-        </Suspense>
-        {/* The YouTube player is a DOM surface, so it cannot participate in
+        {/* Pair-programming session bar (only inside an active pair room) */}
+        {pair.active && (
+          <div className="pointer-events-none absolute left-1/2 top-16 z-10 flex -translate-x-1/2 flex-col items-center gap-1.5">
+            <PairModeBar
+              repoName={repoName}
+              memberNames={pair.active.members
+                .filter((m) => m.userId !== myUserId)
+                .map((m) => m.name)}
+              onEnd={() => void pair.end()}
+            />
+          </div>
+        )}
+
+        {/* Collaborative cursors while pairing */}
+        <PeerCursorOverlay
+          cursors={pair.peerCursors}
+          nameOf={nameOf}
+          colorOf={cursorColorOf}
+        />
+
+        {/* Pair-session setup modal (auto-shown when two people meet in a
+          pair-programming room without a session) */}
+        <AnimatePresence>
+          {pair.open && pair.suggestedPartnerId && (
+            <PairSessionModal
+              workspaceId={workspaceId}
+              partnerName={nameOf(pair.suggestedPartnerId)}
+              onStart={(repositoryId) => void pair.start(repositoryId)}
+              onClose={pair.close}
+            />
+          )}
+        </AnimatePresence>
+
+        {/* 3D world */}
+        <Canvas
+          shadows
+          // Desktop: dpr ≤1.5 + MSAA for crisp mullions/screens. Cheap path
+          // (coarse/small/reduced-motion) keeps dpr 1.15 + no MSAA.
+          dpr={highQuality ? [1, 1.5] : [1, 1.15]}
+          camera={{ position: [0, 3, 46], fov: 50, near: 0.1, far: 900 }}
+          gl={{
+            antialias: highQuality,
+            stencil: false,
+            alpha: false,
+            powerPreference: "high-performance",
+            toneMapping: THREE.ACESFilmicToneMapping,
+            toneMappingExposure: 1.0,
+          }}
+          events={safePointerEvents}
+          className="w-full h-full"
+        >
+          <color attach="background" args={["#cdd8e3"]} />
+          <AssetGate onReady={handleWorldReady} />
+          <ThumbnailCapture workspaceId={workspaceId} />
+
+          <Suspense fallback={null}>
+            <OfficeLighting
+              level={playerPos[1] > 3.1 ? 2 : 1}
+              highQuality={highQuality}
+            />
+            <OfficeBuilding simple={simple} />
+          </Suspense>
+          {/* The YouTube player is a DOM surface, so it cannot participate in
             WebGL wall occlusion. Keep it visible only while the local player
             is in the Chill Space; elsewhere the real TV wall stays untouched. */}
-        <ChillScreenProjection
-          active={!!chill.state.videoId && currentRoom === "Chill Space"}
-          mounted={!!chill.state.videoId}
-        />
-
-        <PlayerController
-          playerRef={playerGroupRef}
-          yawRef={sharedYaw}
-          obstacles={PLAYER_COLLIDERS}
-          spawn={SPAWN}
-          modelUrl={playerModel}
-          name={meName}
-          status={myStatusLabel}
-          badgeColor={
-            STATUS_DOT[myPresence?.status ?? "online"] ?? "bg-emerald-500"
-          }
-          disabled={anyOverlayOpen}
-          onRoomChange={handleRoomChange}
-          onPositionUpdate={(pos) => setPlayerPos(pos)}
-          roomAt={roomAt}
-          groundAt={supportAt}
-          stepUp={STEP_UP}
-          onRealtimeMove={handleRealtimeMove}
-          coffee={coffeeActive}
-          firstPerson={fpp}
-          sitSpots={CHAIR_SIT_SPOTS}
-          sitToggleRef={sitToggleRef}
-          onSitChange={(seated) => {
-            setSitting(seated);
-          }}
-        />
-
-        <RemoteAvatars
-          avatars={avatarsWithBot}
-          myUserId={myUserId}
-          pills={nearbyTokens}
-          bubbles={bubblesWithBot}
-          groundAt={supportAt}
-          onAvatarClick={(id) => {
-            if (id !== REVIEWER_BOT_ID) setOpenMemberId(id);
-          }}
-        />
-
-        {/* Wayfinding markers over usable things + desk proximity dots */}
-        <Markers playerPos={playerPos} nearId={interaction.near?.id ?? null} />
-
-        {/* Transient water pour at the cooler */}
-        {waterActive && <WaterPour />}
-
-        <ThirdPersonCamera
-          targetRef={playerGroupRef}
-          colliders={CAMERA_COLLIDERS}
-          sharedYaw={sharedYaw}
-          mode={fpp ? "first" : "third"}
-          onPointerLockExit={() => setFpp(false)}
-        />
-
-        <Preload all />
-        <PerfProbe />
-      </Canvas>
-
-      {/* Member modal */}
-      <AnimatePresence>
-        {openMemberId && (
-          <MemberDetailPopup
-            workspaceId={workspaceId}
-            myUserId={myUserId}
-            client={client}
-            developerId={openMemberId}
-            onClose={() => setOpenMemberId(null)}
+          <ChillScreenProjection
+            active={!!chill.state.videoId && currentRoom === "Chill Space"}
+            mounted={!!chill.state.videoId}
           />
-        )}
-      </AnimatePresence>
 
-      {/* Chat panel */}
-      <AnimatePresence>
-        {chatOpen && (
-          <div className="pointer-events-auto absolute bottom-4 right-4 z-20">
-            <ChatPanel
+          <PlayerController
+            playerRef={playerGroupRef}
+            yawRef={sharedYaw}
+            obstacles={PLAYER_COLLIDERS}
+            spawn={SPAWN}
+            modelUrl={playerModel}
+            name={meName}
+            status={myStatusLabel}
+            badgeColor={
+              STATUS_DOT[myPresence?.status ?? "online"] ?? "bg-emerald-500"
+            }
+            disabled={anyOverlayOpen}
+            onRoomChange={handleRoomChange}
+            onPositionUpdate={(pos) => setPlayerPos(pos)}
+            roomAt={roomAt}
+            groundAt={supportAt}
+            stepUp={STEP_UP}
+            onRealtimeMove={handleRealtimeMove}
+            coffee={coffeeActive}
+            firstPerson={fpp}
+            sitSpots={CHAIR_SIT_SPOTS}
+            sitToggleRef={sitToggleRef}
+            respawnSignal={respawnSeq}
+            reaction={reactions[myUserId]?.reaction ?? null}
+            handRaised={hands.has(myUserId)}
+            onSitChange={(seated) => {
+              setSitting(seated);
+            }}
+          />
+
+          <RemoteAvatars
+            avatars={avatarsWithBot}
+            myUserId={myUserId}
+            pills={nearbyTokens}
+            bubbles={bubblesWithBot}
+            reactions={reactions}
+            raisedHands={hands}
+            groundAt={supportAt}
+            onAvatarClick={(id) => {
+              if (id !== REVIEWER_BOT_ID) setOpenMemberId(id);
+            }}
+          />
+
+          {/* Wayfinding markers over usable things + desk proximity dots */}
+          <Markers
+            playerPos={playerPos}
+            nearId={interaction.near?.id ?? null}
+          />
+
+          {/* Transient water pour at the cooler */}
+          {waterActive && <WaterPour />}
+
+          <ThirdPersonCamera
+            targetRef={playerGroupRef}
+            targetOverride={cameraOverride}
+            colliders={CAMERA_COLLIDERS}
+            sharedYaw={sharedYaw}
+            mode={fpp ? "first" : "third"}
+            onPointerLockExit={() => setFpp(false)}
+          />
+
+          <Preload all />
+          <PerfProbe />
+        </Canvas>
+
+        {/* Member modal */}
+        <AnimatePresence>
+          {openMemberId && (
+            <MemberDetailPopup
               workspaceId={workspaceId}
               myUserId={myUserId}
               client={client}
-              presence={avatars}
-              onClose={() => setChatOpen(false)}
+              developerId={openMemberId}
+              onClose={() => setOpenMemberId(null)}
+              onWave={(id) => client?.sendWave(id)}
+              onLocate={locateMember}
+              onFollow={toggleFollow}
+              following={followId === openMemberId}
             />
-          </div>
-        )}
-      </AnimatePresence>
+          )}
+        </AnimatePresence>
 
-      {/* Desk monitor — "open workspace" */}
-      <AnimatePresence>
-        {workspaceOpen && (
-          <WorkspaceModal
-            workspaceId={workspaceId}
-            myUserId={myUserId}
-            client={client}
-            onClose={() => setWorkspaceOpen(false)}
-          />
-        )}
-      </AnimatePresence>
+        {/* Chat panel */}
+        <AnimatePresence>
+          {chatOpen && (
+            <div className="pointer-events-auto absolute bottom-4 right-4 z-20">
+              <ChatPanel
+                workspaceId={workspaceId}
+                myUserId={myUserId}
+                client={client}
+                presence={avatars}
+                onClose={() => setChatOpen(false)}
+              />
+            </div>
+          )}
+        </AnimatePresence>
 
-      {/* Engineering CI wall screen */}
-      <AnimatePresence>
-        {ciOpen && (
-          <CiDashboardModal
-            workspaceId={workspaceId}
-            client={client}
-            onClose={() => setCiOpen(false)}
-          />
-        )}
-      </AnimatePresence>
-
-      {/* Whiteboard — shared canvas for the board you pressed E on */}
-      <AnimatePresence>
-        {whiteboardId && (
-          <WhiteboardModal
-            boardId={whiteboardId}
-            client={client}
-            onClose={() => setWhiteboardId(null)}
-          />
-        )}
-      </AnimatePresence>
-
-      {/* Chill Space shared screen + arcade station */}
-      <AnimatePresence>
-        {chillScreenOpen && (
-          <ChillScreenModal
-            client={client}
-            state={chill.state}
-            queue={chill.queue}
-            currentItemId={chill.currentItemId}
-            onClose={() => setChillScreenOpen(false)}
-          />
-        )}
-      </AnimatePresence>
-      <AnimatePresence>
-        {gamesOpen && (
-          <GamesModal
-            myUserId={myUserId}
-            members={chat.members}
-            games={games}
-            onClose={() => setGamesOpen(false)}
-          />
-        )}
-      </AnimatePresence>
-      <AnimatePresence>
-        {vendingOpen && (
-          <VendingModal vending={vending} onClose={closeVending} />
-        )}
-      </AnimatePresence>
-      <AnimatePresence>
-        {reviewerOpen && (
-          <ReviewerModal
-            workspaceId={workspaceId}
-            onClose={() => setReviewerOpen(false)}
-          />
-        )}
-      </AnimatePresence>
-      <AnimatePresence>
-        {fleetOpen && (
-          <FleetModal
-            workspaceId={workspaceId}
-            client={client}
-            onClose={() => setFleetOpen(false)}
-          />
-        )}
-      </AnimatePresence>
-
-      {/* Proximity voice/video — only when near other members.
-          Bottom-center column: video tiles above the mic/camera controls. */}
-      {nearIds.size > 0 && (
-        <div className="pointer-events-none fixed inset-x-0 bottom-5 z-30 flex flex-col items-center gap-2">
-          <div className="pointer-events-auto">
-            <CallStage
-              room={call.room}
-              nearIds={nearIds}
+        {/* Desk monitor — "open workspace" */}
+        <AnimatePresence>
+          {workspaceOpen && (
+            <WorkspaceModal
+              workspaceId={workspaceId}
               myUserId={myUserId}
-              nameOf={(id) => avatars.get(id)?.name ?? id}
+              client={client}
+              onClose={() => setWorkspaceOpen(false)}
             />
-          </div>
-          {call.error && onlineCount >= 2 && (
-            <div
-              role="alert"
-              className="pointer-events-none rounded-full bg-rose-50/95 px-3 py-1.5 text-[11px] font-medium text-rose-700 ring-1 ring-rose-500/30 backdrop-blur-md"
-            >
-              Voice unavailable — check mic permissions
-            </div>
           )}
-          {call.mediaError && onlineCount >= 2 && (
-            <div
-              role="alert"
-              className="pointer-events-none max-w-[420px] truncate rounded-full bg-rose-50/95 px-3 py-1.5 text-[11px] font-medium text-rose-700 ring-1 ring-rose-500/30 backdrop-blur-md"
-            >
-              {call.mediaError}
-            </div>
-          )}
-          <div className="pointer-events-auto">
-            <CallControls
-              micOn={call.micOn}
-              cameraOn={call.cameraOn}
-              sharing={call.sharing}
-              toggleMic={call.toggleMic}
-              toggleCamera={call.toggleCamera}
-              toggleShare={call.toggleShare}
+        </AnimatePresence>
+
+        {/* Engineering CI wall screen */}
+        <AnimatePresence>
+          {ciOpen && (
+            <CiDashboardModal
+              workspaceId={workspaceId}
+              client={client}
+              onClose={() => setCiOpen(false)}
             />
+          )}
+        </AnimatePresence>
+
+        {/* Whiteboard — shared canvas for the board you pressed E on */}
+        <AnimatePresence>
+          {whiteboardId && (
+            <WhiteboardModal
+              boardId={whiteboardId}
+              client={client}
+              onClose={() => setWhiteboardId(null)}
+            />
+          )}
+        </AnimatePresence>
+
+        {/* Chill Space shared screen + arcade station */}
+        <AnimatePresence>
+          {chillScreenOpen && (
+            <ChillScreenModal
+              client={client}
+              state={chill.state}
+              queue={chill.queue}
+              currentItemId={chill.currentItemId}
+              onClose={() => setChillScreenOpen(false)}
+            />
+          )}
+        </AnimatePresence>
+        <AnimatePresence>
+          {gamesOpen && (
+            <GamesModal
+              myUserId={myUserId}
+              members={chat.members}
+              games={games}
+              onClose={() => setGamesOpen(false)}
+            />
+          )}
+        </AnimatePresence>
+        <AnimatePresence>
+          {vendingOpen && (
+            <VendingModal vending={vending} onClose={closeVending} />
+          )}
+        </AnimatePresence>
+        <AnimatePresence>
+          {reviewerOpen && (
+            <ReviewerModal
+              workspaceId={workspaceId}
+              onClose={() => setReviewerOpen(false)}
+            />
+          )}
+        </AnimatePresence>
+        <AnimatePresence>
+          {fleetOpen && (
+            <FleetModal
+              workspaceId={workspaceId}
+              client={client}
+              onClose={() => setFleetOpen(false)}
+            />
+          )}
+        </AnimatePresence>
+        <AnimatePresence>
+          {posterArt && (
+            <PosterModal art={posterArt} onClose={() => setPosterArt(null)} />
+          )}
+        </AnimatePresence>
+        <AnimatePresence>
+          {galleryFrameOpen && (
+            <GalleryModal
+              frame={galleryFrameOpen}
+              onSet={(frameId, imageUrl) =>
+                client?.sendGallerySet(frameId, imageUrl)
+              }
+              onClose={() => setGalleryFrameOpen(null)}
+            />
+          )}
+        </AnimatePresence>
+        <AnimatePresence>
+          {spotlightOpen && (
+            <SpotlightModal
+              onSend={(message) => client?.sendSpotlight(message)}
+              onClose={() => setSpotlightOpen(false)}
+            />
+          )}
+        </AnimatePresence>
+
+        {/* Follow indicator — who you're trailing, one tap to stop */}
+        {followId && (
+          <div className="pointer-events-none absolute left-1/2 top-[4.5rem] z-10 flex -translate-x-1/2">
+            <button
+              type="button"
+              onClick={() => setFollowId(null)}
+              title="Stop following"
+              className={`${CHIP} pointer-events-auto px-3.5 py-2 text-[12px] font-semibold text-neutral-800 transition-colors hover:bg-white`}
+            >
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-sky-500" />
+              Following {avatars.get(followId)?.name ?? "teammate"} · tap to
+              stop
+            </button>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Merge celebration — fires only when one of MY pull requests merges. */}
-      <Confetti
-        ref={confettiRef}
-        manualstart
-        className="pointer-events-none fixed inset-0 z-[9999] h-full w-full"
-      />
+        {/* Proximity voice/video — only while a nearby member is actually
+          connected over LiveKit. World proximity alone never shows tiles
+          or controls, so departed members leave nothing behind. */}
+        {call.visibleIds.size > 0 && (
+          <div className="pointer-events-none fixed inset-x-0 bottom-5 z-30 flex flex-col items-center gap-2">
+            <div className="pointer-events-auto">
+              <CallStage
+                room={call.room}
+                nearIds={call.visibleIds}
+                myUserId={myUserId}
+                nameOf={(id) => avatars.get(id)?.name ?? id}
+              />
+            </div>
+            {call.error && onlineCount >= 2 && (
+              <div
+                role="alert"
+                className="pointer-events-none rounded-full bg-rose-50/95 px-3 py-1.5 text-[11px] font-medium text-rose-700 ring-1 ring-rose-500/30 backdrop-blur-md"
+              >
+                Voice unavailable — check mic permissions
+              </div>
+            )}
+            {call.mediaError && onlineCount >= 2 && (
+              <div
+                role="alert"
+                className="pointer-events-none max-w-[420px] truncate rounded-full bg-rose-50/95 px-3 py-1.5 text-[11px] font-medium text-rose-700 ring-1 ring-rose-500/30 backdrop-blur-md"
+              >
+                {call.mediaError}
+              </div>
+            )}
+            <div className="pointer-events-auto">
+              <CallControls
+                micOn={call.micOn}
+                cameraOn={call.cameraOn}
+                sharing={call.sharing}
+                toggleMic={call.toggleMic}
+                toggleCamera={call.toggleCamera}
+                toggleShare={call.toggleShare}
+              />
+            </div>
+          </div>
+        )}
 
-      {/* Chill Space shared-screen volume — only while inside the room.
+        {/* Merge celebration — fires only when one of MY pull requests merges. */}
+        <Confetti
+          ref={confettiRef}
+          manualstart
+          className="pointer-events-none fixed inset-0 z-[9999] h-full w-full"
+        />
+
+        {/* Chill Space shared-screen volume — only while inside the room.
           Sits above the legend so it never covers the top chips. */}
-      {currentRoom === "Chill Space" && (
-        <div className="absolute bottom-36 left-4 z-10">
-          <div className="pointer-events-auto flex items-center gap-2.5 rounded-full bg-[#f4f2ed]/95 py-2 pl-3 pr-4 text-neutral-700 ring-1 ring-black/[0.09] backdrop-blur-md">
-            <Volume2 className="h-4 w-4 text-neutral-500" />
-            <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-neutral-500">
-              Screen
-            </span>
-            <input
-              type="range"
-              min={0}
-              max={100}
-              value={Math.round(chill.volume * 100)}
-              onChange={(e) => chill.setVolume(Number(e.target.value) / 100)}
-              className="h-1 w-32 cursor-pointer appearance-none rounded-full bg-neutral-900/15 accent-emerald-600"
-              aria-label="Chill space volume"
-            />
+        {currentRoom === "Chill Space" && (
+          <div className="absolute bottom-36 left-4 z-10">
+            <div className="pointer-events-auto flex items-center gap-2.5 rounded-full bg-[#f4f2ed]/95 py-2 pl-3 pr-4 text-neutral-700 ring-1 ring-black/[0.09] backdrop-blur-md">
+              <Volume2 className="h-4 w-4 text-neutral-500" />
+              <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-neutral-500">
+                Screen
+              </span>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                value={Math.round(chill.volume * 100)}
+                onChange={(e) => chill.setVolume(Number(e.target.value) / 100)}
+                className="h-1 w-32 cursor-pointer appearance-none rounded-full bg-neutral-900/15 accent-emerald-600"
+                aria-label="Chill space volume"
+              />
+            </div>
           </div>
-        </div>
-      )}
-    </div>
+        )}
+      </div>
+    </TooltipProvider>
   );
 }
 

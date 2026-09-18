@@ -1,6 +1,11 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { WModal, WModalHeader } from "./motion";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 /* ─────────────────────────────────────────────────────────────
    WORLD CHROME — the in-world UI language.
@@ -65,6 +70,32 @@ export function Kbd({ children }: { children: ReactNode }) {
   );
 }
 
+/* ── Tooltip (shadcn) in the bone-paper voice ───────────────
+   Wraps icon-only buttons everywhere in the world HUD. Replaces native
+   `title=` so hover hints match the world chrome and work on touch
+   (tap-hold) via Radix. Requires a TooltipProvider above (WorldCanvas). */
+export function WorldTip({
+  content,
+  children,
+  side = "bottom",
+}: {
+  content: ReactNode;
+  children: ReactNode;
+  side?: "top" | "bottom" | "left" | "right";
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{children}</TooltipTrigger>
+      <TooltipContent
+        side={side}
+        className="border-0 bg-neutral-950/95 px-2.5 py-1 text-[11px] font-medium text-white shadow-lg"
+      >
+        {content}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 /* ── Buttons ───────────────────────────────────────────────── */
 export function DIconBtn({
   children,
@@ -80,21 +111,22 @@ export function DIconBtn({
   className?: string;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label={label}
-      title={label}
-      aria-pressed={active}
-      className={cn(
-        "relative grid size-9 flex-shrink-0 place-items-center rounded-full bg-[#f4f2ed]/95 text-neutral-700 ring-1 ring-black/[0.09] backdrop-blur-md transition-colors hover:bg-white hover:text-neutral-950",
-        active &&
-          "bg-neutral-950 text-white hover:bg-neutral-800 hover:text-white",
-        className,
-      )}
-    >
-      {children}
-    </button>
+    <WorldTip content={label}>
+      <button
+        type="button"
+        onClick={onClick}
+        aria-label={label}
+        aria-pressed={active}
+        className={cn(
+          "relative grid size-9 flex-shrink-0 place-items-center rounded-full bg-[#f4f2ed]/95 text-neutral-700 ring-1 ring-black/[0.09] backdrop-blur-md transition-colors hover:bg-white hover:text-neutral-950",
+          active &&
+            "bg-neutral-950 text-white hover:bg-neutral-800 hover:text-white",
+          className,
+        )}
+      >
+        {children}
+      </button>
+    </WorldTip>
   );
 }
 

@@ -22,6 +22,7 @@ const RING_COLOR: Record<Interactable["icon"], string> = {
   vending: "#fbbf24",
   reviewer: "#2dd4bf",
   fleet: "#22d3ee",
+  art: "#f59e0b",
 };
 
 // 7m global range (was 8) — trims clutter in the dense AI-lab cluster while
@@ -134,6 +135,14 @@ function drawGlyph(ctx: CanvasRenderingContext2D, icon: Interactable["icon"]) {
       ctx.moveTo(44, 53);
       ctx.lineTo(51, 60);
       ctx.lineTo(62, 46);
+      ctx.stroke();
+      break;
+    case "art": // picture frame + inner canvas + hanger
+      ctx.strokeRect(24, 34, 80, 64);
+      ctx.strokeRect(36, 46, 56, 40);
+      ctx.beginPath();
+      ctx.moveTo(64, 34);
+      ctx.lineTo(64, 22);
       ctx.stroke();
       break;
     case "fleet": // server stack
@@ -348,8 +357,15 @@ export function Markers({
       window.matchMedia("(prefers-reduced-motion: reduce)").matches,
     [],
   );
+  // Image frames (curated posters + community gallery) show no floating
+  // marker — the E prompt on approach is the indicator. Everything else
+  // keeps the full ring + icon.
   const spots = useMemo(
-    () => INTERACTABLES.filter((s) => s.kind !== "monitor"),
+    () =>
+      INTERACTABLES.filter(
+        (s) =>
+          s.kind !== "monitor" && s.kind !== "poster" && s.kind !== "gallery",
+      ),
     [],
   );
   return (

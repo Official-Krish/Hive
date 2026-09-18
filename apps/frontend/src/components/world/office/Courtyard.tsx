@@ -712,7 +712,11 @@ function SkyLife() {
   );
 }
 
-export function Courtyard() {
+/**
+ * Simplified view (Gather parity): skips the skyline, street traffic and
+ * lamp lights — plaza, planting and paths stay. For weak GPUs / focus mode.
+ */
+export function Courtyard({ simple = false }: { simple?: boolean }) {
   const { minX, maxX, minZ, maxZ } = COURTYARD;
   const cw = maxX - minX;
   const cd = maxZ - minZ;
@@ -1075,7 +1079,7 @@ export function Courtyard() {
             <boxGeometry args={[0.58, 0.06, 0.26]} />
             <primitive object={M.lampGlow} attach="material" />
           </mesh>
-          {LAMP_LIGHTS && (
+          {!simple && LAMP_LIGHTS && (
             <pointLight
               position={[0, 4.2, 0]}
               color="#ffe8bb"
@@ -1204,36 +1208,43 @@ export function Courtyard() {
       </Instances>
 
       {/* Sidewalk props + parked traffic for scale */}
-      <StreetProps />
+      {!simple && <StreetProps />}
 
       {/* Distant skyline — three facade densities, two depth bands.
           Jittered footprints + antenna toppers so towers don't read as clones. */}
-      {towers.map((mat, m) => {
-        const band = towerBands[m] ?? [];
-        if (band.length === 0) return null;
-        return (
-          <Instances key={m} range={band.length} limit={band.length}>
-            <boxGeometry args={[1, 1, 1]} />
-            <primitive object={mat} attach="material" />
-            {band.map((b, i) => (
-              <Instance
-                key={i}
-                position={[b.x, b.h / 2, b.z]}
-                rotation={[0, (((b.x * 13 + b.z * 7) % 21) - 10) * 0.02, 0]}
-                scale={[b.w, b.h, b.d]}
-              />
-            ))}
-          </Instances>
-        );
-      })}
+      {!simple &&
+        towers.map((mat, m) => {
+          const band = towerBands[m] ?? [];
+          if (band.length === 0) return null;
+          return (
+            <Instances key={m} range={band.length} limit={band.length}>
+              <boxGeometry args={[1, 1, 1]} />
+              <primitive object={mat} attach="material" />
+              {band.map((b, i) => (
+                <Instance
+                  key={i}
+                  position={[b.x, b.h / 2, b.z]}
+                  rotation={[0, (((b.x * 13 + b.z * 7) % 21) - 10) * 0.02, 0]}
+                  scale={[b.w, b.h, b.d]}
+                />
+              ))}
+            </Instances>
+          );
+        })}
       {/* Antenna toppers on the tallest towers */}
-      <Instances range={tallTowers.length} limit={tallTowers.length}>
-        <boxGeometry args={[1.2, 1, 1.2]} />
-        <primitive object={M.metalDark} attach="material" />
-        {tallTowers.map((b, i) => (
-          <Instance key={i} position={[b.x, b.h + 4, b.z]} scale={[1, 8, 1]} />
-        ))}
-      </Instances>
+      {!simple && (
+        <Instances range={tallTowers.length} limit={tallTowers.length}>
+          <boxGeometry args={[1.2, 1, 1.2]} />
+          <primitive object={M.metalDark} attach="material" />
+          {tallTowers.map((b, i) => (
+            <Instance
+              key={i}
+              position={[b.x, b.h + 4, b.z]}
+              scale={[1, 8, 1]}
+            />
+          ))}
+        </Instances>
+      )}
     </group>
   );
 }

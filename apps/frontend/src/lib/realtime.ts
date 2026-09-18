@@ -3,6 +3,7 @@ import type {
   RealtimeClientMessage,
   RealtimeEvent,
   RealtimeMember,
+  SocialReaction,
 } from "@hive/types";
 import { WS_BASE_URL } from "./config";
 
@@ -31,6 +32,12 @@ export type RealtimeEventMap = {
     { type: "github.notification" }
   >;
   "social.bump": Extract<RealtimeEvent, { type: "social.bump" }>;
+  "gallery.updated": Extract<RealtimeEvent, { type: "gallery.updated" }>;
+  "gallery.state": Extract<RealtimeEvent, { type: "gallery.state" }>;
+  "social.wave": Extract<RealtimeEvent, { type: "social.wave" }>;
+  "social.react": Extract<RealtimeEvent, { type: "social.react" }>;
+  "social.hand": Extract<RealtimeEvent, { type: "social.hand" }>;
+  "space.spotlight": Extract<RealtimeEvent, { type: "space.spotlight" }>;
   "whiteboard.stroke": Extract<RealtimeEvent, { type: "whiteboard.stroke" }>;
   "whiteboard.clear": Extract<RealtimeEvent, { type: "whiteboard.clear" }>;
   "whiteboard.history": Extract<RealtimeEvent, { type: "whiteboard.history" }>;
@@ -182,6 +189,30 @@ export class RealtimeClient {
 
   sendBump(roomId: string | null) {
     return this.send({ type: "social.bump", roomId });
+  }
+
+  sendGallerySet(frameId: string, imageUrl: string | null) {
+    return this.send({ type: "gallery.set", frameId, imageUrl });
+  }
+
+  requestGalleryState() {
+    return this.send({ type: "gallery.state.request" });
+  }
+
+  sendWave(toId: string) {
+    return this.send({ type: "social.wave", toId });
+  }
+
+  sendReact(reaction: SocialReaction) {
+    return this.send({ type: "social.react", reaction });
+  }
+
+  sendHand(raised: boolean) {
+    return this.send({ type: "social.hand", raised });
+  }
+
+  sendSpotlight(message: string) {
+    return this.send({ type: "space.spotlight", message });
   }
 
   sendWhiteboardStroke(

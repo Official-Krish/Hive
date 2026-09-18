@@ -6,6 +6,12 @@ import type { Box3Spec } from "./office/layout";
 interface ThirdPersonCameraProps {
   targetPosition?: [number, number, number];
   targetRef?: React.RefObject<THREE.Object3D | null>;
+  /**
+   * One-shot / follow override (locate + follow teammate). When set, the
+   * lens tracks this world point instead of the player — cleared by the
+   * caller (timeout or movement key).
+   */
+  targetOverride?: [number, number, number] | null;
   colliders?: Box3Spec[];
   /** Shared yaw (radians). Written on orbit, read by the player controller —
    *  a ref, so drag-look never triggers a React render. */
@@ -42,6 +48,7 @@ const _camPos = new THREE.Vector3();
 export function ThirdPersonCamera({
   targetPosition,
   targetRef,
+  targetOverride,
   colliders = [],
   sharedYaw,
   mode = "third",
@@ -191,7 +198,11 @@ export function ThirdPersonCamera({
     let tx = 0;
     let ty = 0;
     let tz = 0;
-    if (targetRef?.current) {
+    if (targetOverride) {
+      tx = targetOverride[0];
+      ty = targetOverride[1];
+      tz = targetOverride[2];
+    } else if (targetRef?.current) {
       tx = targetRef.current.position.x;
       ty = targetRef.current.position.y;
       tz = targetRef.current.position.z;

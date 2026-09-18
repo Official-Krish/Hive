@@ -13,6 +13,7 @@ import {
   useEscape,
 } from "./chrome";
 import { WModal } from "./motion";
+import { ReactionIcon } from "./reactions";
 import { cn } from "@/lib/utils";
 
 const LABEL = EYEBROW;
@@ -33,6 +34,10 @@ interface MemberDetailPopupProps {
   client: import("@/lib/realtime").RealtimeClient | null;
   developerId: string | null;
   onClose: () => void;
+  onWave?: (developerId: string) => void;
+  onLocate?: (developerId: string) => void;
+  onFollow?: (developerId: string) => void;
+  following?: boolean;
 }
 
 /**
@@ -45,6 +50,10 @@ export function MemberDetailPopup({
   client,
   developerId,
   onClose,
+  onWave,
+  onLocate,
+  onFollow,
+  following,
 }: MemberDetailPopupProps) {
   useEscape(onClose);
 
@@ -58,6 +67,10 @@ export function MemberDetailPopup({
         client={client}
         developerId={developerId}
         onClose={onClose}
+        onWave={onWave}
+        onLocate={onLocate}
+        onFollow={onFollow}
+        following={following}
       />
     </WModal>
   );
@@ -69,12 +82,20 @@ function MemberModalInner({
   client,
   developerId,
   onClose,
+  onWave,
+  onLocate,
+  onFollow,
+  following,
 }: {
   workspaceId: string;
   myUserId: string;
   client: import("@/lib/realtime").RealtimeClient | null;
   developerId: string;
   onClose: () => void;
+  onWave?: (developerId: string) => void;
+  onLocate?: (developerId: string) => void;
+  onFollow?: (developerId: string) => void;
+  following?: boolean;
 }) {
   const overlay = useMapOverlay(workspaceId, developerId, client, true);
 
@@ -128,6 +149,46 @@ function MemberModalInner({
           <X className="size-3.5" />
         </button>
       </div>
+
+      {/* presence actions — wave, locate, follow (hidden for yourself) */}
+      {!isMe && (onWave || onLocate || onFollow) && (
+        <div className="flex items-center gap-1.5 border-b border-black/[0.07] px-5 py-2.5">
+          {onWave && (
+            <button
+              type="button"
+              onClick={() => onWave(developerId)}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-white px-2.5 py-1.5 text-[12px] font-semibold text-neutral-700 ring-1 ring-black/[0.09] transition-colors hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900/30"
+            >
+              <ReactionIcon id="wave" />
+              Wave
+            </button>
+          )}
+          {onLocate && (
+            <button
+              type="button"
+              onClick={() => onLocate(developerId)}
+              className="rounded-lg bg-white px-2.5 py-1.5 text-[12px] font-semibold text-neutral-700 ring-1 ring-black/[0.09] transition-colors hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900/30"
+            >
+              Locate
+            </button>
+          )}
+          {onFollow && (
+            <button
+              type="button"
+              onClick={() => onFollow(developerId)}
+              aria-pressed={following ?? false}
+              className={cn(
+                "rounded-lg px-2.5 py-1.5 text-[12px] font-semibold ring-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900/30",
+                following
+                  ? "bg-neutral-950 text-white ring-neutral-950 hover:bg-neutral-800"
+                  : "bg-white text-neutral-700 ring-black/[0.09] hover:bg-neutral-100",
+              )}
+            >
+              {following ? "Following" : "Follow"}
+            </button>
+          )}
+        </div>
+      )}
 
       {/* body — scrollable so long profiles never clip on short screens */}
       <div className="flex-1 space-y-5 overflow-y-auto px-5 py-4 text-[13px]">

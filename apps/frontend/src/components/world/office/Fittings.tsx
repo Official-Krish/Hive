@@ -1,4 +1,4 @@
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Billboard, Instances, Instance } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
@@ -12,6 +12,7 @@ import {
   SLAT_WALLS,
   TV_PANELS,
   WHITEBOARDS,
+  WALL_ART,
   ROOM_SIGNS,
   PODS,
   RUGS,
@@ -20,9 +21,11 @@ import {
   INTERIOR,
   MEZZ,
   EXT_H,
+  type WallArt,
   type WallPanel,
 } from "./layout";
 import { M } from "./materials";
+import { ASSET_BASE_URL } from "@/lib/config";
 import { bladeTexture, directoryTexture } from "./signage";
 import { PodDoorPlate } from "./Level2";
 
@@ -154,6 +157,79 @@ function Whiteboard({ p, index = 0 }: { p: WallPanel; index?: number }) {
       <mesh position={[0, -h / 2 - 0.09, 0.06]}>
         <boxGeometry args={[w * 0.55, 0.04, 0.1]} />
         <primitive object={M.metalBrushed} attach="material" />
+      </mesh>
+    </group>
+  );
+}
+
+/**
+ * Framed gallery art — walnut frame + canvas face. Images come from the
+ * team-curated pack (`${ASSET_BASE_URL}/art/<artId>.jpg`) so CORS and
+ * licensing stay deterministic. Missing/failed images fall back to a blank
+ * canvas (wallAccent) instead of breaking the wall.
+ */
+const artCache = new Map<string, THREE.Texture | null>();
+
+function useArtTexture(artId: string): THREE.Texture | null {
+  const [tex, setTex] = useState<THREE.Texture | null>(
+    () => artCache.get(artId) ?? null,
+  );
+  useEffect(() => {
+    if (artCache.has(artId)) {
+      setTex(artCache.get(artId) ?? null);
+      return;
+    }
+    let live = true;
+    new THREE.TextureLoader()
+      .setCrossOrigin("anonymous")
+      .loadAsync(`${ASSET_BASE_URL}/art/${artId}.jpg`)
+      .then((t) => {
+        t.colorSpace = THREE.SRGBColorSpace;
+        t.anisotropy = 8;
+        artCache.set(artId, t);
+        if (live) setTex(t);
+      })
+      .catch(() => {
+        artCache.set(artId, null);
+      });
+    return () => {
+      live = false;
+    };
+  }, [artId]);
+  return tex;
+}
+
+function FramedArt({ p }: { p: WallArt }) {
+  const [w, h] = p.size;
+  const tex = useArtTexture(p.artId);
+  const face = useMemo(
+    () =>
+      tex
+        ? new THREE.MeshStandardMaterial({
+            map: tex,
+            roughness: 0.85,
+            metalness: 0,
+          })
+        : M.wallAccent,
+    [tex],
+  );
+  useEffect(() => {
+    // Dispose only textures we created (never the shared fallback).
+    return () => {
+      if (tex && face !== M.wallAccent) face.dispose();
+    };
+  }, [face, tex]);
+  return (
+    <group position={p.position} rotation={p.rotation}>
+      {/* walnut frame */}
+      <mesh castShadow>
+        <boxGeometry args={[w + 0.12, h + 0.12, 0.06]} />
+        <primitive object={M.walnut} attach="material" />
+      </mesh>
+      {/* canvas face */}
+      <mesh position={[0, 0, 0.036]}>
+        <planeGeometry args={[w, h]} />
+        <primitive object={face} attach="material" />
       </mesh>
     </group>
   );
@@ -468,6 +544,11 @@ export function Fittings() {
       ))}
       {WHITEBOARDS.map((p, i) => (
         <Whiteboard key={i} p={p} index={i} />
+      ))}
+
+      {/* Gallery wall art (interactive poster boards — see interactions.ts) */}
+      {WALL_ART.map((p) => (
+        <FramedArt key={p.artId} p={p} />
       ))}
 
       {/* Room signage */}

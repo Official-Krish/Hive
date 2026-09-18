@@ -30,6 +30,10 @@ interface RemoteAvatarsProps {
   pills?: ReadonlyMap<string, NearbyTokens>;
   /** Short-lived speech bubbles: developerId → text (e.g. water-cooler bump). */
   bubbles?: Readonly<Record<string, string>>;
+  /** Icon reactions: developerId → { reaction, at } (parent expires them). */
+  reactions?: Readonly<Record<string, { reaction: string; at: number }>>;
+  /** Raised hands (ephemeral presence, not a presence status). */
+  raisedHands?: ReadonlySet<string>;
   onAvatarClick?: (developerId: string) => void;
   /** Walkable-surface height, same sampler the local player uses. Without
    *  it remotes hover at Y=0 on stairs and the upper deck. */
@@ -56,6 +60,8 @@ export function RemoteAvatars({
   myUserId,
   pills,
   bubbles,
+  reactions,
+  raisedHands,
   onAvatarClick,
   groundAt,
 }: RemoteAvatarsProps) {
@@ -359,6 +365,8 @@ export function RemoteAvatars({
                 }
                 position={[0, 0, 0]}
                 meta={cappedMeta}
+                reaction={reactions?.[id]?.reaction ?? null}
+                handRaised={raisedHands?.has(id) ?? false}
               />
             </AvatarErrorBoundary>
           </group>

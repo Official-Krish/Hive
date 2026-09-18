@@ -6,6 +6,8 @@ import {
   MEETING_CHAIRS,
   L2_DESK_CHAIRS,
   WATER_COOLER,
+  WALL_ART,
+  GALLERY_FRAMES,
 } from "./office/layout";
 import { KIT_YAW } from "./office/kitManifest";
 import type { TransformData } from "./InstancedFurniture";
@@ -21,7 +23,9 @@ export type InteractableKind =
   | "vending"
   | "reviewer"
   | "fleet"
-  | "reviewer-console";
+  | "reviewer-console"
+  | "poster"
+  | "gallery";
 
 export type InteractableIcon =
   | "coffee"
@@ -33,7 +37,8 @@ export type InteractableIcon =
   | "arcade"
   | "vending"
   | "reviewer"
-  | "fleet";
+  | "fleet"
+  | "art";
 
 export interface Interactable {
   id: string;
@@ -209,6 +214,29 @@ const REVIEWER_CONSOLE: Interactable = {
   icon: "reviewer",
 };
 
+/**
+ * Gallery posters — the standing point sits ~1.4m off the art face, along
+ * the face normal (rotation 0 → +Z, PI/2 → +X, -PI/2 → -X). Mirrors WALL_ART.
+ */
+function posterSpots(): Interactable[] {
+  return WALL_ART.map((a): Interactable => {
+    const yaw = a.rotation[1] ?? 0;
+    // Face normal in XZ: rotY 0 → +Z; +PI/2 → +X; -PI/2 → -X.
+    const fx = Math.sin(yaw);
+    const fz = Math.cos(yaw);
+    return {
+      id: `poster-${a.artId}`,
+      kind: "poster" as const,
+      x: a.position[0] + fx * 1.4,
+      z: a.position[2] + fz * 1.4,
+      y: 0,
+      radius: 2.2,
+      prompt: a.title,
+      icon: "art",
+    };
+  });
+}
+
 /** Every desk gets a "workspace" monitor you can lean in and use. */
 function monitorSpots(): Interactable[] {
   return [...DESKS, ...L2_DESKS, ...POD_DESKS].map((d, i) => {
@@ -247,6 +275,20 @@ export const INTERACTABLES: Interactable[] = [
     prompt: "Draw on whiteboard",
     icon: "board",
   })),
+  ...posterSpots(),
+  ...GALLERY_FRAMES.map((g): Interactable => {
+    const yaw = g.rotation[1] ?? 0;
+    return {
+      id: `gallery-${g.id}`,
+      kind: "gallery" as const,
+      x: g.position[0] + Math.sin(yaw) * 1.4,
+      z: g.position[2] + Math.cos(yaw) * 1.4,
+      y: 0,
+      radius: 2.2,
+      prompt: g.title,
+      icon: "art",
+    };
+  }),
   ...monitorSpots(),
 ];
 

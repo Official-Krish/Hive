@@ -903,6 +903,171 @@ export const WHITEBOARDS: WallPanel[] = [
   },
 ];
 
+/**
+ * Framed wall art — curated gallery pieces. `artId` resolves to
+ * `${ASSET_BASE_URL}/art/${artId}.jpg` in Fittings (team-uploaded pack, so
+ * CORS + licensing stay deterministic). Faces mirror the TV/whiteboard
+ * convention: rotation 0 faces +Z, PI/2 faces +X, -PI/2 faces -X.
+ */
+export interface WallArt {
+  position: Vec3;
+  rotation: Vec3;
+  size: [number, number]; // width, height
+  artId: string;
+  title: string;
+  caption: string;
+}
+
+export const WALL_ART: WallArt[] = [
+  // North back wall (inner face -19.8) — gaps between the AI-lab screens.
+  {
+    position: [-26, 1.6, -19.73],
+    rotation: [0, 0, 0],
+    size: [2.4, 1.7],
+    artId: "art-01",
+    title: "Ship It",
+    caption: "Release day, Hive HQ — the wall that watches launches.",
+  },
+  {
+    position: [-2, 1.6, -19.73],
+    rotation: [0, 0, 0],
+    size: [2.0, 1.5],
+    artId: "art-02",
+    title: "Night Deploy",
+    caption: "Low light, green builds. The calmest hour in engineering.",
+  },
+  {
+    position: [30, 1.6, -19.73],
+    rotation: [0, 0, 0],
+    size: [2.2, 1.6],
+    artId: "art-03",
+    title: "Mission Control",
+    caption: "Every screen lit, every test green — launch morning.",
+  },
+  // West wall (inner face -33.8), facing +X into the workspace.
+  {
+    position: [-33.73, 1.6, -16],
+    rotation: [0, Math.PI / 2, 0],
+    size: [2.2, 1.6],
+    artId: "art-04",
+    title: "Deep Work",
+    caption: "Headphones on, world off. The focus-pod manifesto.",
+  },
+  {
+    position: [-33.73, 1.6, 0],
+    rotation: [0, Math.PI / 2, 0],
+    size: [2.0, 1.5],
+    artId: "art-05",
+    title: "Whiteboard Storm",
+    caption: "Forty minutes, three markers, one architecture.",
+  },
+  // East wall (inner face 33.8), facing -X.
+  {
+    position: [33.73, 1.6, -10],
+    rotation: [0, -Math.PI / 2, 0],
+    size: [2.2, 1.6],
+    artId: "art-06",
+    title: "Coffee Protocol",
+    caption: "Standup runs on espresso. This is the documentation.",
+  },
+  {
+    position: [33.73, 1.6, 4],
+    rotation: [0, -Math.PI / 2, 0],
+    size: [2.0, 1.5],
+    artId: "art-07",
+    title: "Merge Day",
+    caption: "Two hundred commits, zero conflicts. A true story.",
+  },
+  {
+    position: [33.73, 1.6, 14],
+    rotation: [0, -Math.PI / 2, 0],
+    size: [2.4, 1.7],
+    artId: "art-08",
+    title: "The Courtyard",
+    caption: "Where the best ideas happen — outside the building.",
+  },
+];
+
+/**
+ * Community gallery frames — anyone can paste an image link into any frame
+ * (or clear it); the hub relays to everyone. Same face convention as art:
+ * rotation 0 faces +Z, PI/2 faces +X, -PI/2 faces -X, PI faces -Z.
+ */
+export interface GalleryFrame {
+  id: string;
+  position: Vec3;
+  rotation: Vec3;
+  size: [number, number]; // width, height
+  title: string;
+}
+
+export const GALLERY_FRAMES: GalleryFrame[] = [
+  // North back wall gap (between curated art + AI-lab screens).
+  {
+    id: "g1",
+    position: [5, 1.6, -19.73],
+    rotation: [0, 0, 0],
+    size: [2.2, 1.6],
+    title: "Engineering Wall",
+  },
+  // West corridor, east face.
+  {
+    id: "g2",
+    position: [-3.87, 1.6, -1],
+    rotation: [0, Math.PI / 2, 0],
+    size: [2.0, 1.5],
+    title: "Corridor West",
+  },
+  // East corridor, west face.
+  {
+    id: "g3",
+    position: [3.87, 1.6, 3.5],
+    rotation: [0, -Math.PI / 2, 0],
+    size: [2.0, 1.5],
+    title: "Corridor East",
+  },
+  // Lounge divider, north face.
+  {
+    id: "g4",
+    position: [-28, 1.6, -0.13],
+    rotation: [0, Math.PI, 0],
+    size: [2.2, 1.6],
+    title: "Lounge Wall",
+  },
+  // Meeting divider, north face.
+  {
+    id: "g5",
+    position: [6, 1.6, 1.87],
+    rotation: [0, Math.PI, 0],
+    size: [2.0, 1.5],
+    title: "Meeting Wall",
+  },
+  // Cafeteria east wall.
+  {
+    id: "g6",
+    position: [33.73, 1.6, 8],
+    rotation: [0, -Math.PI / 2, 0],
+    size: [2.2, 1.6],
+    title: "Cafeteria Wall",
+  },
+  // Lounge west wall.
+  {
+    id: "g7",
+    position: [-33.73, 1.6, -5],
+    rotation: [0, Math.PI / 2, 0],
+    size: [2.0, 1.5],
+    title: "Lounge West",
+  },
+  // Lobby west wall.
+  {
+    id: "g8",
+    position: [-33.73, 1.6, 17],
+    rotation: [0, Math.PI / 2, 0],
+    size: [2.4, 1.7],
+    title: "Lobby Wall",
+  },
+];
+
 /** Backlit room signage: position, facing, label + label colour. */
 export interface RoomSign {
   position: Vec3;
