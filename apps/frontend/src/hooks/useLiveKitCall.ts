@@ -11,6 +11,8 @@ export interface LiveKitCallOptions {
   suppressPublish?: boolean;
   /** Force-publish my tracks regardless of proximity (active pair session). */
   forcePublish?: boolean;
+  /** Suppress my camera only, mic follows proximity (podium audience). */
+  suppressCamera?: boolean;
 }
 
 export interface LiveKitCallState {
@@ -46,10 +48,19 @@ export function useLiveKitCall(
   onlineCount: number,
   options: LiveKitCallOptions = {},
 ): LiveKitCallState {
-  const { volumePeers, muteRemote, suppressPublish, forcePublish } = options;
+  const {
+    volumePeers,
+    muteRemote,
+    suppressPublish,
+    forcePublish,
+    suppressCamera,
+  } = options;
   const mute = Boolean(muteRemote);
   const suppress = Boolean(suppressPublish);
   const force = Boolean(forcePublish);
+  const suppressCam = Boolean(suppressCamera);
+  const suppressCamRef = useRef(suppressCam);
+  suppressCamRef.current = suppressCam;
   const [connected, setConnected] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -213,7 +224,8 @@ export function useLiveKitCall(
     const apply = () => {
       const shouldPublish =
         (nearRef.current || forceRef.current) && !suppressRef.current;
-      const cam = shouldPublish && cameraIntent.current;
+      const cam =
+        shouldPublish && cameraIntent.current && !suppressCamRef.current;
       const mic = shouldPublish && micIntent.current;
       safe(
         r.localParticipant
@@ -263,16 +275,26 @@ export function useLiveKitCall(
   }, [room, recomputeLive]);
 
   // Focus rooms: any peer standing inside a focus pod stays muted on my side
-  // unless they're my accepted focus partner. Set per-participant volume based
-  // on the current mute policy so only `volumePeers` are audible.
+  // unless they're my accepted focus partner. Same primitive isolates the
+  // podium stage (speaker hears nobody). Re-applied on peer join so late
+  // joiners can't slip through unmuted.
   useEffect(() => {
     const r = roomRef.current;
     if (!r || r.state !== ConnectionState.Connected) return;
-    r.remoteParticipants.forEach((p) => {
-      const audible =
-        !muteRemoteRef.current || volumePeersRef.current?.has(p.identity);
-      p.setVolume(audible ? 1 : 0);
-    });
+    const applyVolumes = () => {
+      r.remoteParticipants.forEach((p) => {
+        const audible =
+          !muteRemoteRef.current || volumePeersRef.current?.has(p.identity);
+        p.setVolume(audible ? 1 : 0);
+      });
+    };
+    applyVolumes();
+    r.on(RoomEvent.ParticipantConnected, applyVolumes);
+    r.on(RoomEvent.TrackSubscribed, applyVolumes);
+    return () => {
+      r.off(RoomEvent.ParticipantConnected, applyVolumes);
+      r.off(RoomEvent.TrackSubscribed, applyVolumes);
+    };
   }, [room, connected, mute, volumePeers]);
 
   const toggleMic = useCallback(() => {
@@ -294,7 +316,9 @@ export function useLiveKitCall(
   const toggleCamera = useCallback(() => {
     cameraIntent.current = !cameraIntent.current;
     const near =
-      (nearKeyRef.current !== "" || forceRef.current) && !suppressRef.current;
+      (nearKeyRef.current !== "" || forceRef.current) &&
+      !suppressRef.current &&
+      !suppressCamRef.current;
     setCameraOn(cameraIntent.current && near);
     const r = roomRef.current;
     if (r && r.state === ConnectionState.Connected && near) {

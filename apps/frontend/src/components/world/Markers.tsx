@@ -23,6 +23,7 @@ const RING_COLOR: Record<Interactable["icon"], string> = {
   reviewer: "#2dd4bf",
   fleet: "#22d3ee",
   art: "#f59e0b",
+  mic: "#fbbf24",
 };
 
 // 7m global range (was 8) — trims clutter in the dense AI-lab cluster while
@@ -143,6 +144,17 @@ function drawGlyph(ctx: CanvasRenderingContext2D, icon: Interactable["icon"]) {
       ctx.beginPath();
       ctx.moveTo(64, 34);
       ctx.lineTo(64, 22);
+      ctx.stroke();
+      break;
+    case "mic": // vintage mic: head + stand + base
+      ctx.beginPath();
+      ctx.arc(64, 44, 18, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(64, 62);
+      ctx.lineTo(64, 100);
+      ctx.moveTo(44, 108);
+      ctx.lineTo(84, 108);
       ctx.stroke();
       break;
     case "fleet": // server stack

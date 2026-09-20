@@ -199,6 +199,24 @@ export interface Ramp {
  * Every flat surface the player can stand on above the ground plane. Level 1
  * is implicit (y = 0 everywhere), so this only lists the upper deck.
  */
+/** Podium Room stage platform + mic spot (level 2, east bay). Declared
+ *  before DECKS (which references the stage) to avoid a TDZ trap. */
+export const PODIUM_STAGE = {
+  x0: 13,
+  x1: 21,
+  z0: 9.9,
+  z1: 11.3,
+  h: 0.45,
+};
+/** Claim circle on the stage — stand here and press E to take the mic. */
+export const PODIUM_MIC = { x: 17, z: 10.3, r: 1.1 };
+/** Audience benches facing the stage (procedural boxes, see Level2). */
+export const PODIUM_BENCHES: Array<{ x: number; z: number; w: number }> = [
+  { x: 12.5, z: 8.1, w: 3 },
+  { x: 17, z: 8.1, w: 3 },
+  { x: 21.5, z: 8.1, w: 3 },
+];
+
 export const DECKS: Deck[] = [
   // Full upper floor over both wings + the corridor.
   { x0: minX, x1: maxX, z0: minZ, z1: MEZZ.z0, y: L2_Y },
@@ -211,6 +229,14 @@ export const DECKS: Deck[] = [
     z0: STAIR_LANDING.z0,
     z1: STAIR_LANDING.z1,
     y: L2_Y,
+  },
+  // Podium stage platform (walkable step, 0.45 < STEP_UP).
+  {
+    x0: PODIUM_STAGE.x0,
+    x1: PODIUM_STAGE.x1,
+    z0: PODIUM_STAGE.z0,
+    z1: PODIUM_STAGE.z1,
+    y: L2_Y + PODIUM_STAGE.h,
   },
 ];
 
@@ -304,7 +330,7 @@ export const STAIR_GUARDS: Wall[] = [
 // leadership suite (manager offices, corner office, boardroom).
 // ============================================================================
 export type PodKind =
-  "manager" | "corner" | "board" | "huddle" | "focus" | "pair";
+  "manager" | "corner" | "board" | "huddle" | "focus" | "pair" | "podium";
 
 export interface Pod {
   id: string;
@@ -418,6 +444,15 @@ export const PODS: Pod[] = [
     door: { side: "w", at: -5.6, width: 1.1 },
     kind: "huddle",
     accent: "#a78bfa",
+  },
+  {
+    id: "podium",
+    name: "Podium Room",
+    level: 2,
+    rect: [8.0, 24.0, 7.0, 11.5],
+    door: { side: "n", at: 12.0, width: 1.6 },
+    kind: "podium",
+    accent: "#fbbf24",
   },
 ];
 
@@ -1676,6 +1711,9 @@ export const PLAYER_COLLIDERS: AABB[] = [
   ...fridgeBoxes,
   ...coolerBoxes,
   ...podTableBoxes,
+  // Podium Room: audience benches + mic stand (stage itself stays walkable).
+  ...PODIUM_BENCHES.map((b) => rect(b.x, b.z, b.w / 2, 0.3, L2_Y, L2_Y + 0.55)),
+  rect(PODIUM_MIC.x, PODIUM_MIC.z, 0.09, 0.09, L2_Y, L2_Y + 2.0),
   ...propBoxes(MEETING_TABLES, 1.5, 2.5),
   ...propBoxes(DESKS, 1.0, 0.55),
   ...propBoxes(LOUNGE_TABLES, 0.8, 0.5),

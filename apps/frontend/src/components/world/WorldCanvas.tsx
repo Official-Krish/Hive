@@ -48,6 +48,7 @@ import { useNearbyTokens } from "@/hooks/useNearbyTokens";
 import { useInteractions } from "@/hooks/useInteractions";
 import { useFocusRoom } from "@/hooks/useFocusRoom";
 import { usePairSession } from "@/hooks/usePairSession";
+import { usePodium } from "@/hooks/usePodium";
 import { useGameSession } from "@/hooks/useGameSession";
 import { REVIEWER_BOT_ID, useReviewerBot } from "@/hooks/useReviewerBot";
 import { http } from "@/lib/http";
@@ -103,6 +104,7 @@ import {
   Gauge,
   KeyRound,
   Megaphone,
+  Mic,
   Monitor,
   PenLine,
   SearchCheck,
@@ -146,6 +148,7 @@ const INTERACTABLE_ICONS: Record<InteractableIcon, LucideIcon> = {
   reviewer: SearchCheck,
   fleet: Server,
   art: Frame,
+  mic: Mic,
 };
 
 /* r3f v9.7 `events.connect(target)` can fire with a null container during a
@@ -568,11 +571,29 @@ export function WorldCanvas({
     vending.dismissReveal();
     setVendingOpen(false);
   }, [vending.dismissReveal]);
+
+  // Player world position (feet height included) for proximity interactions.
+  const [playerPos, setPlayerPos] = useState<[number, number, number]>([
+    SPAWN[0],
+    SPAWN[1],
+    SPAWN[2],
+  ]);
+  const podium = usePodium({
+    myUserId,
+    currentRoom,
+    client,
+    playerPos,
+  });
+  const podiumRef = useRef(podium);
+  podiumRef.current = podium;
   const call = useLiveKitCall(workspaceId, myUserId, nearIds, onlineCount, {
     volumePeers: focus.allowedPeers,
-    muteRemote: focus.inFocus,
+    // The podium speaker hears nobody (stage isolation); focus mute as before.
+    muteRemote: focus.inFocus || podium.isSpeaker,
     suppressPublish: focus.inFocus && !focus.partnerId,
-    forcePublish: pair.active !== null,
+    forcePublish: pair.active !== null || podium.isSpeaker,
+    // Audience cameras stay off in the podium room (mic follows proximity).
+    suppressCamera: podium.inPodiumRoom && !podium.isSpeaker,
   });
   const nearbyTokens = useNearbyTokens(workspaceId, client, nearIds);
   const chat = useChat(workspaceId, myUserId, client, chatOpen);
@@ -793,12 +814,6 @@ export function WorldCanvas({
     [bumpBubbles, reviewer.bubble],
   );
 
-  // Player world position (feet height included) for proximity interactions.
-  const [playerPos, setPlayerPos] = useState<[number, number, number]>([
-    SPAWN[0],
-    SPAWN[1],
-    SPAWN[2],
-  ]);
   const [coffeeActive, setCoffeeActive] = useState(false);
   const [sitting, setSitting] = useState(false);
   const sitToggleRef = useRef<(() => void) | null>(null);
@@ -1080,6 +1095,22 @@ export function WorldCanvas({
         case "whiteboard":
           setWhiteboardId(it.id);
           break;
+        case "podium": {
+          const pd = podiumRef.current;
+          if (pd.isSpeaker) {
+            pd.release();
+            showToast("Mic released");
+          } else if (pd.holderId) {
+            showToast(
+              `${avatarsRef.current.get(pd.holderId)?.name ?? "Someone"} has the mic — listen in`,
+            );
+          } else if (!pd.onMic) {
+            showToast("Step onto the stage circle to take the mic");
+          } else {
+            pd.claim();
+          }
+          break;
+        }
         case "poster": {
           const art = WALL_ART.find((a) => `poster-${a.artId}` === it.id);
           if (art) setPosterArt(art);
@@ -1403,6 +1434,25 @@ export function WorldCanvas({
       );
     }
   }, [currentRoom, showToast]);
+
+  // Podium mic transitions: announce takes/releases in the ticker.
+  // The initial sync on join stays quiet (announced on demand at the mic).
+  const podiumAnnounced = useRef(false);
+  useEffect(() => {
+    if (!podiumAnnounced.current) {
+      podiumAnnounced.current = true;
+      return;
+    }
+    const holder = podium.holderId;
+    if (holder) {
+      pushFeed(
+        `${holder === myUserId ? "You took" : `${avatarsRef.current.get(holder)?.name ?? "Someone"} took`} the podium mic`,
+        "bump",
+      );
+    } else {
+      pushFeed("The podium mic is free", "bump");
+    }
+  }, [podium.holderId, myUserId, pushFeed]);
 
   // Watchdog: worker-created alerts never hit the WS (separate process), so
   // poll the alerts API and push newly-seen OPEN alerts into the ticker.
@@ -2471,6 +2521,28 @@ export function WorldCanvas({
           )}
         </AnimatePresence>
 
+        {/* Podium status — speaker sees On mic, audience sees Listening */}
+        {podium.inPodiumRoom && podium.holderId && (
+          <div className="pointer-events-none absolute left-1/2 top-[4.5rem] z-10 flex -translate-x-1/2">
+            <div
+              className={`${CHIP} px-3.5 py-2 text-[12px] font-semibold ${
+                podium.isSpeaker ? "text-amber-800" : "text-neutral-800"
+              }`}
+            >
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${
+                  podium.isSpeaker
+                    ? "animate-pulse bg-amber-500"
+                    : "bg-violet-500"
+                }`}
+              />
+              {podium.isSpeaker
+                ? "On mic — the room hears you"
+                : `Listening to ${avatars.get(podium.holderId)?.name ?? "the speaker"}`}
+            </div>
+          </div>
+        )}
+
         {/* Follow indicator — who you're trailing, one tap to stop */}
         {followId && (
           <div className="pointer-events-none absolute left-1/2 top-[4.5rem] z-10 flex -translate-x-1/2">
@@ -2498,6 +2570,8 @@ export function WorldCanvas({
                 nearIds={call.visibleIds}
                 myUserId={myUserId}
                 nameOf={(id) => avatars.get(id)?.name ?? id}
+                speakerId={podium.holderId}
+                podiumRoom={podium.inPodiumRoom}
               />
             </div>
             {call.error && onlineCount >= 2 && (

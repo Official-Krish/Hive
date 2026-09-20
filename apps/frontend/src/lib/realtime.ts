@@ -34,6 +34,7 @@ export type RealtimeEventMap = {
   "social.bump": Extract<RealtimeEvent, { type: "social.bump" }>;
   "gallery.updated": Extract<RealtimeEvent, { type: "gallery.updated" }>;
   "gallery.state": Extract<RealtimeEvent, { type: "gallery.state" }>;
+  "podium.state": Extract<RealtimeEvent, { type: "podium.state" }>;
   "social.wave": Extract<RealtimeEvent, { type: "social.wave" }>;
   "social.react": Extract<RealtimeEvent, { type: "social.react" }>;
   "social.hand": Extract<RealtimeEvent, { type: "social.hand" }>;
@@ -197,6 +198,18 @@ export class RealtimeClient {
 
   requestGalleryState() {
     return this.send({ type: "gallery.state.request" });
+  }
+
+  sendPodiumClaim() {
+    return this.send({ type: "podium.claim" });
+  }
+
+  sendPodiumRelease() {
+    return this.send({ type: "podium.release" });
+  }
+
+  requestPodiumState() {
+    return this.send({ type: "podium.state.request" });
   }
 
   sendWave(toId: string) {

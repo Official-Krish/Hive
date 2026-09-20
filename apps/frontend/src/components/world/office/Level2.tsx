@@ -13,6 +13,9 @@ import {
   PODS,
   POD_DESKS,
   POD_TABLES,
+  PODIUM_STAGE,
+  PODIUM_MIC,
+  PODIUM_BENCHES,
   L2_DESKS,
   L2_DESK_CHAIRS,
   L2_MONITORS,
@@ -400,6 +403,76 @@ export function Level2() {
           seats={pod.kind === "board" ? 5 : 2}
         />
       ))}
+
+      {/* --- Podium Room: stage, mic stand, audience benches -------------- */}
+      <group name="podium-room">
+        {/* Stage platform (walkable — see DECKS) + front fascia light */}
+        <mesh
+          position={[
+            (PODIUM_STAGE.x0 + PODIUM_STAGE.x1) / 2,
+            L2_Y + PODIUM_STAGE.h / 2,
+            (PODIUM_STAGE.z0 + PODIUM_STAGE.z1) / 2,
+          ]}
+          castShadow
+          receiveShadow
+        >
+          <boxGeometry
+            args={[
+              PODIUM_STAGE.x1 - PODIUM_STAGE.x0,
+              PODIUM_STAGE.h,
+              PODIUM_STAGE.z1 - PODIUM_STAGE.z0,
+            ]}
+          />
+          <primitive object={M.walnut} attach="material" />
+        </mesh>
+        <mesh
+          position={[
+            (PODIUM_STAGE.x0 + PODIUM_STAGE.x1) / 2,
+            L2_Y + 0.12,
+            PODIUM_STAGE.z0 + 0.03,
+          ]}
+        >
+          <boxGeometry
+            args={[PODIUM_STAGE.x1 - PODIUM_STAGE.x0 - 0.4, 0.05, 0.04]}
+          />
+          <primitive object={M.stripWarm} attach="material" />
+        </mesh>
+        {/* Dark backdrop behind the stage so the speaker reads on camera */}
+        <mesh position={[17, L2_Y + 1.5, 11.44]} castShadow>
+          <boxGeometry args={[8.4, 3.0, 0.08]} />
+          <primitive object={M.featureWall} attach="material" />
+        </mesh>
+        {/* Mic stand: base disc, pole, head */}
+        <group position={[PODIUM_MIC.x, L2_Y + PODIUM_STAGE.h, PODIUM_MIC.z]}>
+          <mesh position={[0, 0.02, 0]} receiveShadow>
+            <cylinderGeometry args={[0.16, 0.18, 0.04, 16]} />
+            <primitive object={M.blackAnodized} attach="material" />
+          </mesh>
+          <mesh position={[0, 0.75, 0]} castShadow>
+            <cylinderGeometry args={[0.025, 0.025, 1.5, 8]} />
+            <primitive object={M.chrome} attach="material" />
+          </mesh>
+          <mesh position={[0, 1.53, 0]}>
+            <sphereGeometry args={[0.07, 12, 10]} />
+            <primitive object={M.blackAnodized} attach="material" />
+          </mesh>
+        </group>
+        {/* Audience benches facing the stage */}
+        {PODIUM_BENCHES.map((b, i) => (
+          <group key={i} position={[b.x, L2_Y, b.z]}>
+            <mesh position={[0, 0.28, 0]} castShadow receiveShadow>
+              <boxGeometry args={[b.w, 0.09, 0.55]} />
+              <primitive object={M.oak} attach="material" />
+            </mesh>
+            {[-b.w / 2 + 0.25, b.w / 2 - 0.25].map((dx, k) => (
+              <mesh key={k} position={[dx, 0.14, 0]} castShadow>
+                <boxGeometry args={[0.09, 0.28, 0.5]} />
+                <primitive object={M.blackAnodized} attach="material" />
+              </mesh>
+            ))}
+          </group>
+        ))}
+      </group>
 
       {/* --- Open plan + breakout ------------------------------------------ */}
       <InstancedFurniture

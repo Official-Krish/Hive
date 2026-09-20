@@ -56,6 +56,9 @@ export class RealtimeHub {
   /** Community gallery frames: workspaceId → frameId → imageUrl. In-memory
    *  like whiteboard history — anyone can set/clear any frame. */
   private readonly gallery = new Map<string, Map<string, string>>();
+  /** Podium mic holder per workspace (single speaker). In-memory; a restart
+   *  (or holder disconnect) releases the mic. */
+  private readonly podiumHolder = new Map<string, string>();
   private server: WsServer | null = null;
 
   constructor(private readonly options: RealtimeHubOptions) {}
@@ -604,6 +607,43 @@ export class RealtimeHub {
         ws.send(JSON.stringify(event));
         break;
       }
+      case "podium.claim": {
+        // First come, first served — a held mic rejects the claim.
+        if (!this.podiumHolder.has(workspaceId)) {
+          this.podiumHolder.set(workspaceId, client.userId);
+        }
+        const claimed: RealtimeEvent = {
+          type: "podium.state",
+          workspaceId,
+          holderId: this.podiumHolder.get(workspaceId) ?? null,
+          timestamp,
+        };
+        this.publishToWorkspace(workspaceId, claimed);
+        break;
+      }
+      case "podium.release": {
+        if (this.podiumHolder.get(workspaceId) === client.userId) {
+          this.podiumHolder.delete(workspaceId);
+          const released: RealtimeEvent = {
+            type: "podium.state",
+            workspaceId,
+            holderId: null,
+            timestamp,
+          };
+          this.publishToWorkspace(workspaceId, released);
+        }
+        break;
+      }
+      case "podium.state.request": {
+        const state: RealtimeEvent = {
+          type: "podium.state",
+          workspaceId,
+          holderId: this.podiumHolder.get(workspaceId) ?? null,
+          timestamp,
+        };
+        ws.send(JSON.stringify(state));
+        break;
+      }
       case "focus.invite": {
         const event: RealtimeEvent = {
           type: "focus.invite",
@@ -865,6 +905,17 @@ export class RealtimeHub {
         timestamp: Date.now(),
       };
       this.publishToWorkspace(client.workspaceId, event);
+      // A departing mic holder releases the podium for everyone else.
+      if (this.podiumHolder.get(client.workspaceId) === client.userId) {
+        this.podiumHolder.delete(client.workspaceId);
+        const released: RealtimeEvent = {
+          type: "podium.state",
+          workspaceId: client.workspaceId,
+          holderId: null,
+          timestamp: Date.now(),
+        };
+        this.publishToWorkspace(client.workspaceId, released);
+      }
     } catch (err) {
       console.error(
         `[hive] realtime close failed for user ${client.userId}`,

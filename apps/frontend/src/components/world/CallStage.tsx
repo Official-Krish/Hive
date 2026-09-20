@@ -156,6 +156,36 @@ function VideoTile({
   );
 }
 
+/** Audio-only subscription (no tile): nearby peers + the podium speaker. */
+function AudioOnly({
+  room,
+  identity,
+  version,
+}: {
+  room: Room;
+  identity: string;
+  version: number;
+}) {
+  const audioRef = useRef<HTMLAudioElement>(null);
+
+  useEffect(() => {
+    const audioEl = audioRef.current;
+    if (!audioEl) return;
+    const p = room.getParticipantByIdentity(identity) as
+      RemoteParticipant | undefined;
+    const track = p
+      ? [...p.audioTrackPublications.values()].find((x) => x.track)?.track
+      : undefined;
+    if (!track) return;
+    track.attach(audioEl);
+    return () => {
+      track.detach(audioEl);
+    };
+  }, [room, identity, version]);
+
+  return <audio ref={audioRef} autoPlay aria-hidden />;
+}
+
 function ScreenTile({
   participant,
   label,
@@ -273,11 +303,17 @@ export function CallStage({
   nearIds,
   myUserId,
   nameOf,
+  speakerId = null,
+  podiumRoom = false,
 }: {
   room: Room | null;
   nearIds: ReadonlySet<string>;
   myUserId: string;
   nameOf?: (id: string) => string;
+  /** Podium mic holder — the only remote tile in the podium room. */
+  speakerId?: string | null;
+  /** When true, audience video tiles are hidden (speaker only). */
+  podiumRoom?: boolean;
 }) {
   const [version, bump] = useReducer((v: number) => v + 1, 0);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -328,7 +364,18 @@ export function CallStage({
 
   const labelFor = (id: string) =>
     id === myUserId ? "You" : (nameOf?.(id) ?? id);
-  const ids = [...nearIds];
+  // Podium room: video shows the speaker only (plus your own preview);
+  // audience tiles are hidden but their audio still attaches below.
+  const ids = podiumRoom
+    ? [...nearIds].filter((id) => id === speakerId)
+    : [...nearIds];
+  // Audio follows ears, not tiles: nearby peers always, plus the far
+  // speaker for everyone in the podium room.
+  const audioIds = [
+    ...nearIds,
+    ...(podiumRoom && speakerId ? [speakerId] : []),
+  ].filter((id, i, all) => all.indexOf(id) === i);
+  const tiledIds = new Set(ids);
 
   // Any remote actively sharing their screen (other than my own video feed).
   const shares = [...room.remoteParticipants.values()].filter((p) =>
@@ -366,6 +413,12 @@ export function CallStage({
             +{ids.length - 4}
           </span>
         )}
+        {/* Audio-only peers: heard but not tiled (audience + far speaker). */}
+        {audioIds
+          .filter((id) => !tiledIds.has(id))
+          .map((id) => (
+            <AudioOnly key={id} room={room} identity={id} version={version} />
+          ))}
       </div>
       {shares.length > 0 && (
         <div className="flex flex-row gap-2">

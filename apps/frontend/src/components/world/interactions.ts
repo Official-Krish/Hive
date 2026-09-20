@@ -8,6 +8,9 @@ import {
   WATER_COOLER,
   WALL_ART,
   GALLERY_FRAMES,
+  PODIUM_MIC,
+  L2_Y,
+  PODIUM_STAGE,
 } from "./office/layout";
 import { KIT_YAW } from "./office/kitManifest";
 import type { TransformData } from "./InstancedFurniture";
@@ -25,7 +28,8 @@ export type InteractableKind =
   | "fleet"
   | "reviewer-console"
   | "poster"
-  | "gallery";
+  | "gallery"
+  | "podium";
 
 export type InteractableIcon =
   | "coffee"
@@ -38,7 +42,8 @@ export type InteractableIcon =
   | "vending"
   | "reviewer"
   | "fleet"
-  | "art";
+  | "art"
+  | "mic";
 
 export interface Interactable {
   id: string;
@@ -290,6 +295,17 @@ export const INTERACTABLES: Interactable[] = [
     };
   }),
   ...monitorSpots(),
+  // Podium Room mic claim — stand on the stage circle, press E.
+  {
+    id: "podium-mic",
+    kind: "podium" as const,
+    x: PODIUM_MIC.x,
+    z: PODIUM_MIC.z + 0.9,
+    y: L2_Y + PODIUM_STAGE.h,
+    radius: 2.4,
+    prompt: "Take the mic",
+    icon: "mic",
+  },
 ];
 
 export function interactableById(id: string): Interactable | undefined {
