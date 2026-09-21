@@ -394,6 +394,13 @@ export const realtimeEventSchema = z.discriminatedUnion("type", [
     timestamp: z.number(),
   }),
   z.object({
+    type: z.literal("podium.screen.state"),
+    workspaceId: z.string(),
+    url: z.string().url().max(2048).nullable(),
+    setBy: z.string().nullable(),
+    timestamp: z.number(),
+  }),
+  z.object({
     type: z.literal("gallery.updated"),
     workspaceId: z.string(),
     frameId: z.string().min(1).max(40),
@@ -588,6 +595,16 @@ export const realtimeClientMessageSchema = z.discriminatedUnion("type", [
   }),
   z.object({
     type: z.literal("podium.state.request"),
+  }),
+  z.object({
+    type: z.literal("podium.screen.set"),
+    url: z.string().url().max(2048),
+  }),
+  z.object({
+    type: z.literal("podium.screen.clear"),
+  }),
+  z.object({
+    type: z.literal("podium.screen.state.request"),
   }),
   z.object({
     type: z.literal("social.wave"),

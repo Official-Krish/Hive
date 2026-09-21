@@ -11,6 +11,7 @@ import {
   PODIUM_MIC,
   L2_Y,
   PODIUM_STAGE,
+  PODIUM_SCREEN_SPOT,
 } from "./office/layout";
 import { KIT_YAW } from "./office/kitManifest";
 import type { TransformData } from "./InstancedFurniture";
@@ -29,7 +30,8 @@ export type InteractableKind =
   | "reviewer-console"
   | "poster"
   | "gallery"
-  | "podium";
+  | "podium"
+  | "podium-screen";
 
 export type InteractableIcon =
   | "coffee"
@@ -305,6 +307,17 @@ export const INTERACTABLES: Interactable[] = [
     radius: 2.4,
     prompt: "Take the mic",
     icon: "mic",
+  },
+  // Podium Room wall screen — stand on the open floor, press E to present.
+  {
+    id: "podium-screen",
+    kind: "podium-screen" as const,
+    x: PODIUM_SCREEN_SPOT.x,
+    z: PODIUM_SCREEN_SPOT.z,
+    y: L2_Y,
+    radius: 3.2,
+    prompt: "Wall screen",
+    icon: "monitor",
   },
 ];
 

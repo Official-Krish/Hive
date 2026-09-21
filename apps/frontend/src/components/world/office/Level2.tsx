@@ -15,7 +15,7 @@ import {
   POD_TABLES,
   PODIUM_STAGE,
   PODIUM_MIC,
-  PODIUM_BENCHES,
+  PODIUM_SCREEN,
   L2_DESKS,
   L2_DESK_CHAIRS,
   L2_MONITORS,
@@ -404,7 +404,7 @@ export function Level2() {
         />
       ))}
 
-      {/* --- Podium Room: stage, mic stand, audience benches -------------- */}
+      {/* --- Podium Room: big stage + mic stand (open standing floor) ---- */}
       <group name="podium-room">
         {/* Stage platform (walkable — see DECKS) + front fascia light */}
         <mesh
@@ -437,11 +437,37 @@ export function Level2() {
           />
           <primitive object={M.stripWarm} attach="material" />
         </mesh>
-        {/* Dark backdrop behind the stage so the speaker reads on camera */}
-        <mesh position={[17, L2_Y + 1.5, 11.44]} castShadow>
-          <boxGeometry args={[8.4, 3.0, 0.08]} />
-          <primitive object={M.featureWall} attach="material" />
-        </mesh>
+        {/* Full-wall screen behind the stage — bezel + idle face. Live
+          content (any shared URL) is a DOM surface projected onto this same
+          geometry (see PodiumScreenProjection). Faces the audience (-Z). */}
+        <group
+          position={[PODIUM_SCREEN.x, PODIUM_SCREEN.y, PODIUM_SCREEN.z]}
+          rotation={PODIUM_SCREEN.rotation}
+        >
+          {/* warm halo spilling around the bezel */}
+          <mesh position={[0, 0, -0.07]}>
+            <planeGeometry
+              args={[PODIUM_SCREEN.w + 0.8, PODIUM_SCREEN.h + 0.8]}
+            />
+            <meshStandardMaterial
+              color="#0b0b10"
+              emissive="#f59e0b"
+              emissiveIntensity={0.9}
+              roughness={0.6}
+            />
+          </mesh>
+          <mesh castShadow>
+            <boxGeometry
+              args={[PODIUM_SCREEN.w + 0.14, PODIUM_SCREEN.h + 0.14, 0.12]}
+            />
+            <primitive object={M.tvBezel} attach="material" />
+          </mesh>
+          {/* idle face — dark so the speaker reads on camera when empty */}
+          <mesh position={[0, 0, 0.065]}>
+            <planeGeometry args={[PODIUM_SCREEN.w, PODIUM_SCREEN.h]} />
+            <primitive object={M.tvB} attach="material" />
+          </mesh>
+        </group>
         {/* Mic stand: base disc, pole, head */}
         <group position={[PODIUM_MIC.x, L2_Y + PODIUM_STAGE.h, PODIUM_MIC.z]}>
           <mesh position={[0, 0.02, 0]} receiveShadow>
@@ -457,21 +483,6 @@ export function Level2() {
             <primitive object={M.blackAnodized} attach="material" />
           </mesh>
         </group>
-        {/* Audience benches facing the stage */}
-        {PODIUM_BENCHES.map((b, i) => (
-          <group key={i} position={[b.x, L2_Y, b.z]}>
-            <mesh position={[0, 0.28, 0]} castShadow receiveShadow>
-              <boxGeometry args={[b.w, 0.09, 0.55]} />
-              <primitive object={M.oak} attach="material" />
-            </mesh>
-            {[-b.w / 2 + 0.25, b.w / 2 - 0.25].map((dx, k) => (
-              <mesh key={k} position={[dx, 0.14, 0]} castShadow>
-                <boxGeometry args={[0.09, 0.28, 0.5]} />
-                <primitive object={M.blackAnodized} attach="material" />
-              </mesh>
-            ))}
-          </group>
-        ))}
       </group>
 
       {/* --- Open plan + breakout ------------------------------------------ */}

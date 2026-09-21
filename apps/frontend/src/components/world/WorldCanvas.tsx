@@ -49,6 +49,7 @@ import { useInteractions } from "@/hooks/useInteractions";
 import { useFocusRoom } from "@/hooks/useFocusRoom";
 import { usePairSession } from "@/hooks/usePairSession";
 import { usePodium } from "@/hooks/usePodium";
+import { usePodiumScreen } from "@/hooks/usePodiumScreen";
 import { useGameSession } from "@/hooks/useGameSession";
 import { REVIEWER_BOT_ID, useReviewerBot } from "@/hooks/useReviewerBot";
 import { http } from "@/lib/http";
@@ -74,6 +75,8 @@ import { STATUS_DOT, WorldTip, statusLabel, useDismiss } from "./chrome";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useChillMedia } from "@/hooks/useChillMedia";
 import { ChillScreenProjection } from "./ChillScreenProjection";
+import { PodiumScreenProjection } from "./PodiumScreenProjection";
+import { PodiumScreenModal } from "./PodiumScreenModal";
 import { ChillScreenModal } from "./ChillScreenModal";
 import { GamesModal } from "./GamesModal";
 import { FleetModal } from "./FleetModal";
@@ -586,6 +589,7 @@ export function WorldCanvas({
   });
   const podiumRef = useRef(podium);
   podiumRef.current = podium;
+  const podiumScreen = usePodiumScreen(client);
   const call = useLiveKitCall(workspaceId, myUserId, nearIds, onlineCount, {
     volumePeers: focus.allowedPeers,
     // The podium speaker hears nobody (stage isolation); focus mute as before.
@@ -857,6 +861,7 @@ export function WorldCanvas({
   );
   const [whiteboardId, setWhiteboardId] = useState<string | null>(null);
   const [chillScreenOpen, setChillScreenOpen] = useState(false);
+  const [podiumScreenOpen, setPodiumScreenOpen] = useState(false);
   const [gamesOpen, setGamesOpen] = useState(false);
   const [vendingOpen, setVendingOpen] = useState(false);
   const [reviewerOpen, setReviewerOpen] = useState(false);
@@ -994,6 +999,7 @@ export function WorldCanvas({
     workspaceOpen ||
     ciOpen ||
     chillScreenOpen ||
+    podiumScreenOpen ||
     gamesOpen ||
     vendingOpen ||
     reviewerOpen ||
@@ -1010,6 +1016,7 @@ export function WorldCanvas({
     workspaceOpen ||
     ciOpen ||
     chillScreenOpen ||
+    podiumScreenOpen ||
     gamesOpen ||
     vendingOpen ||
     reviewerOpen ||
@@ -1044,6 +1051,15 @@ export function WorldCanvas({
 
   const handleInteract = useCallback(
     (it: Interactable) => {
+      // Matches the pill filter below: inside the Podium Room only the mic
+      // and the wall screen answer E.
+      if (
+        podium.inPodiumRoom &&
+        it.kind !== "podium" &&
+        it.kind !== "podium-screen"
+      ) {
+        return;
+      }
       switch (it.kind) {
         case "coffee": {
           setCoffeeActive(true);
@@ -1076,6 +1092,9 @@ export function WorldCanvas({
           break;
         case "chill-screen":
           setChillScreenOpen(true);
+          break;
+        case "podium-screen":
+          setPodiumScreenOpen(true);
           break;
         case "arcade":
           setGamesOpen(true);
@@ -1123,7 +1142,15 @@ export function WorldCanvas({
         }
       }
     },
-    [client, currentRoom, myUserId, addBubble, pushFeed, showToast],
+    [
+      client,
+      currentRoom,
+      myUserId,
+      addBubble,
+      pushFeed,
+      showToast,
+      podium.inPodiumRoom,
+    ],
   );
 
   const interaction = useInteractions({
@@ -1131,6 +1158,26 @@ export function WorldCanvas({
     blocked: anyOverlayOpen,
     onPress: handleInteract,
   });
+
+  // Inside the Podium Room only the mic + wall screen answer E, and the
+  // sit prompt stays hidden — the room is standing-only by design.
+  const nearVisible =
+    interaction.near &&
+    (!podium.inPodiumRoom ||
+      interaction.near.kind === "podium" ||
+      interaction.near.kind === "podium-screen")
+      ? interaction.near
+      : null;
+  const sitVisible = nearChair && !podium.inPodiumRoom;
+  // The mic pill follows the mic: take it, step down, or listen in.
+  const nearPrompt =
+    nearVisible?.kind === "podium"
+      ? podium.isSpeaker
+        ? "Step down from the mic"
+        : podium.holderId
+          ? "Mic is taken — listen in"
+          : "Take the mic"
+      : (nearVisible?.prompt ?? "");
 
   useEffect(() => {
     if (!client) return;
@@ -1889,25 +1936,26 @@ export function WorldCanvas({
           !whiteboardId &&
           !posterArt &&
           !galleryFrameOpen &&
-          (interaction.near || nearChair) && (
+          !podiumScreenOpen &&
+          (nearVisible || sitVisible) && (
             <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 flex -translate-x-1/2 items-center gap-2">
-              {interaction.near &&
+              {nearVisible &&
                 (() => {
-                  const Icon = INTERACTABLE_ICONS[interaction.near.icon];
+                  const Icon = INTERACTABLE_ICONS[nearVisible.icon];
                   return (
                     <WToast id="interact" tone="neutral">
                       <button
                         type="button"
                         onClick={() => interaction.press()}
                         className="flex cursor-pointer items-center gap-2"
-                        aria-label={`Interact: ${interaction.near.prompt}`}
+                        aria-label={`Interact: ${nearPrompt}`}
                       >
                         <kbd className="rounded-md bg-white px-1.5 py-0.5 font-mono text-[10px] font-semibold text-neutral-800 ring-1 ring-black/[0.09]">
                           E
                         </kbd>
                         <Icon className="size-3.5 shrink-0 text-neutral-700" />
                         <span className="text-[12px] font-semibold text-neutral-800">
-                          {interaction.near.prompt}
+                          {nearPrompt}
                         </span>
                       </button>
                     </WToast>
@@ -1916,7 +1964,7 @@ export function WorldCanvas({
               {/* Sit pill shows alongside (not instead of) the E pill — every
               chair sits inside a monitor spot's radius, so gating on
               !interaction.near hid it exactly when it was relevant. */}
-              {nearChair && (
+              {sitVisible && (
                 <WToast key="sit" id="sit" tone="neutral">
                   <button
                     type="button"
@@ -1942,6 +1990,7 @@ export function WorldCanvas({
           !whiteboardId &&
           !posterArt &&
           !galleryFrameOpen &&
+          !podiumScreenOpen &&
           toasts.length > 0 && (
             <WToastStack>
               {toasts.map((t) => (
@@ -2320,6 +2369,11 @@ export function WorldCanvas({
             active={!!chill.state.videoId && currentRoom === "Chill Space"}
             mounted={!!chill.state.videoId}
           />
+          {/* Podium wall screen — a DOM surface like the chill TV, visible
+            only while the local player is in the Podium Room. */}
+          {podium.inPodiumRoom && (
+            <PodiumScreenProjection url={podiumScreen.url} />
+          )}
 
           <PlayerController
             playerRef={playerGroupRef}
@@ -2461,6 +2515,23 @@ export function WorldCanvas({
               queue={chill.queue}
               currentItemId={chill.currentItemId}
               onClose={() => setChillScreenOpen(false)}
+            />
+          )}
+        </AnimatePresence>
+        {/* Podium Room wall screen */}
+        <AnimatePresence>
+          {podiumScreenOpen && (
+            <PodiumScreenModal
+              url={podiumScreen.url}
+              setByName={
+                podiumScreen.setBy
+                  ? (avatars.get(podiumScreen.setBy)?.name ??
+                    podiumScreen.setBy)
+                  : null
+              }
+              onSet={(url) => podiumScreen.setUrl(url)}
+              onClear={() => podiumScreen.clear()}
+              onClose={() => setPodiumScreenOpen(false)}
             />
           )}
         </AnimatePresence>

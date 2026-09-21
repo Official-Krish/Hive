@@ -34,6 +34,12 @@ type ClientData = RealtimeClientData | DeviceSocketData;
 type Socket = Bun.ServerWebSocket<ClientData>;
 type WsServer = Bun.Server<ClientData>;
 
+/** What's showing on a workspace's podium wall screen (in-memory). */
+interface PodiumScreenState {
+  url: string;
+  setBy: string;
+}
+
 const WS_PATH = "/ws";
 const DEVICE_WS_PATH = "/ws/device";
 
@@ -59,6 +65,9 @@ export class RealtimeHub {
   /** Podium mic holder per workspace (single speaker). In-memory; a restart
    *  (or holder disconnect) releases the mic. */
   private readonly podiumHolder = new Map<string, string>();
+  /** Podium wall-screen URL per workspace. In-memory like the gallery; anyone
+   *  can set/clear it, and it survives disconnects (cleared on restart). */
+  private readonly podiumScreen = new Map<string, PodiumScreenState>();
   private server: WsServer | null = null;
 
   constructor(private readonly options: RealtimeHubOptions) {}
@@ -639,6 +648,45 @@ export class RealtimeHub {
           type: "podium.state",
           workspaceId,
           holderId: this.podiumHolder.get(workspaceId) ?? null,
+          timestamp,
+        };
+        ws.send(JSON.stringify(state));
+        break;
+      }
+      case "podium.screen.set": {
+        this.podiumScreen.set(workspaceId, {
+          url: parsed.url,
+          setBy: client.userId,
+        });
+        const updated: RealtimeEvent = {
+          type: "podium.screen.state",
+          workspaceId,
+          url: parsed.url,
+          setBy: client.userId,
+          timestamp,
+        };
+        this.publishToWorkspace(workspaceId, updated);
+        break;
+      }
+      case "podium.screen.clear": {
+        this.podiumScreen.delete(workspaceId);
+        const cleared: RealtimeEvent = {
+          type: "podium.screen.state",
+          workspaceId,
+          url: null,
+          setBy: null,
+          timestamp,
+        };
+        this.publishToWorkspace(workspaceId, cleared);
+        break;
+      }
+      case "podium.screen.state.request": {
+        const current = this.podiumScreen.get(workspaceId);
+        const state: RealtimeEvent = {
+          type: "podium.screen.state",
+          workspaceId,
+          url: current?.url ?? null,
+          setBy: current?.setBy ?? null,
           timestamp,
         };
         ws.send(JSON.stringify(state));
