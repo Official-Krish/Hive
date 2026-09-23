@@ -199,6 +199,35 @@ export interface Ramp {
  * Every flat surface the player can stand on above the ground plane. Level 1
  * is implicit (y = 0 everywhere), so this only lists the upper deck.
  */
+/** Podium Room stage platform + mic spot (level 2, east bay). Declared
+ *  before DECKS (which references the stage) to avoid a TDZ trap.
+ *  Big town-hall stage — the audience stands on the open floor (no fixed
+ *  seating) so panels and crowds both fit. */
+export const PODIUM_STAGE = {
+  x0: 7,
+  x1: 29,
+  z0: 8.5,
+  z1: 11.5,
+  h: 0.45,
+};
+/** Claim circle on the stage — stand here and press E to take the mic. */
+export const PODIUM_MIC = { x: 18, z: 10.0, r: 1.4 };
+/**
+ * Full-wall screen behind the stage: anyone can put a URL up (photo, video,
+ * any embeddable page) and the whole room sees it. Faces north (-Z) into the
+ * audience. Pixel surface is 100px per metre (see PodiumScreenProjection).
+ */
+export const PODIUM_SCREEN = {
+  x: 18,
+  y: L2_Y + 2.6,
+  z: 11.68,
+  w: 20,
+  h: 4,
+  rotation: [0, Math.PI, 0] as [number, number, number],
+};
+/** Standing point in front of the stage for the wall-screen E prompt. */
+export const PODIUM_SCREEN_SPOT = { x: 18, z: 7.2 };
+
 export const DECKS: Deck[] = [
   // Full upper floor over both wings + the corridor.
   { x0: minX, x1: maxX, z0: minZ, z1: MEZZ.z0, y: L2_Y },
@@ -211,6 +240,14 @@ export const DECKS: Deck[] = [
     z0: STAIR_LANDING.z0,
     z1: STAIR_LANDING.z1,
     y: L2_Y,
+  },
+  // Podium stage platform (walkable step, 0.45 < STEP_UP).
+  {
+    x0: PODIUM_STAGE.x0,
+    x1: PODIUM_STAGE.x1,
+    z0: PODIUM_STAGE.z0,
+    z1: PODIUM_STAGE.z1,
+    y: L2_Y + PODIUM_STAGE.h,
   },
 ];
 
@@ -304,7 +341,7 @@ export const STAIR_GUARDS: Wall[] = [
 // leadership suite (manager offices, corner office, boardroom).
 // ============================================================================
 export type PodKind =
-  "manager" | "corner" | "board" | "huddle" | "focus" | "pair";
+  "manager" | "corner" | "board" | "huddle" | "focus" | "pair" | "podium";
 
 export interface Pod {
   id: string;
@@ -418,6 +455,15 @@ export const PODS: Pod[] = [
     door: { side: "w", at: -5.6, width: 1.1 },
     kind: "huddle",
     accent: "#a78bfa",
+  },
+  {
+    id: "podium",
+    name: "Podium Room",
+    level: 2,
+    rect: [5.0, 32.0, 0.0, 11.8],
+    door: { side: "n", at: 18.0, width: 2.4 },
+    kind: "podium",
+    accent: "#fbbf24",
   },
 ];
 
@@ -1388,12 +1434,8 @@ export const L2_DESKS: TransformData[] = (() => {
   [-10.4].forEach(() =>
     [9, 13, 17, 21, 25, 29].forEach((x) => push(x, -10.4, 0)),
   );
-  // East wing, south open bay.
-  [1.5, 5].forEach((z, r) =>
-    [9, 13, 17, 21, 25, 29].forEach((x) =>
-      push(x, z, r % 2 === 0 ? 0 : Math.PI),
-    ),
-  );
+  // East wing, south bay: no open desks — this side holds only the
+  // private pods and the Podium Room (open standing floor throughout).
   return out;
 })();
 
@@ -1468,7 +1510,7 @@ export const L2_PLANTS: TransformData[] = [
   { position: [-4.9, L2_Y, 14.6] },
   { position: [4.9, L2_Y, 14.6] },
   { position: [-33, L2_Y, 10.6] },
-  { position: [33, L2_Y, 10.6] },
+  { position: [33, L2_Y, 4] },
   { position: [-5.2, L2_Y, -1] },
   { position: [5.2, L2_Y, -1] },
   { position: [33, L2_Y, -10.4] },
@@ -1483,8 +1525,6 @@ export const CEILING_RUNS_L2: CeilingRun[] = [
   { position: [-20, CY2, 8], length: 26, axis: "x", warm: false },
   { position: [0, CY2, -4], length: 30, axis: "z", warm: false },
   { position: [19, CY2, -10.4], length: 28, axis: "x", warm: false },
-  { position: [19, CY2, 1.5], length: 28, axis: "x", warm: true },
-  { position: [19, CY2, 5], length: 28, axis: "x", warm: true },
   { position: [0, CY2, 14], length: 64, axis: "x", warm: true },
 ];
 
@@ -1493,10 +1533,18 @@ export const POD_LIGHTS: { position: Vec3; length: number; warm: boolean }[] =
   PODS.map((p) => {
     const [x0, x1, z0, z1] = p.rect;
     const base = p.level === 2 ? L2_Y : 0;
+    // The podium hall is open to the level-2 ceiling (no pod top), so its
+    // strip mounts flush like the other L2 ceiling runs instead of floating
+    // at glass height.
+    const top = p.kind === "podium" ? CY2 : base + POD_H - 0.12;
     return {
-      position: [(x0 + x1) / 2, base + POD_H - 0.12, (z0 + z1) / 2],
+      position: [(x0 + x1) / 2, top, (z0 + z1) / 2],
       length: Math.max(1.2, (x1 - x0) * 0.7),
-      warm: p.kind === "corner" || p.kind === "huddle" || p.kind === "pair",
+      warm:
+        p.kind === "corner" ||
+        p.kind === "huddle" ||
+        p.kind === "pair" ||
+        p.kind === "podium",
     };
   });
 
@@ -1676,6 +1724,9 @@ export const PLAYER_COLLIDERS: AABB[] = [
   ...fridgeBoxes,
   ...coolerBoxes,
   ...podTableBoxes,
+  // Podium Room: mic stand only (stage itself stays walkable; the open
+  // floor in front is standing room — no fixed seating).
+  rect(PODIUM_MIC.x, PODIUM_MIC.z, 0.09, 0.09, L2_Y, L2_Y + 2.0),
   ...propBoxes(MEETING_TABLES, 1.5, 2.5),
   ...propBoxes(DESKS, 1.0, 0.55),
   ...propBoxes(LOUNGE_TABLES, 0.8, 0.5),

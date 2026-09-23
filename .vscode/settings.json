@@ -1,0 +1,7 @@
+{
+  "rust-analyzer.linkedProjects": ["apps/collector/Cargo.toml"],
+  "rust-analyzer.cargo.allTargets": true,
+  "rust-analyzer.check.enable": true,
+  "rust-analyzer.check.command": "clippy",
+  "rust-analyzer.diagnostics.enable": true
+}

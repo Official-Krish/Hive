@@ -424,6 +424,109 @@ describe("realtime hub", () => {
     }
   });
 
+  test("claims, contests, and releases the podium mic", async () => {
+    const { socket: a, userId: aliceId } = await connect("Alice", workspaceId);
+    const { socket: b, userId: bobId } = await connect("Bob", workspaceId);
+    try {
+      // Late joiners sync the current holder on demand.
+      b.send({ type: "podium.state.request" });
+      const empty = await b.waitFor("podium.state");
+      expect(empty.holderId).toBeNull();
+
+      // First claim wins; a contested claim re-broadcasts the holder.
+      b.send({ type: "podium.claim" });
+      const claimed = await a.waitFor(
+        "podium.state",
+        (e) => e.holderId === bobId,
+      );
+      expect(claimed.holderId).toBe(bobId);
+
+      a.send({ type: "podium.claim" });
+      const contested = await b.waitFor(
+        "podium.state",
+        (e) => e.holderId === bobId,
+      );
+      expect(contested.holderId).toBe(bobId);
+
+      // Only the holder can release.
+      a.send({ type: "podium.release" });
+      b.send({ type: "podium.release" });
+      const released = await a.waitFor(
+        "podium.state",
+        (e) => e.holderId === null,
+      );
+      expect(released.holderId).toBeNull();
+      void aliceId;
+    } finally {
+      a.close();
+      b.close();
+      await a.waitClose();
+      await b.waitClose();
+    }
+  });
+
+  test("departing mic holder releases the podium", async () => {
+    const { socket: a } = await connect("Alice", workspaceId);
+    const { socket: b, userId: bobId } = await connect("Bob", workspaceId);
+    try {
+      b.send({ type: "podium.claim" });
+      await a.waitFor("podium.state", (e) => e.holderId === bobId);
+      b.close();
+      await b.waitClose();
+      const released = await a.waitFor(
+        "podium.state",
+        (e) => e.holderId === null,
+      );
+      expect(released.holderId).toBeNull();
+    } finally {
+      a.close();
+      await a.waitClose();
+    }
+  });
+
+  test("sets, syncs, and clears the podium wall screen", async () => {
+    const { socket: a, userId: aliceId } = await connect("Alice", workspaceId);
+    const { socket: b, userId: bobId } = await connect("Bob", workspaceId);
+    try {
+      // Late joiners sync the current screen on demand (idle at first).
+      b.send({ type: "podium.screen.state.request" });
+      const empty = await b.waitFor("podium.screen.state");
+      expect(empty.url).toBeNull();
+
+      // Anyone can put a URL up; everyone sees it with the setter.
+      const url = "https://example.com/deck";
+      b.send({ type: "podium.screen.set", url });
+      const updated = await a.waitFor(
+        "podium.screen.state",
+        (e) => e.url === url,
+      );
+      expect(updated.setBy).toBe(bobId);
+
+      // A newcomer syncs the live URL (not idle).
+      b.send({ type: "podium.screen.state.request" });
+      const synced = await b.waitFor(
+        "podium.screen.state",
+        (e) => e.url === url,
+      );
+      expect(synced.setBy).toBe(bobId);
+
+      // Anyone can clear it again.
+      a.send({ type: "podium.screen.clear" });
+      const cleared = await b.waitFor(
+        "podium.screen.state",
+        (e) => e.url === null,
+      );
+      expect(cleared.url).toBeNull();
+      expect(cleared.setBy).toBeNull();
+      void aliceId;
+    } finally {
+      a.close();
+      b.close();
+      await a.waitClose();
+      await b.waitClose();
+    }
+  });
+
   test("broadcasts presence.changed offline when a peer disconnects", async () => {
     const { socket: a } = await connect("Alice", workspaceId);
     const { socket: b, userId: bobId } = await connect("Bob", workspaceId);

@@ -34,6 +34,12 @@ type ClientData = RealtimeClientData | DeviceSocketData;
 type Socket = Bun.ServerWebSocket<ClientData>;
 type WsServer = Bun.Server<ClientData>;
 
+/** What's showing on a workspace's podium wall screen (in-memory). */
+interface PodiumScreenState {
+  url: string;
+  setBy: string;
+}
+
 const WS_PATH = "/ws";
 const DEVICE_WS_PATH = "/ws/device";
 
@@ -56,6 +62,12 @@ export class RealtimeHub {
   /** Community gallery frames: workspaceId → frameId → imageUrl. In-memory
    *  like whiteboard history — anyone can set/clear any frame. */
   private readonly gallery = new Map<string, Map<string, string>>();
+  /** Podium mic holder per workspace (single speaker). In-memory; a restart
+   *  (or holder disconnect) releases the mic. */
+  private readonly podiumHolder = new Map<string, string>();
+  /** Podium wall-screen URL per workspace. In-memory like the gallery; anyone
+   *  can set/clear it, and it survives disconnects (cleared on restart). */
+  private readonly podiumScreen = new Map<string, PodiumScreenState>();
   private server: WsServer | null = null;
 
   constructor(private readonly options: RealtimeHubOptions) {}
@@ -604,6 +616,82 @@ export class RealtimeHub {
         ws.send(JSON.stringify(event));
         break;
       }
+      case "podium.claim": {
+        // First come, first served — a held mic rejects the claim.
+        if (!this.podiumHolder.has(workspaceId)) {
+          this.podiumHolder.set(workspaceId, client.userId);
+        }
+        const claimed: RealtimeEvent = {
+          type: "podium.state",
+          workspaceId,
+          holderId: this.podiumHolder.get(workspaceId) ?? null,
+          timestamp,
+        };
+        this.publishToWorkspace(workspaceId, claimed);
+        break;
+      }
+      case "podium.release": {
+        if (this.podiumHolder.get(workspaceId) === client.userId) {
+          this.podiumHolder.delete(workspaceId);
+          const released: RealtimeEvent = {
+            type: "podium.state",
+            workspaceId,
+            holderId: null,
+            timestamp,
+          };
+          this.publishToWorkspace(workspaceId, released);
+        }
+        break;
+      }
+      case "podium.state.request": {
+        const state: RealtimeEvent = {
+          type: "podium.state",
+          workspaceId,
+          holderId: this.podiumHolder.get(workspaceId) ?? null,
+          timestamp,
+        };
+        ws.send(JSON.stringify(state));
+        break;
+      }
+      case "podium.screen.set": {
+        this.podiumScreen.set(workspaceId, {
+          url: parsed.url,
+          setBy: client.userId,
+        });
+        const updated: RealtimeEvent = {
+          type: "podium.screen.state",
+          workspaceId,
+          url: parsed.url,
+          setBy: client.userId,
+          timestamp,
+        };
+        this.publishToWorkspace(workspaceId, updated);
+        break;
+      }
+      case "podium.screen.clear": {
+        this.podiumScreen.delete(workspaceId);
+        const cleared: RealtimeEvent = {
+          type: "podium.screen.state",
+          workspaceId,
+          url: null,
+          setBy: null,
+          timestamp,
+        };
+        this.publishToWorkspace(workspaceId, cleared);
+        break;
+      }
+      case "podium.screen.state.request": {
+        const current = this.podiumScreen.get(workspaceId);
+        const state: RealtimeEvent = {
+          type: "podium.screen.state",
+          workspaceId,
+          url: current?.url ?? null,
+          setBy: current?.setBy ?? null,
+          timestamp,
+        };
+        ws.send(JSON.stringify(state));
+        break;
+      }
       case "focus.invite": {
         const event: RealtimeEvent = {
           type: "focus.invite",
@@ -865,6 +953,17 @@ export class RealtimeHub {
         timestamp: Date.now(),
       };
       this.publishToWorkspace(client.workspaceId, event);
+      // A departing mic holder releases the podium for everyone else.
+      if (this.podiumHolder.get(client.workspaceId) === client.userId) {
+        this.podiumHolder.delete(client.workspaceId);
+        const released: RealtimeEvent = {
+          type: "podium.state",
+          workspaceId: client.workspaceId,
+          holderId: null,
+          timestamp: Date.now(),
+        };
+        this.publishToWorkspace(client.workspaceId, released);
+      }
     } catch (err) {
       console.error(
         `[hive] realtime close failed for user ${client.userId}`,

@@ -48,6 +48,8 @@ import { useNearbyTokens } from "@/hooks/useNearbyTokens";
 import { useInteractions } from "@/hooks/useInteractions";
 import { useFocusRoom } from "@/hooks/useFocusRoom";
 import { usePairSession } from "@/hooks/usePairSession";
+import { usePodium } from "@/hooks/usePodium";
+import { usePodiumScreen } from "@/hooks/usePodiumScreen";
 import { useGameSession } from "@/hooks/useGameSession";
 import { REVIEWER_BOT_ID, useReviewerBot } from "@/hooks/useReviewerBot";
 import { http } from "@/lib/http";
@@ -73,6 +75,8 @@ import { STATUS_DOT, WorldTip, statusLabel, useDismiss } from "./chrome";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useChillMedia } from "@/hooks/useChillMedia";
 import { ChillScreenProjection } from "./ChillScreenProjection";
+import { PodiumScreenProjection } from "./PodiumScreenProjection";
+import { PodiumScreenModal } from "./PodiumScreenModal";
 import { ChillScreenModal } from "./ChillScreenModal";
 import { GamesModal } from "./GamesModal";
 import { FleetModal } from "./FleetModal";
@@ -103,6 +107,7 @@ import {
   Gauge,
   KeyRound,
   Megaphone,
+  Mic,
   Monitor,
   PenLine,
   SearchCheck,
@@ -146,6 +151,7 @@ const INTERACTABLE_ICONS: Record<InteractableIcon, LucideIcon> = {
   reviewer: SearchCheck,
   fleet: Server,
   art: Frame,
+  mic: Mic,
 };
 
 /* r3f v9.7 `events.connect(target)` can fire with a null container during a
@@ -568,11 +574,30 @@ export function WorldCanvas({
     vending.dismissReveal();
     setVendingOpen(false);
   }, [vending.dismissReveal]);
+
+  // Player world position (feet height included) for proximity interactions.
+  const [playerPos, setPlayerPos] = useState<[number, number, number]>([
+    SPAWN[0],
+    SPAWN[1],
+    SPAWN[2],
+  ]);
+  const podium = usePodium({
+    myUserId,
+    currentRoom,
+    client,
+    playerPos,
+  });
+  const podiumRef = useRef(podium);
+  podiumRef.current = podium;
+  const podiumScreen = usePodiumScreen(client);
   const call = useLiveKitCall(workspaceId, myUserId, nearIds, onlineCount, {
     volumePeers: focus.allowedPeers,
-    muteRemote: focus.inFocus,
+    // The podium speaker hears nobody (stage isolation); focus mute as before.
+    muteRemote: focus.inFocus || podium.isSpeaker,
     suppressPublish: focus.inFocus && !focus.partnerId,
-    forcePublish: pair.active !== null,
+    forcePublish: pair.active !== null || podium.isSpeaker,
+    // Audience cameras stay off in the podium room (mic follows proximity).
+    suppressCamera: podium.inPodiumRoom && !podium.isSpeaker,
   });
   const nearbyTokens = useNearbyTokens(workspaceId, client, nearIds);
   const chat = useChat(workspaceId, myUserId, client, chatOpen);
@@ -793,12 +818,6 @@ export function WorldCanvas({
     [bumpBubbles, reviewer.bubble],
   );
 
-  // Player world position (feet height included) for proximity interactions.
-  const [playerPos, setPlayerPos] = useState<[number, number, number]>([
-    SPAWN[0],
-    SPAWN[1],
-    SPAWN[2],
-  ]);
   const [coffeeActive, setCoffeeActive] = useState(false);
   const [sitting, setSitting] = useState(false);
   const sitToggleRef = useRef<(() => void) | null>(null);
@@ -842,6 +861,7 @@ export function WorldCanvas({
   );
   const [whiteboardId, setWhiteboardId] = useState<string | null>(null);
   const [chillScreenOpen, setChillScreenOpen] = useState(false);
+  const [podiumScreenOpen, setPodiumScreenOpen] = useState(false);
   const [gamesOpen, setGamesOpen] = useState(false);
   const [vendingOpen, setVendingOpen] = useState(false);
   const [reviewerOpen, setReviewerOpen] = useState(false);
@@ -979,6 +999,7 @@ export function WorldCanvas({
     workspaceOpen ||
     ciOpen ||
     chillScreenOpen ||
+    podiumScreenOpen ||
     gamesOpen ||
     vendingOpen ||
     reviewerOpen ||
@@ -995,6 +1016,7 @@ export function WorldCanvas({
     workspaceOpen ||
     ciOpen ||
     chillScreenOpen ||
+    podiumScreenOpen ||
     gamesOpen ||
     vendingOpen ||
     reviewerOpen ||
@@ -1029,6 +1051,15 @@ export function WorldCanvas({
 
   const handleInteract = useCallback(
     (it: Interactable) => {
+      // Matches the pill filter below: inside the Podium Room only the mic
+      // and the wall screen answer E.
+      if (
+        podium.inPodiumRoom &&
+        it.kind !== "podium" &&
+        it.kind !== "podium-screen"
+      ) {
+        return;
+      }
       switch (it.kind) {
         case "coffee": {
           setCoffeeActive(true);
@@ -1062,6 +1093,9 @@ export function WorldCanvas({
         case "chill-screen":
           setChillScreenOpen(true);
           break;
+        case "podium-screen":
+          setPodiumScreenOpen(true);
+          break;
         case "arcade":
           setGamesOpen(true);
           break;
@@ -1080,6 +1114,22 @@ export function WorldCanvas({
         case "whiteboard":
           setWhiteboardId(it.id);
           break;
+        case "podium": {
+          const pd = podiumRef.current;
+          if (pd.isSpeaker) {
+            pd.release();
+            showToast("Mic released");
+          } else if (pd.holderId) {
+            showToast(
+              `${avatarsRef.current.get(pd.holderId)?.name ?? "Someone"} has the mic — listen in`,
+            );
+          } else if (!pd.onMic) {
+            showToast("Step onto the stage circle to take the mic");
+          } else {
+            pd.claim();
+          }
+          break;
+        }
         case "poster": {
           const art = WALL_ART.find((a) => `poster-${a.artId}` === it.id);
           if (art) setPosterArt(art);
@@ -1092,7 +1142,15 @@ export function WorldCanvas({
         }
       }
     },
-    [client, currentRoom, myUserId, addBubble, pushFeed, showToast],
+    [
+      client,
+      currentRoom,
+      myUserId,
+      addBubble,
+      pushFeed,
+      showToast,
+      podium.inPodiumRoom,
+    ],
   );
 
   const interaction = useInteractions({
@@ -1100,6 +1158,26 @@ export function WorldCanvas({
     blocked: anyOverlayOpen,
     onPress: handleInteract,
   });
+
+  // Inside the Podium Room only the mic + wall screen answer E, and the
+  // sit prompt stays hidden — the room is standing-only by design.
+  const nearVisible =
+    interaction.near &&
+    (!podium.inPodiumRoom ||
+      interaction.near.kind === "podium" ||
+      interaction.near.kind === "podium-screen")
+      ? interaction.near
+      : null;
+  const sitVisible = nearChair && !podium.inPodiumRoom;
+  // The mic pill follows the mic: take it, step down, or listen in.
+  const nearPrompt =
+    nearVisible?.kind === "podium"
+      ? podium.isSpeaker
+        ? "Step down from the mic"
+        : podium.holderId
+          ? "Mic is taken — listen in"
+          : "Take the mic"
+      : (nearVisible?.prompt ?? "");
 
   useEffect(() => {
     if (!client) return;
@@ -1403,6 +1481,25 @@ export function WorldCanvas({
       );
     }
   }, [currentRoom, showToast]);
+
+  // Podium mic transitions: announce takes/releases in the ticker.
+  // The initial sync on join stays quiet (announced on demand at the mic).
+  const podiumAnnounced = useRef(false);
+  useEffect(() => {
+    if (!podiumAnnounced.current) {
+      podiumAnnounced.current = true;
+      return;
+    }
+    const holder = podium.holderId;
+    if (holder) {
+      pushFeed(
+        `${holder === myUserId ? "You took" : `${avatarsRef.current.get(holder)?.name ?? "Someone"} took`} the podium mic`,
+        "bump",
+      );
+    } else {
+      pushFeed("The podium mic is free", "bump");
+    }
+  }, [podium.holderId, myUserId, pushFeed]);
 
   // Watchdog: worker-created alerts never hit the WS (separate process), so
   // poll the alerts API and push newly-seen OPEN alerts into the ticker.
@@ -1839,25 +1936,26 @@ export function WorldCanvas({
           !whiteboardId &&
           !posterArt &&
           !galleryFrameOpen &&
-          (interaction.near || nearChair) && (
+          !podiumScreenOpen &&
+          (nearVisible || sitVisible) && (
             <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 flex -translate-x-1/2 items-center gap-2">
-              {interaction.near &&
+              {nearVisible &&
                 (() => {
-                  const Icon = INTERACTABLE_ICONS[interaction.near.icon];
+                  const Icon = INTERACTABLE_ICONS[nearVisible.icon];
                   return (
                     <WToast id="interact" tone="neutral">
                       <button
                         type="button"
                         onClick={() => interaction.press()}
                         className="flex cursor-pointer items-center gap-2"
-                        aria-label={`Interact: ${interaction.near.prompt}`}
+                        aria-label={`Interact: ${nearPrompt}`}
                       >
                         <kbd className="rounded-md bg-white px-1.5 py-0.5 font-mono text-[10px] font-semibold text-neutral-800 ring-1 ring-black/[0.09]">
                           E
                         </kbd>
                         <Icon className="size-3.5 shrink-0 text-neutral-700" />
                         <span className="text-[12px] font-semibold text-neutral-800">
-                          {interaction.near.prompt}
+                          {nearPrompt}
                         </span>
                       </button>
                     </WToast>
@@ -1866,7 +1964,7 @@ export function WorldCanvas({
               {/* Sit pill shows alongside (not instead of) the E pill — every
               chair sits inside a monitor spot's radius, so gating on
               !interaction.near hid it exactly when it was relevant. */}
-              {nearChair && (
+              {sitVisible && (
                 <WToast key="sit" id="sit" tone="neutral">
                   <button
                     type="button"
@@ -1892,6 +1990,7 @@ export function WorldCanvas({
           !whiteboardId &&
           !posterArt &&
           !galleryFrameOpen &&
+          !podiumScreenOpen &&
           toasts.length > 0 && (
             <WToastStack>
               {toasts.map((t) => (
@@ -2270,6 +2369,11 @@ export function WorldCanvas({
             active={!!chill.state.videoId && currentRoom === "Chill Space"}
             mounted={!!chill.state.videoId}
           />
+          {/* Podium wall screen — a DOM surface like the chill TV, visible
+            only while the local player is in the Podium Room. */}
+          {podium.inPodiumRoom && (
+            <PodiumScreenProjection url={podiumScreen.url} />
+          )}
 
           <PlayerController
             playerRef={playerGroupRef}
@@ -2414,6 +2518,23 @@ export function WorldCanvas({
             />
           )}
         </AnimatePresence>
+        {/* Podium Room wall screen */}
+        <AnimatePresence>
+          {podiumScreenOpen && (
+            <PodiumScreenModal
+              url={podiumScreen.url}
+              setByName={
+                podiumScreen.setBy
+                  ? (avatars.get(podiumScreen.setBy)?.name ??
+                    podiumScreen.setBy)
+                  : null
+              }
+              onSet={(url) => podiumScreen.setUrl(url)}
+              onClear={() => podiumScreen.clear()}
+              onClose={() => setPodiumScreenOpen(false)}
+            />
+          )}
+        </AnimatePresence>
         <AnimatePresence>
           {gamesOpen && (
             <GamesModal
@@ -2471,6 +2592,28 @@ export function WorldCanvas({
           )}
         </AnimatePresence>
 
+        {/* Podium status — speaker sees On mic, audience sees Listening */}
+        {podium.inPodiumRoom && podium.holderId && (
+          <div className="pointer-events-none absolute left-1/2 top-[4.5rem] z-10 flex -translate-x-1/2">
+            <div
+              className={`${CHIP} px-3.5 py-2 text-[12px] font-semibold ${
+                podium.isSpeaker ? "text-amber-800" : "text-neutral-800"
+              }`}
+            >
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${
+                  podium.isSpeaker
+                    ? "animate-pulse bg-amber-500"
+                    : "bg-violet-500"
+                }`}
+              />
+              {podium.isSpeaker
+                ? "On mic — the room hears you"
+                : `Listening to ${avatars.get(podium.holderId)?.name ?? "the speaker"}`}
+            </div>
+          </div>
+        )}
+
         {/* Follow indicator — who you're trailing, one tap to stop */}
         {followId && (
           <div className="pointer-events-none absolute left-1/2 top-[4.5rem] z-10 flex -translate-x-1/2">
@@ -2498,6 +2641,8 @@ export function WorldCanvas({
                 nearIds={call.visibleIds}
                 myUserId={myUserId}
                 nameOf={(id) => avatars.get(id)?.name ?? id}
+                speakerId={podium.holderId}
+                podiumRoom={podium.inPodiumRoom}
               />
             </div>
             {call.error && onlineCount >= 2 && (
