@@ -4,6 +4,7 @@ import type {
   AlertFilter,
   MetricFilter,
   PrFilter,
+  PRCostQuery,
   SessionFilter,
   TaskFilter,
   TestRunFilter,
@@ -12,9 +13,13 @@ import type {
 } from "@hive/types";
 import { getAuth } from "../../middleware/authenticate";
 import { ReadsService } from "./reads.service";
+import { CostAttributionService } from "./cost-attribution.service";
 
 export class ReadsController {
-  constructor(private readonly service = new ReadsService()) {}
+  constructor(
+    private readonly service = new ReadsService(),
+    private readonly costs = new CostAttributionService(),
+  ) {}
 
   private static param(req: Request, name: string): string {
     const value = req.params[name];
@@ -202,6 +207,19 @@ export class ReadsController {
           q.to,
         ),
       },
+    });
+  };
+
+  getPRCosts = async (req: Request, res: Response): Promise<void> => {
+    const q = ReadsController.query<PRCostQuery>(req);
+    res.json({
+      data: await this.costs.getPRCosts(
+        ReadsController.workspaceId(req),
+        q.from,
+        q.to,
+        q.page,
+        q.pageSize,
+      ),
     });
   };
 

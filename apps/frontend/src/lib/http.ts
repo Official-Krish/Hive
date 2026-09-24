@@ -6,6 +6,7 @@ import type {
   GitHubNotificationsResponse,
   MemberThroughput,
   MemberUsage,
+  PRCostResponse,
   PairSession,
   PairSessionCreate,
   UsageBudget,
@@ -1201,6 +1202,14 @@ export const http = {
       params?: { from?: string; to?: string },
     ): Promise<{ members: MemberThroughput[] }> =>
       request(`/api/v1/workspaces/${workspaceId}/usage/throughput`, {
+        query: params,
+      }),
+
+    prCosts: (
+      workspaceId: string,
+      params?: { from?: string; to?: string; page?: number; pageSize?: number },
+    ): Promise<PRCostResponse> =>
+      request(`/api/v1/workspaces/${workspaceId}/usage/costs`, {
         query: params,
       }),
 

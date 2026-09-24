@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { paginationSchema } from "./api";
+import { paginationSchema, type Paginated } from "./api";
 
 export const activityFilterSchema = paginationSchema.extend({
   status: z
@@ -532,6 +532,57 @@ export const usageBudgetSchema = z.object({
   alertAtPct: z.number().int().min(1).max(100).default(80),
 });
 export type UsageBudgetInput = z.infer<typeof usageBudgetSchema>;
+
+// Cost-per-feature attribution — which PRs ate the token budget.
+// Sessions link to PRs directly (same repo + branch = head branch) or by
+// inference (same repo + author + overlapping windows). Inferred sessions
+// attach to at most one PR, so totals never double-count.
+export const prCostQuerySchema = z.object({
+  from: z.coerce.date().optional(),
+  to: z.coerce.date().optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(20),
+});
+export type PRCostQuery = z.infer<typeof prCostQuerySchema>;
+
+export type PRCostStatus = "DRAFT" | "OPEN" | "MERGED" | "CLOSED";
+
+export interface PRCostItem {
+  repositoryId: string;
+  repositoryName: string;
+  number: number;
+  title: string;
+  status: PRCostStatus;
+  authorName: string | null;
+  headBranch: string | null;
+  sessions: number;
+  directSessions: number;
+  inferredSessions: number;
+  directCostCents: number | null;
+  inferredCostCents: number | null;
+  totalCostCents: number | null;
+  mergedAt: string | null;
+  updatedAt: string;
+  hiddenByPrivacy: boolean;
+}
+
+export interface PRCostSummary {
+  prs: number;
+  sessionsAttributed: number;
+  directCostCents: number | null;
+  inferredCostCents: number | null;
+  totalCostCents: number | null;
+  /** Spend on merged PRs (shipped value) vs closed-unmerged (waste). */
+  mergedCostCents: number | null;
+  abandonedCostCents: number | null;
+  /** In-range session spend no PR could claim. */
+  unattributedCostCents: number | null;
+  hiddenByPrivacy: boolean;
+}
+
+export interface PRCostResponse extends Paginated<PRCostItem> {
+  summary: PRCostSummary;
+}
 
 export const vendingProviderSchema = z.enum(["claude", "opencode", "codex"]);
 export type VendingProvider = z.infer<typeof vendingProviderSchema>;
