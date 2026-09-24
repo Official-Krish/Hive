@@ -524,12 +524,22 @@ export interface MemberThroughput {
 export interface UsageBudget {
   monthlyCapCents: number | null;
   alertAtPct: number;
+  memberCapCents: number | null;
+  hardEnforce: boolean;
   updatedAt: string | null;
 }
 
 export const usageBudgetSchema = z.object({
   monthlyCapCents: z.number().int().min(0).max(100_000_000).nullable(),
   alertAtPct: z.number().int().min(1).max(100).default(80),
+  memberCapCents: z
+    .number()
+    .int()
+    .min(0)
+    .max(100_000_000)
+    .nullable()
+    .default(null),
+  hardEnforce: z.boolean().default(false),
 });
 export type UsageBudgetInput = z.infer<typeof usageBudgetSchema>;
 

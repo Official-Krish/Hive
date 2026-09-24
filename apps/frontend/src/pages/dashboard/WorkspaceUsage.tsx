@@ -92,6 +92,8 @@ export function WorkspaceUsage() {
   const [costPage, setCostPage] = useState(1);
   const [capInput, setCapInput] = useState("");
   const [alertInput, setAlertInput] = useState("80");
+  const [memberCapInput, setMemberCapInput] = useState("");
+  const [hardEnforce, setHardEnforce] = useState(false);
 
   const range = useMemo(() => ({ from: isoDaysAgo(days) }), [days]);
 
@@ -188,6 +190,8 @@ export function WorkspaceUsage() {
     mutationFn: (input: {
       monthlyCapCents: number | null;
       alertAtPct: number;
+      memberCapCents: number | null;
+      hardEnforce: boolean;
     }) => http.reads.updateUsageBudget(workspaceId, input),
     onSuccess: () => {
       void queryClient.invalidateQueries({
@@ -571,6 +575,20 @@ export function WorkspaceUsage() {
                     />
                   </label>
                   <label className="flex flex-col gap-1 text-[12px] font-medium text-neutral-500">
+                    Per-member cap (USD, empty = none)
+                    <input
+                      value={memberCapInput}
+                      onChange={(e) => setMemberCapInput(e.target.value)}
+                      placeholder={
+                        data?.budget.memberCapCents != null
+                          ? `$${(data.budget.memberCapCents / 100).toFixed(2)}`
+                          : "No cap"
+                      }
+                      inputMode="decimal"
+                      className={`${baselineInputClass} w-32`}
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1 text-[12px] font-medium text-neutral-500">
                     Alert at %
                     <input
                       value={alertInput}
@@ -579,21 +597,41 @@ export function WorkspaceUsage() {
                       className={`${baselineInputClass} w-20`}
                     />
                   </label>
+                  <label className="flex items-center gap-2 pb-2 text-[12px] font-medium text-neutral-700">
+                    <input
+                      type="checkbox"
+                      checked={hardEnforce}
+                      onChange={(e) => setHardEnforce(e.target.checked)}
+                      className="size-3.5 accent-neutral-900"
+                    />
+                    Hard stop on breach
+                  </label>
                   <Btn
                     onClick={() => {
                       const dollars = capInput.trim();
+                      const memberDollars = memberCapInput.trim();
                       budgetMutation.mutate({
                         monthlyCapCents:
                           dollars === ""
                             ? null
                             : Math.round(Number(dollars) * 100),
                         alertAtPct: Number(alertInput) || 80,
+                        memberCapCents:
+                          memberDollars === ""
+                            ? null
+                            : Math.round(Number(memberDollars) * 100),
+                        hardEnforce,
                       });
                     }}
                   >
                     {budgetMutation.isPending ? "Saving…" : "Save budget"}
                   </Btn>
                 </div>
+                <p className="pt-2 text-[12px] leading-relaxed text-neutral-500">
+                  {data?.budget.hardEnforce
+                    ? "Hard stop is armed — breaching a cap remotely stops collectors until members restart them."
+                    : "Soft mode — breaches open alerts only. Arm the hard stop to remotely stop collectors on breach."}
+                </p>
                 {budgetMutation.isError && (
                   <div className="pt-3 text-[12px] font-medium text-rose-600">
                     Could not save — check the amounts.

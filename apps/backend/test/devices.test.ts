@@ -3,6 +3,7 @@ import type { Server } from "node:http";
 import { ApiKeyStatus, prisma } from "@hive/db";
 import { hashToken } from "../src/lib/crypto";
 import { DeviceService } from "../src/modules/devices/devices.service";
+import { deviceBus } from "../src/modules/realtime/realtime.bus";
 import { makeClient, startServer, stopServer } from "./helpers";
 import type { TestClient } from "./helpers";
 
@@ -221,5 +222,58 @@ describe("device revoke", () => {
       data: { devices: { status: string }[] };
     }>(list);
     expect(body.data.devices[0]?.status).toBe("revoked");
+  });
+});
+
+describe("budget enforcement scoping", () => {
+  test("onlineDeviceIds follows the socket, the window, then the key", async () => {
+    await c.registerUser();
+    const me = await c.api("/api/v1/auth/me");
+    const userId = (await c.asJson<{ data: { user: { id: string } } }>(me)).data
+      .user.id;
+    const service = new DeviceService();
+    const { id } = await c.registerDevice();
+
+    // Fresh heartbeat: online via the last-seen window, no socket needed.
+    deviceBus.setOnlineChecker(() => false);
+    try {
+      expect(await service.onlineDeviceIds(userId)).toEqual([id]);
+
+      // Stale heartbeat, no socket: offline.
+      await prisma.device.update({
+        where: { id },
+        data: { lastSeenAt: new Date(Date.now() - 10 * 60 * 1000) },
+      });
+      expect(await service.onlineDeviceIds(userId)).toEqual([]);
+
+      // Stale heartbeat, live socket: online via the checker.
+      deviceBus.setOnlineChecker((deviceId) => deviceId === id);
+      expect(await service.onlineDeviceIds(userId)).toEqual([id]);
+
+      // Revoked key: excluded even with a live socket.
+      await service.revoke(id, userId);
+      expect(await service.onlineDeviceIds(userId)).toEqual([]);
+    } finally {
+      deviceBus.setOnlineChecker(null);
+    }
+  });
+
+  test("pushShutdown delivers a shutdown command per device", async () => {
+    await c.registerUser();
+    const { id } = await c.registerDevice();
+
+    const sent: { deviceId: string; cmd: string }[] = [];
+    deviceBus.setSender((deviceId, event) =>
+      sent.push({ deviceId, cmd: event.cmd }),
+    );
+    try {
+      new DeviceService().pushShutdown([id, "other"]);
+      expect(sent).toEqual([
+        { deviceId: id, cmd: "shutdown" },
+        { deviceId: "other", cmd: "shutdown" },
+      ]);
+    } finally {
+      deviceBus.setSender(null);
+    }
   });
 });

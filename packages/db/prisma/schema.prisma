@@ -855,6 +855,8 @@ model UsageBudget {
   workspaceId      String   @unique
   monthlyCapCents  Int?
   alertAtPct       Int      @default(80)
+  memberCapCents   Int?
+  hardEnforce      Boolean  @default(false)
   updatedById      String?
   updatedAt        DateTime @updatedAt
 

@@ -1041,6 +1041,8 @@ export class ReadsService {
     return {
       monthlyCapCents: row?.monthlyCapCents ?? null,
       alertAtPct: row?.alertAtPct ?? 80,
+      memberCapCents: row?.memberCapCents ?? null,
+      hardEnforce: row?.hardEnforce ?? false,
       updatedAt: row?.updatedAt.toISOString() ?? null,
     };
   }
@@ -1344,17 +1346,23 @@ export class ReadsService {
         workspaceId,
         monthlyCapCents: input.monthlyCapCents,
         alertAtPct: input.alertAtPct,
+        memberCapCents: input.memberCapCents,
+        hardEnforce: input.hardEnforce,
         updatedById: userId,
       },
       update: {
         monthlyCapCents: input.monthlyCapCents,
         alertAtPct: input.alertAtPct,
+        memberCapCents: input.memberCapCents,
+        hardEnforce: input.hardEnforce,
         updatedById: userId,
       },
     });
     return {
       monthlyCapCents: row.monthlyCapCents,
       alertAtPct: row.alertAtPct,
+      memberCapCents: row.memberCapCents,
+      hardEnforce: row.hardEnforce,
       updatedAt: row.updatedAt.toISOString(),
     };
   }
