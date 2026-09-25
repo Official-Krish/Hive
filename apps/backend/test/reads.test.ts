@@ -303,6 +303,95 @@ describe("map overlay", () => {
     });
   });
 
+  test("includes month spend vs caps in the budget block", async () => {
+    const seed = await setupSeeded();
+    const agent = await prisma.agent.findFirst({ where: { name: "claude" } });
+    expect(agent).not.toBeNull();
+    const session = await prisma.agentSession.create({
+      data: {
+        developerId: seed.developerId,
+        workspaceId: seed.workspaceId,
+        agentId: agent!.id,
+        status: "COMPLETED",
+      },
+    });
+    const model = await prisma.model.findFirst({
+      where: { name: "claude-test" },
+    });
+    await prisma.tokenUsage.create({
+      data: {
+        sessionId: session.id,
+        modelId: model!.id,
+        inputTokens: 10,
+        outputTokens: 5,
+        costCents: 250,
+        measuredAt: new Date(),
+      },
+    });
+    await prisma.usageBudget.create({
+      data: {
+        workspaceId: seed.workspaceId,
+        monthlyCapCents: 1000,
+        memberCapCents: 500,
+        hardEnforce: true,
+      },
+    });
+
+    const res = await c.api(
+      `/api/v1/workspaces/${seed.workspaceId}/map/overlay/${seed.developerId}`,
+    );
+    expect(res.status).toBe(200);
+    const body = await c.asJson<{
+      data: {
+        budget: {
+          monthSpendCents: number | null;
+          monthlyCapCents: number | null;
+          memberSpendCents: number | null;
+          memberCapCents: number | null;
+          alertAtPct: number;
+          hardEnforce: boolean;
+          hiddenByPrivacy: boolean;
+        } | null;
+      };
+    }>(res);
+    expect(body.data.budget).toMatchObject({
+      monthSpendCents: 250,
+      monthlyCapCents: 1000,
+      memberSpendCents: 250,
+      memberCapCents: 500,
+      alertAtPct: 80,
+      hardEnforce: true,
+      hiddenByPrivacy: false,
+    });
+  });
+
+  test("masks the overlay budget block when token visibility is off", async () => {
+    const seed = await setupSeeded();
+    const patch = await c.api(
+      `/api/v1/workspaces/${seed.workspaceId}/privacy`,
+      { method: "PATCH", body: { allowTokenUsage: false } },
+    );
+    expect(patch.status).toBe(200);
+
+    const res = await c.api(
+      `/api/v1/workspaces/${seed.workspaceId}/map/overlay/${seed.developerId}`,
+    );
+    const body = await c.asJson<{
+      data: {
+        costCents: number | null;
+        budget: {
+          monthSpendCents: number | null;
+          hiddenByPrivacy: boolean;
+        } | null;
+      };
+    }>(res);
+    expect(body.data.costCents).toBeNull();
+    expect(body.data.budget).toMatchObject({
+      monthSpendCents: null,
+      hiddenByPrivacy: true,
+    });
+  });
+
   test("rejects overlays for developers outside the workspace", async () => {
     const seed = await setupSeeded();
     const savedJar = c.saveJar();

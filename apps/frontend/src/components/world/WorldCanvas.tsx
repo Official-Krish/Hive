@@ -42,7 +42,7 @@ import {
 } from "./office/layout";
 import { AVATARS } from "./AvatarConfig";
 import { ASSET_BASE_URL } from "@/lib/config";
-import { useRealtimeMap } from "@/hooks/useRealtimeMap";
+import { useMapOverlay, useRealtimeMap } from "@/hooks/useRealtimeMap";
 import { useLiveKitCall } from "@/hooks/useLiveKitCall";
 import { useNearbyTokens } from "@/hooks/useNearbyTokens";
 import { useInteractions } from "@/hooks/useInteractions";
@@ -590,6 +590,20 @@ export function WorldCanvas({
   const podiumRef = useRef(podium);
   podiumRef.current = podium;
   const podiumScreen = usePodiumScreen(client);
+  // Own month spend vs caps for the top-bar budget chip (privacy-gated;
+  // the chip hides when masked or when no cap is set).
+  const myOverlay = useMapOverlay(workspaceId, myUserId, client, true);
+  const budgetChip = (() => {
+    const b = myOverlay.data?.budget;
+    if (!b || b.hiddenByPrivacy) return null;
+    const cap = b.monthlyCapCents ?? b.memberCapCents;
+    const spent =
+      b.monthlyCapCents != null ? b.monthSpendCents : b.memberSpendCents;
+    if (cap == null || spent == null) return null;
+    const pct = cap > 0 ? (spent / cap) * 100 : 0;
+    const danger = pct >= (b.hardEnforce ? b.alertAtPct : 100);
+    return { spent, cap, pct, danger, armed: b.hardEnforce };
+  })();
   const call = useLiveKitCall(workspaceId, myUserId, nearIds, onlineCount, {
     volumePeers: focus.allowedPeers,
     // The podium speaker hears nobody (stage isolation); focus mute as before.
@@ -1661,6 +1675,38 @@ export function WorldCanvas({
           )}
 
           <div className="pointer-events-auto ml-auto flex items-center gap-2">
+            {/* Month token spend vs cap — red when the hard stop is armed
+              and spend nears the threshold (or any breach past 100%). */}
+            {budgetChip && (
+              <WorldTip
+                content={`$${(budgetChip.spent / 100).toFixed(2)} of $${(budgetChip.cap / 100).toFixed(2)} month spend${budgetChip.armed ? " · hard stop armed" : ""}`}
+              >
+                <div
+                  role="status"
+                  aria-label={`Month token spend ${(budgetChip.spent / 100).toFixed(2)} dollars of ${(budgetChip.cap / 100).toFixed(2)} dollar cap${budgetChip.armed ? ", hard stop armed" : ""}`}
+                  className={`${CHIP} px-3 py-2 ${
+                    budgetChip.danger ? "border-rose-500/40 bg-rose-50/95" : ""
+                  }`}
+                >
+                  <span
+                    className={`h-1.5 w-1.5 rounded-full ${
+                      budgetChip.danger
+                        ? "animate-pulse bg-rose-500"
+                        : "bg-emerald-500"
+                    }`}
+                  />
+                  <span
+                    className={`text-[12px] font-semibold tabular-nums ${
+                      budgetChip.danger ? "text-rose-800" : "text-neutral-700"
+                    }`}
+                  >
+                    ${(budgetChip.spent / 100).toFixed(2)} / $
+                    {(budgetChip.cap / 100).toFixed(2)}
+                  </span>
+                </div>
+              </WorldTip>
+            )}
+
             {/* Tour — reopens the first-run walkthrough */}
             <WorldTip content="Show tour">
               <button

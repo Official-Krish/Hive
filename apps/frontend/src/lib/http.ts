@@ -598,6 +598,15 @@ export interface MapOverlay {
   inputTokens: number;
   outputTokens: number;
   costCents: number | null;
+  budget?: {
+    monthSpendCents: number | null;
+    monthlyCapCents: number | null;
+    memberSpendCents: number | null;
+    memberCapCents: number | null;
+    alertAtPct: number;
+    hardEnforce: boolean;
+    hiddenByPrivacy: boolean;
+  } | null;
   stats?: {
     sessionsToday: number;
     activeMinutesToday: number;

@@ -64,6 +64,8 @@ export function alertLabel(type: string): string {
       return "Failing tests";
     case "budget.risk":
       return "Budget risk";
+    case "budget.enforced":
+      return "Collectors stopped";
     case "vending.low_stock":
       return "Low API keys";
     default:

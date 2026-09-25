@@ -277,6 +277,26 @@ function WorkspaceTab({
               </span>{" "}
               cost
             </span>
+            {data.budget &&
+              !data.budget.hiddenByPrivacy &&
+              data.budget.memberSpendCents != null && (
+                <span>
+                  <span
+                    className={
+                      data.budget.memberCapCents != null &&
+                      data.budget.memberSpendCents > data.budget.memberCapCents
+                        ? "font-semibold text-rose-700"
+                        : "font-semibold text-neutral-900"
+                    }
+                  >
+                    ${(data.budget.memberSpendCents / 100).toFixed(2)}
+                  </span>{" "}
+                  month
+                  {data.budget.memberCapCents != null
+                    ? ` of $${(data.budget.memberCapCents / 100).toFixed(2)}`
+                    : ""}
+                </span>
+              )}
           </div>
           {s.modelMix && s.modelMix.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-1.5">

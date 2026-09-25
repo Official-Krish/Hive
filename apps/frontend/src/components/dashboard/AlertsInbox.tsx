@@ -7,6 +7,7 @@ const WATCHDOG_TYPES = new Set([
   "token.burn",
   "test.failing_streak",
   "budget.risk",
+  "budget.enforced",
   "vending.low_stock",
 ]);
 

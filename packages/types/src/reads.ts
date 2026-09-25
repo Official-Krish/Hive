@@ -449,6 +449,16 @@ export interface MapOverlay {
   inputTokens: number;
   outputTokens: number;
   costCents: number | null;
+  /** Month-to-date spend vs caps for the world HUD (masked when private). */
+  budget?: {
+    monthSpendCents: number | null;
+    monthlyCapCents: number | null;
+    memberSpendCents: number | null;
+    memberCapCents: number | null;
+    alertAtPct: number;
+    hardEnforce: boolean;
+    hiddenByPrivacy: boolean;
+  } | null;
 }
 
 // ---------------------------------------------------------------------------

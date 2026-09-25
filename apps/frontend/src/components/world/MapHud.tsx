@@ -378,6 +378,31 @@ function MemberModalInner({
                     <span className="text-neutral-500">today</span>
                   </>
                 )}
+                {data?.budget &&
+                  !data.budget.hiddenByPrivacy &&
+                  data.budget.memberSpendCents != null &&
+                  data.budget.memberSpendCents > 0 && (
+                    <>
+                      <span className="h-3 w-px bg-black/[0.05]" aria-hidden />
+                      <span
+                        className={
+                          data.budget.memberCapCents != null &&
+                          data.budget.memberSpendCents >
+                            data.budget.memberCapCents
+                            ? "font-semibold text-rose-700"
+                            : "font-semibold text-neutral-800"
+                        }
+                      >
+                        ${(data.budget.memberSpendCents / 100).toFixed(2)}
+                      </span>
+                      <span className="text-neutral-500">
+                        month
+                        {data.budget.memberCapCents != null
+                          ? ` of $${(data.budget.memberCapCents / 100).toFixed(2)}`
+                          : ""}
+                      </span>
+                    </>
+                  )}
               </div>
             </section>
           )}
