@@ -99,6 +99,13 @@ export function ThirdPersonCamera({
     new THREE.Vector3(...(targetPosition ?? [0, 0, 0])),
   );
   const smoothDist = useRef(DEFAULT_DIST);
+  // Feel state — sprint FOV kick (speed estimated from target motion) plus
+  // a faint handheld sway so the lens feels carried, not bolted on.
+  const prevTarget = useRef(
+    new THREE.Vector3(...(targetPosition ?? [0, 0, 0])),
+  );
+  const smoothSpeed = useRef(0);
+  const baseFov = useRef<number | null>(null);
   useEffect(() => {
     const el = gl.domElement;
     const onDown = (e: MouseEvent) => {
@@ -259,8 +266,38 @@ export function ThirdPersonCamera({
       target.z + dir.z * smoothDist.current,
     );
 
+    // Stiff-but-smooth follow. NOTE: no additive handheld sway here — a
+    // ±2cm sin drift on top of the follow target's own head-bob read as a
+    // constant camera shake. Stillness is steadiness.
     camera.position.lerp(camPos, Math.min(1, delta * 14));
     camera.lookAt(target);
+
+    // Sprint FOV breath: estimate target speed from frame motion and ease
+    // the lens at most +4° at full sprint. Small, slow (damp 2.5) and gated
+    // well above noise — a big/fast kick reads as camera shake, not pace.
+    // First-person returns early above; locate/follow overrides hold base.
+    if (camera instanceof THREE.PerspectiveCamera) {
+      if (baseFov.current === null) baseFov.current = camera.fov;
+      const base = baseFov.current;
+      const instant =
+        delta > 0
+          ? _desired.set(tx, 0, tz).distanceTo(prevTarget.current) / delta
+          : 0;
+      prevTarget.current.set(tx, 0, tz);
+      smoothSpeed.current = THREE.MathUtils.damp(
+        smoothSpeed.current,
+        Math.min(9, instant),
+        2.5,
+        delta,
+      );
+      const want = targetOverride
+        ? base
+        : base + Math.min(4, smoothSpeed.current * 0.5);
+      if (Math.abs(camera.fov - want) > 0.1) {
+        camera.fov = THREE.MathUtils.damp(camera.fov, want, 2.5, delta);
+        camera.updateProjectionMatrix();
+      }
+    }
   });
 
   return null;

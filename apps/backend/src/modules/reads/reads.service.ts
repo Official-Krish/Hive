@@ -764,30 +764,57 @@ export class ReadsService {
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
 
-    const [sessionsTodayRows, testsToday, todayCost, mixRows] =
-      await Promise.all([
-        prisma.agentSession.findMany({
-          where: { developerId, workspaceId, startedAt: { gte: startOfDay } },
-          select: { startedAt: true, endedAt: true },
-        }),
-        prisma.testRun.groupBy({
-          by: ["status"],
-          where: { developerId, endedAt: { gte: startOfDay } },
-          _count: true,
-        }),
-        prisma.tokenUsage.aggregate({
-          where: {
-            session: { developerId, workspaceId },
-            measuredAt: { gte: startOfDay },
-          },
-          _sum: { costCents: true },
-        }),
-        prisma.tokenUsage.groupBy({
-          by: ["modelId"],
-          where: { session: { developerId, workspaceId } },
-          _sum: { inputTokens: true, outputTokens: true },
-        }),
-      ]);
+    const now = new Date();
+    const monthStart = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
+    );
+
+    const [
+      sessionsTodayRows,
+      testsToday,
+      todayCost,
+      mixRows,
+      monthSpend,
+      memberSpend,
+      budget,
+    ] = await Promise.all([
+      prisma.agentSession.findMany({
+        where: { developerId, workspaceId, startedAt: { gte: startOfDay } },
+        select: { startedAt: true, endedAt: true },
+      }),
+      prisma.testRun.groupBy({
+        by: ["status"],
+        where: { developerId, endedAt: { gte: startOfDay } },
+        _count: true,
+      }),
+      prisma.tokenUsage.aggregate({
+        where: {
+          session: { developerId, workspaceId },
+          measuredAt: { gte: startOfDay },
+        },
+        _sum: { costCents: true },
+      }),
+      prisma.tokenUsage.groupBy({
+        by: ["modelId"],
+        where: { session: { developerId, workspaceId } },
+        _sum: { inputTokens: true, outputTokens: true },
+      }),
+      prisma.tokenUsage.aggregate({
+        where: {
+          session: { workspaceId },
+          measuredAt: { gte: monthStart },
+        },
+        _sum: { costCents: true },
+      }),
+      prisma.tokenUsage.aggregate({
+        where: {
+          session: { developerId, workspaceId },
+          measuredAt: { gte: monthStart },
+        },
+        _sum: { costCents: true },
+      }),
+      this.budgetOf(workspaceId),
+    ]);
 
     const nowMs = Date.now();
     const activeMinutesToday = Math.round(
@@ -904,6 +931,15 @@ export class ReadsService {
       inputTokens: tokens._sum.inputTokens ?? 0,
       outputTokens: tokens._sum.outputTokens ?? 0,
       costCents: tokens._sum.costCents ?? null,
+      budget: {
+        monthSpendCents: monthSpend._sum.costCents ?? 0,
+        monthlyCapCents: budget.monthlyCapCents,
+        memberSpendCents: memberSpend._sum.costCents ?? 0,
+        memberCapCents: budget.memberCapCents,
+        alertAtPct: budget.alertAtPct,
+        hardEnforce: budget.hardEnforce,
+        hiddenByPrivacy: false,
+      },
       stats: {
         sessionsToday: sessionsTodayRows.length,
         activeMinutesToday,
@@ -1041,6 +1077,8 @@ export class ReadsService {
     return {
       monthlyCapCents: row?.monthlyCapCents ?? null,
       alertAtPct: row?.alertAtPct ?? 80,
+      memberCapCents: row?.memberCapCents ?? null,
+      hardEnforce: row?.hardEnforce ?? false,
       updatedAt: row?.updatedAt.toISOString() ?? null,
     };
   }
@@ -1344,17 +1382,23 @@ export class ReadsService {
         workspaceId,
         monthlyCapCents: input.monthlyCapCents,
         alertAtPct: input.alertAtPct,
+        memberCapCents: input.memberCapCents,
+        hardEnforce: input.hardEnforce,
         updatedById: userId,
       },
       update: {
         monthlyCapCents: input.monthlyCapCents,
         alertAtPct: input.alertAtPct,
+        memberCapCents: input.memberCapCents,
+        hardEnforce: input.hardEnforce,
         updatedById: userId,
       },
     });
     return {
       monthlyCapCents: row.monthlyCapCents,
       alertAtPct: row.alertAtPct,
+      memberCapCents: row.memberCapCents,
+      hardEnforce: row.hardEnforce,
       updatedAt: row.updatedAt.toISOString(),
     };
   }

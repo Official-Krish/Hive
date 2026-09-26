@@ -142,6 +142,33 @@ export class DeviceService {
     );
   }
 
+  /** Ids of the user's devices currently considered online (live socket
+   *  or seen within the online window) with an active collect key. */
+  async onlineDeviceIds(userId: string): Promise<string[]> {
+    const devices = await prisma.device.findMany({
+      where: { userId },
+      include: {
+        apiKeys: { select: { status: true, expiresAt: true } },
+      },
+    });
+    return devices
+      .filter(
+        (d) =>
+          this.statusOf(d.apiKeys) === "active" &&
+          this.isOnline(d.id, d.lastSeenAt),
+      )
+      .map((d) => d.id);
+  }
+
+  /** Push a shutdown command to raw device ids (no ownership check —
+   *  callers must scope ids first, e.g. via onlineDeviceIds). */
+  pushShutdown(deviceIds: string[]): void {
+    const timestamp = Date.now();
+    for (const id of deviceIds) {
+      deviceBus.send(id, { type: "control", cmd: "shutdown", timestamp });
+    }
+  }
+
   async stop(deviceId: string, userId: string): Promise<void> {
     const device = await prisma.device.findFirst({
       where: { id: deviceId, userId },

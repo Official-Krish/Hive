@@ -1276,8 +1276,8 @@ export interface Neighbor {
   w: number;
   d: number;
   h: number;
-  /** Facade glazing density (picks one of three window textures). */
-  style: 0 | 1 | 2;
+  /** Facade texture: 0-2 curtain-wall densities, 3 warehouse brick. */
+  style: 0 | 1 | 2 | 3;
   ry: number;
   /** Which face carries the entrance + canopy. */
   entrance: "n" | "s" | "e" | "w";
@@ -1293,7 +1293,7 @@ const N = (
   w: number,
   d: number,
   h: number,
-  style: 0 | 1 | 2,
+  style: 0 | 1 | 2 | 3,
   entrance: "n" | "s" | "e" | "w",
   ry = 0,
   setback = 0,
@@ -1302,23 +1302,27 @@ const N = (
 
 export const NEIGHBORS: Neighbor[] = [
   // --- Across the service road, facing our plaza ---------------------------
-  N(-96, 80, 30, 26, 34, 0, "n", 0, 3.5),
+  // Height anchors: a 72 m deco-spire centerpiece + a 60 m lit crown give
+  // the avenue a genuine big-skyscraper wall (sealed decor — no gameplay).
+  N(-96, 80, 30, 26, 42, 0, "n", 0, 3.5),
   N(-56, 78, 26, 24, 26, 1, "n"),
-  N(-18, 83, 32, 28, 47, 2, "n", 0, 4.5, 0.58),
+  N(-18, 83, 32, 28, 72, 2, "n", 0, 4.5, 0.58),
   N(22, 78, 28, 24, 31, 0, "n"),
-  N(62, 82, 34, 30, 41, 1, "n", 0, 4),
+  N(62, 82, 34, 30, 60, 1, "n", 0, 4),
   N(100, 78, 26, 24, 23, 2, "n"),
   // --- Flanking the block, west -------------------------------------------
-  N(-72, 30, 26, 34, 29, 1, "e"),
-  N(-72, -8, 26, 32, 22, 2, "e"),
+  // Nearest mid-rises are brick warehouses (Chelsea context, like the
+  // reference's brick neighbours around the glass office).
+  N(-72, 30, 26, 34, 29, 3, "e"),
+  N(-72, -8, 26, 32, 22, 3, "e"),
   N(-77, -50, 30, 34, 33, 0, "e", 0, 3),
   // --- Flanking the block, east -------------------------------------------
-  N(72, 30, 26, 34, 26, 2, "w"),
-  N(72, -8, 26, 32, 31, 0, "w"),
+  N(72, 30, 26, 34, 26, 3, "w"),
+  N(72, -8, 26, 32, 31, 3, "w"),
   N(77, -50, 30, 34, 24, 1, "w"),
   // --- Behind us, north ----------------------------------------------------
-  N(-24, -68, 34, 28, 37, 2, "s", 0, 4),
-  N(20, -70, 30, 26, 29, 0, "s"),
+  N(-24, -68, 34, 28, 54, 2, "s", 0, 4),
+  N(20, -70, 30, 26, 46, 0, "s"),
   N(58, -72, 26, 24, 21, 1, "s"),
   // --- Further out, blending into the skyline ------------------------------
   N(-132, 20, 34, 38, 63, 1, "e", 0, 5, 0.55),

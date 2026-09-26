@@ -42,7 +42,7 @@ import {
 } from "./office/layout";
 import { AVATARS } from "./AvatarConfig";
 import { ASSET_BASE_URL } from "@/lib/config";
-import { useRealtimeMap } from "@/hooks/useRealtimeMap";
+import { useMapOverlay, useRealtimeMap } from "@/hooks/useRealtimeMap";
 import { useLiveKitCall } from "@/hooks/useLiveKitCall";
 import { useNearbyTokens } from "@/hooks/useNearbyTokens";
 import { useInteractions } from "@/hooks/useInteractions";
@@ -590,6 +590,20 @@ export function WorldCanvas({
   const podiumRef = useRef(podium);
   podiumRef.current = podium;
   const podiumScreen = usePodiumScreen(client);
+  // Own month spend vs caps for the top-bar budget chip (privacy-gated;
+  // the chip hides when masked or when no cap is set).
+  const myOverlay = useMapOverlay(workspaceId, myUserId, client, true);
+  const budgetChip = (() => {
+    const b = myOverlay.data?.budget;
+    if (!b || b.hiddenByPrivacy) return null;
+    const cap = b.monthlyCapCents ?? b.memberCapCents;
+    const spent =
+      b.monthlyCapCents != null ? b.monthSpendCents : b.memberSpendCents;
+    if (cap == null || spent == null) return null;
+    const pct = cap > 0 ? (spent / cap) * 100 : 0;
+    const danger = pct >= (b.hardEnforce ? b.alertAtPct : 100);
+    return { spent, cap, pct, danger, armed: b.hardEnforce };
+  })();
   const call = useLiveKitCall(workspaceId, myUserId, nearIds, onlineCount, {
     volumePeers: focus.allowedPeers,
     // The podium speaker hears nobody (stage isolation); focus mute as before.
@@ -1661,6 +1675,38 @@ export function WorldCanvas({
           )}
 
           <div className="pointer-events-auto ml-auto flex items-center gap-2">
+            {/* Month token spend vs cap — red when the hard stop is armed
+              and spend nears the threshold (or any breach past 100%). */}
+            {budgetChip && (
+              <WorldTip
+                content={`$${(budgetChip.spent / 100).toFixed(2)} of $${(budgetChip.cap / 100).toFixed(2)} month spend${budgetChip.armed ? " · hard stop armed" : ""}`}
+              >
+                <div
+                  role="status"
+                  aria-label={`Month token spend ${(budgetChip.spent / 100).toFixed(2)} dollars of ${(budgetChip.cap / 100).toFixed(2)} dollar cap${budgetChip.armed ? ", hard stop armed" : ""}`}
+                  className={`${CHIP} px-3 py-2 ${
+                    budgetChip.danger ? "border-rose-500/40 bg-rose-50/95" : ""
+                  }`}
+                >
+                  <span
+                    className={`h-1.5 w-1.5 rounded-full ${
+                      budgetChip.danger
+                        ? "animate-pulse bg-rose-500"
+                        : "bg-emerald-500"
+                    }`}
+                  />
+                  <span
+                    className={`text-[12px] font-semibold tabular-nums ${
+                      budgetChip.danger ? "text-rose-800" : "text-neutral-700"
+                    }`}
+                  >
+                    ${(budgetChip.spent / 100).toFixed(2)} / $
+                    {(budgetChip.cap / 100).toFixed(2)}
+                  </span>
+                </div>
+              </WorldTip>
+            )}
+
             {/* Tour — reopens the first-run walkthrough */}
             <WorldTip content="Show tour">
               <button
@@ -2333,25 +2379,30 @@ export function WorldCanvas({
           )}
         </AnimatePresence>
 
-        {/* 3D world */}
+        {/* 3D world — cinematic grade: lifted exposure, wider lens for a
+            spacious tech-office feel. Shadows stay PCF (not soft) and dpr
+            stays ≤1.5 on desktop: soft shadows + dpr 2.0 cost ~30% frame
+            time on integrated GPUs for almost no visible gain here. */}
         <Canvas
           shadows
           // Desktop: dpr ≤1.5 + MSAA for crisp mullions/screens. Cheap path
           // (coarse/small/reduced-motion) keeps dpr 1.15 + no MSAA.
           dpr={highQuality ? [1, 1.5] : [1, 1.15]}
-          camera={{ position: [0, 3, 46], fov: 50, near: 0.1, far: 900 }}
+          // far stays tight (900): every extra 100m of far plane steals
+          // depth-buffer precision and makes distant decals shimmer/fight.
+          camera={{ position: [0, 3, 46], fov: 55, near: 0.1, far: 900 }}
           gl={{
-            antialias: highQuality,
+            antialias: true,
             stencil: false,
             alpha: false,
             powerPreference: "high-performance",
             toneMapping: THREE.ACESFilmicToneMapping,
-            toneMappingExposure: 1.0,
+            toneMappingExposure: 1.12,
           }}
           events={safePointerEvents}
           className="w-full h-full"
         >
-          <color attach="background" args={["#cdd8e3"]} />
+          <color attach="background" args={["#bcc9de"]} />
           <AssetGate onReady={handleWorldReady} />
           <ThumbnailCapture workspaceId={workspaceId} />
 

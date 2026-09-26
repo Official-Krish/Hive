@@ -6,6 +6,7 @@ import type {
   GitHubNotificationsResponse,
   MemberThroughput,
   MemberUsage,
+  PRCostResponse,
   PairSession,
   PairSessionCreate,
   UsageBudget,
@@ -597,6 +598,15 @@ export interface MapOverlay {
   inputTokens: number;
   outputTokens: number;
   costCents: number | null;
+  budget?: {
+    monthSpendCents: number | null;
+    monthlyCapCents: number | null;
+    memberSpendCents: number | null;
+    memberCapCents: number | null;
+    alertAtPct: number;
+    hardEnforce: boolean;
+    hiddenByPrivacy: boolean;
+  } | null;
   stats?: {
     sessionsToday: number;
     activeMinutesToday: number;
@@ -1201,6 +1211,14 @@ export const http = {
       params?: { from?: string; to?: string },
     ): Promise<{ members: MemberThroughput[] }> =>
       request(`/api/v1/workspaces/${workspaceId}/usage/throughput`, {
+        query: params,
+      }),
+
+    prCosts: (
+      workspaceId: string,
+      params?: { from?: string; to?: string; page?: number; pageSize?: number },
+    ): Promise<PRCostResponse> =>
+      request(`/api/v1/workspaces/${workspaceId}/usage/costs`, {
         query: params,
       }),
 

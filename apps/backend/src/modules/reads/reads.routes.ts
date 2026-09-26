@@ -7,6 +7,7 @@ import {
   sessionFilterSchema,
   taskFilterSchema,
   testRunFilterSchema,
+  prCostQuerySchema,
   usageBudgetSchema,
   usageQuerySchema,
 } from "@hive/types";
@@ -140,6 +141,13 @@ readsRouter.get(
   admin,
   validateQuery(usageQuerySchema),
   controller.getThroughput,
+);
+readsRouter.get(
+  "/:workspaceId/usage/costs",
+  member,
+  admin,
+  validateQuery(prCostQuerySchema),
+  controller.getPRCosts,
 );
 readsRouter.get(
   "/:workspaceId/usage/budget",

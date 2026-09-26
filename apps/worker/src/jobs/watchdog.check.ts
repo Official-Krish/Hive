@@ -1,7 +1,12 @@
 import { z } from "zod";
 import { prisma, EventType, type Prisma } from "@hive/db";
 import { WATCHDOG_DEFAULTS } from "@hive/types";
-import { publishAlert, type AlertBroadcast } from "@hive/queue";
+import {
+  publishAlert,
+  publishEnforcement,
+  type AlertBroadcast,
+  type EnforcementCommand,
+} from "@hive/queue";
 import { env } from "../config/env";
 import { logger } from "../lib/logger";
 
@@ -18,11 +23,11 @@ interface OpenAlert {
 
 function metaKey(metadata: unknown): string {
   const m = (metadata ?? {}) as Record<string, unknown>;
-  return String(
-    m.sessionId ??
-      m.period ??
-      `${m.repositoryId ?? ""}|${m.branch ?? ""}|${m.command ?? ""}`,
-  );
+  if (m.sessionId != null) return String(m.sessionId);
+  // Per-member budget alerts scope the key to member + period.
+  if (m.memberId != null) return `${m.period ?? ""}|${m.memberId}`;
+  if (m.period != null) return String(m.period);
+  return `${m.repositoryId ?? ""}|${m.branch ?? ""}|${m.command ?? ""}`;
 }
 
 async function openWatchdogAlerts(
@@ -287,83 +292,214 @@ async function checkFailingStreaks(
   await resolveStale(open, live);
 }
 
+async function monthSpend(
+  where: Prisma.TokenUsageWhereInput,
+  monthStart: Date,
+): Promise<number> {
+  const spend = await prisma.tokenUsage.aggregate({
+    where: { ...where, measuredAt: { gte: monthStart } },
+    _sum: { costCents: true },
+  });
+  return spend._sum.costCents ?? 0;
+}
+
+/**
+ * Fire the kill switch once per scope per period: publish an enforcement
+ * command (the backend owns the device control plane and stops the
+ * collectors) and open a latched `budget.enforced` alert. Spend only grows
+ * within a month, so the open alert suppresses repeats; the alert resolves
+ * when spend drops back under the cap and the cycle can arm again.
+ */
+export interface WatchdogHooks {
+  /** Replaces Redis alert fan-out (tests). Defaults to publishAlert. */
+  onAlert?: (event: AlertBroadcast) => Promise<void> | void;
+  /** Replaces Redis enforcement delivery (tests). Defaults to publishEnforcement. */
+  onEnforce?: (command: EnforcementCommand) => Promise<void> | void;
+}
+
+async function enforce(
+  workspaceId: string,
+  userId: string | null,
+  reason: string,
+  metadata: Record<string, unknown>,
+  key: string,
+  openEnforced: OpenAlert[],
+  created: AlertBroadcast[],
+  onEnforce?: WatchdogHooks["onEnforce"],
+): Promise<void> {
+  const message = userId
+    ? `Token cap breached — stopping collectors for one member (${reason})`
+    : `Token budget breached — stopping all workspace collectors (${reason})`;
+  // Latched: an already-open alert means the command went out — never repeat.
+  const latched = openEnforced.some((a) => metaKey(a.metadata) === key);
+  if (!latched) {
+    const command: EnforcementCommand = {
+      workspaceId,
+      userId,
+      reason,
+      requestedAt: new Date().toISOString(),
+    };
+    if (onEnforce) await onEnforce(command);
+    else await publishEnforcement(command, logger);
+  }
+  await ensureOpen(
+    workspaceId,
+    "budget.enforced",
+    key,
+    "CRITICAL",
+    message,
+    metadata,
+    openEnforced,
+    created,
+  );
+}
+
 async function checkBudgets(
   workspaceId: string,
   now: Date,
   created: AlertBroadcast[],
+  onEnforce?: WatchdogHooks["onEnforce"],
 ): Promise<void> {
   const budget = await prisma.usageBudget.findUnique({
     where: { workspaceId },
   });
   const open = await openWatchdogAlerts(workspaceId, "budget.risk");
-  if (!budget?.monthlyCapCents) {
-    await resolveStale(open, new Set());
-    return;
-  }
+  const openEnforced = await openWatchdogAlerts(workspaceId, "budget.enforced");
   const monthStart = new Date(
     Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
   );
   const period = monthStart.toISOString().slice(0, 7);
-  const spend = await prisma.tokenUsage.aggregate({
-    where: {
-      session: { workspaceId },
-      measuredAt: { gte: monthStart },
-    },
-    _sum: { costCents: true },
-  });
-  const monthSpendCents = spend._sum.costCents ?? 0;
-  const pct = (monthSpendCents / budget.monthlyCapCents) * 100;
   const live = new Set<string>();
-  if (pct >= 100) {
-    live.add(period);
-    await ensureOpen(
-      workspaceId,
-      "budget.risk",
-      period,
-      "CRITICAL",
-      `Monthly token budget exceeded (${Math.round(pct)}%)`,
-      {
-        period,
-        monthSpendCents,
-        monthlyCapCents: budget.monthlyCapCents,
-        pct: Math.round(pct),
-      },
-      open,
-      created,
+  const liveEnforced = new Set<string>();
+
+  // Workspace monthly cap (existing soft alerts, unchanged).
+  if (budget?.monthlyCapCents) {
+    const monthSpendCents = await monthSpend(
+      { session: { workspaceId } },
+      monthStart,
     );
-  } else if (pct >= budget.alertAtPct) {
-    live.add(period);
-    await ensureOpen(
-      workspaceId,
-      "budget.risk",
-      period,
-      "WARNING",
-      `Monthly token budget at ${Math.round(pct)}%`,
-      {
+    const pct = (monthSpendCents / budget.monthlyCapCents) * 100;
+    if (pct >= 100) {
+      live.add(period);
+      await ensureOpen(
+        workspaceId,
+        "budget.risk",
         period,
-        monthSpendCents,
-        monthlyCapCents: budget.monthlyCapCents,
-        pct: Math.round(pct),
-      },
-      open,
-      created,
-    );
+        "CRITICAL",
+        `Monthly token budget exceeded (${Math.round(pct)}%)`,
+        {
+          period,
+          monthSpendCents,
+          monthlyCapCents: budget.monthlyCapCents,
+          pct: Math.round(pct),
+        },
+        open,
+        created,
+      );
+      if (budget.hardEnforce) {
+        liveEnforced.add(period);
+        await enforce(
+          workspaceId,
+          null,
+          `workspace spend ${monthSpendCents}c over ${budget.monthlyCapCents}c cap`,
+          { period, monthSpendCents, monthlyCapCents: budget.monthlyCapCents },
+          period,
+          openEnforced,
+          created,
+          onEnforce,
+        );
+      }
+    } else if (pct >= budget.alertAtPct) {
+      live.add(period);
+      await ensureOpen(
+        workspaceId,
+        "budget.risk",
+        period,
+        "WARNING",
+        `Monthly token budget at ${Math.round(pct)}%`,
+        {
+          period,
+          monthSpendCents,
+          monthlyCapCents: budget.monthlyCapCents,
+          pct: Math.round(pct),
+        },
+        open,
+        created,
+      );
+    }
   }
+  // No else-branch: dropping a cap simply contributes no live keys, so the
+  // trailing resolveStale retires the stale alerts without touching the
+  // other scope's keys.
+
+  // Per-member monthly caps.
+  if (budget?.memberCapCents) {
+    const members = await prisma.workspaceMember.findMany({
+      where: { workspaceId },
+      select: { userId: true },
+    });
+    for (const { userId } of members) {
+      const spend = await monthSpend(
+        { session: { workspaceId, developerId: userId } },
+        monthStart,
+      );
+      if (spend < budget.memberCapCents) continue;
+      const key = `${period}|${userId}`;
+      live.add(key);
+      await ensureOpen(
+        workspaceId,
+        "budget.risk",
+        key,
+        "CRITICAL",
+        `Member token cap exceeded (${Math.round((spend / budget.memberCapCents) * 100)}%)`,
+        {
+          period,
+          memberId: userId,
+          monthSpendCents: spend,
+          memberCapCents: budget.memberCapCents,
+        },
+        open,
+        created,
+      );
+      if (budget.hardEnforce) {
+        liveEnforced.add(key);
+        await enforce(
+          workspaceId,
+          userId,
+          `member spend ${spend}c over ${budget.memberCapCents}c cap`,
+          {
+            period,
+            memberId: userId,
+            monthSpendCents: spend,
+            memberCapCents: budget.memberCapCents,
+          },
+          key,
+          openEnforced,
+          created,
+          onEnforce,
+        );
+      }
+    }
+  }
+
   await resolveStale(open, live);
+  await resolveStale(openEnforced, liveEnforced);
 }
 
 export async function checkWorkspace(
   workspaceId: string,
   now: Date = new Date(),
+  hooks: WatchdogHooks = {},
 ): Promise<void> {
   const created: AlertBroadcast[] = [];
   await checkStuckSessions(workspaceId, now, created);
   await checkTokenBurn(workspaceId, now, created);
   await checkFailingStreaks(workspaceId, created);
-  await checkBudgets(workspaceId, now, created);
+  await checkBudgets(workspaceId, now, created, hooks.onEnforce);
   // Instant fan-out to connected dashboards (polling covers the rest).
   for (const event of created) {
-    await publishAlert(event, logger);
+    if (hooks.onAlert) await hooks.onAlert(event);
+    else await publishAlert(event, logger);
   }
 }
 

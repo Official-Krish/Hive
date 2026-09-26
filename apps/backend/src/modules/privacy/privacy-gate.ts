@@ -191,7 +191,21 @@ export class PrivacyGate {
   static mapOverlay(o: MapOverlay, p: PrivacySetting): MapOverlay {
     let out: MapOverlay = { ...o };
     if (!p.allowTokenUsage) {
-      out = { ...out, inputTokens: 0, outputTokens: 0, costCents: null };
+      out = {
+        ...out,
+        inputTokens: 0,
+        outputTokens: 0,
+        costCents: null,
+        budget: {
+          monthSpendCents: null,
+          monthlyCapCents: null,
+          memberSpendCents: null,
+          memberCapCents: null,
+          alertAtPct: 80,
+          hardEnforce: false,
+          hiddenByPrivacy: true,
+        },
+      };
     }
     if (out.stats) {
       out = {

@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { http } from "@/lib/http";
-import type { UsageDayPoint } from "@hive/types";
+import type { PRCostResponse, UsageDayPoint } from "@hive/types";
 import {
   BackLink,
   BaselineSelect,
@@ -86,9 +86,14 @@ export function WorkspaceUsage() {
   const { workspaceId = "" } = useParams();
   const queryClient = useQueryClient();
   const [days, setDays] = useState<(typeof RANGE_DAYS)[number]>(30);
-  const [tab, setTab] = useState<"usage" | "throughput" | "keys">("usage");
+  const [tab, setTab] = useState<"usage" | "throughput" | "costs" | "keys">(
+    "usage",
+  );
+  const [costPage, setCostPage] = useState(1);
   const [capInput, setCapInput] = useState("");
   const [alertInput, setAlertInput] = useState("80");
+  const [memberCapInput, setMemberCapInput] = useState("");
+  const [hardEnforce, setHardEnforce] = useState(false);
 
   const range = useMemo(() => ({ from: isoDaysAgo(days) }), [days]);
 
@@ -113,6 +118,12 @@ export function WorkspaceUsage() {
     queryKey: ["throughput", workspaceId, days],
     queryFn: () => http.reads.throughput(workspaceId, range),
     enabled: isAdmin && tab === "throughput",
+  });
+  const costs = useQuery({
+    queryKey: ["pr-costs", workspaceId, days, costPage],
+    queryFn: () =>
+      http.reads.prCosts(workspaceId, { ...range, page: costPage }),
+    enabled: isAdmin && tab === "costs",
   });
   const reviewsDigest = useQuery({
     queryKey: ["reviews-summary", workspaceId, days],
@@ -179,6 +190,8 @@ export function WorkspaceUsage() {
     mutationFn: (input: {
       monthlyCapCents: number | null;
       alertAtPct: number;
+      memberCapCents: number | null;
+      hardEnforce: boolean;
     }) => http.reads.updateUsageBudget(workspaceId, input),
     onSuccess: () => {
       void queryClient.invalidateQueries({
@@ -242,13 +255,16 @@ export function WorkspaceUsage() {
               aria-label="Usage sections"
               className="flex items-center gap-5 border-b border-neutral-900/10"
             >
-              {(["usage", "throughput", "keys"] as const).map((t) => (
+              {(["usage", "throughput", "costs", "keys"] as const).map((t) => (
                 <button
                   key={t}
                   type="button"
                   role="tab"
                   aria-selected={tab === t}
-                  onClick={() => setTab(t)}
+                  onClick={() => {
+                    setTab(t);
+                    setCostPage(1);
+                  }}
                   className={
                     tab === t
                       ? "border-b-2 border-neutral-900 pb-2 text-[13px] font-semibold text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900/30"
@@ -259,7 +275,9 @@ export function WorkspaceUsage() {
                     ? "Token usage"
                     : t === "throughput"
                       ? "Throughput"
-                      : "API keys"}
+                      : t === "costs"
+                        ? "Cost per feature"
+                        : "API keys"}
                 </button>
               ))}
             </div>
@@ -273,7 +291,10 @@ export function WorkspaceUsage() {
                   key={d}
                   type="button"
                   aria-pressed={days === d}
-                  onClick={() => setDays(d)}
+                  onClick={() => {
+                    setDays(d);
+                    setCostPage(1);
+                  }}
                   className={
                     days === d
                       ? "data-mono text-[12px] font-semibold text-neutral-900 underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900/30"
@@ -554,6 +575,20 @@ export function WorkspaceUsage() {
                     />
                   </label>
                   <label className="flex flex-col gap-1 text-[12px] font-medium text-neutral-500">
+                    Per-member cap (USD, empty = none)
+                    <input
+                      value={memberCapInput}
+                      onChange={(e) => setMemberCapInput(e.target.value)}
+                      placeholder={
+                        data?.budget.memberCapCents != null
+                          ? `$${(data.budget.memberCapCents / 100).toFixed(2)}`
+                          : "No cap"
+                      }
+                      inputMode="decimal"
+                      className={`${baselineInputClass} w-32`}
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1 text-[12px] font-medium text-neutral-500">
                     Alert at %
                     <input
                       value={alertInput}
@@ -562,21 +597,41 @@ export function WorkspaceUsage() {
                       className={`${baselineInputClass} w-20`}
                     />
                   </label>
+                  <label className="flex items-center gap-2 pb-2 text-[12px] font-medium text-neutral-700">
+                    <input
+                      type="checkbox"
+                      checked={hardEnforce}
+                      onChange={(e) => setHardEnforce(e.target.checked)}
+                      className="size-3.5 accent-neutral-900"
+                    />
+                    Hard stop on breach
+                  </label>
                   <Btn
                     onClick={() => {
                       const dollars = capInput.trim();
+                      const memberDollars = memberCapInput.trim();
                       budgetMutation.mutate({
                         monthlyCapCents:
                           dollars === ""
                             ? null
                             : Math.round(Number(dollars) * 100),
                         alertAtPct: Number(alertInput) || 80,
+                        memberCapCents:
+                          memberDollars === ""
+                            ? null
+                            : Math.round(Number(memberDollars) * 100),
+                        hardEnforce,
                       });
                     }}
                   >
                     {budgetMutation.isPending ? "Saving…" : "Save budget"}
                   </Btn>
                 </div>
+                <p className="pt-2 text-[12px] leading-relaxed text-neutral-500">
+                  {data?.budget.hardEnforce
+                    ? "Hard stop is armed — breaching a cap remotely stops collectors until members restart them."
+                    : "Soft mode — breaches open alerts only. Arm the hard stop to remotely stop collectors on breach."}
+                </p>
                 {budgetMutation.isError && (
                   <div className="pt-3 text-[12px] font-medium text-rose-600">
                     Could not save — check the amounts.
@@ -726,6 +781,17 @@ export function WorkspaceUsage() {
             </>
           )}
 
+          {tab === "costs" && (
+            <CostsTab
+              data={costs.data ?? null}
+              loading={costs.isLoading}
+              days={days}
+              onRetry={() => costs.refetch()}
+              page={costPage}
+              onPage={setCostPage}
+            />
+          )}
+
           {tab === "keys" && (
             <KeysTab
               pool={pool.data?.entries ?? []}
@@ -753,6 +819,201 @@ export function WorkspaceUsage() {
               onStock={() => stockMutation.mutate()}
             />
           )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function CostsTab({
+  data,
+  loading,
+  days,
+  onRetry,
+  page,
+  onPage,
+}: {
+  data: PRCostResponse | null;
+  loading: boolean;
+  days: number;
+  onRetry: () => void;
+  page: number;
+  onPage: (p: number) => void;
+}) {
+  const summary = data?.summary ?? null;
+  const items = data?.items ?? [];
+  const waste =
+    (summary?.abandonedCostCents ?? 0) + (summary?.unattributedCostCents ?? 0);
+
+  return (
+    <div className="mt-6 flex flex-col gap-10">
+      {loading ? (
+        <div className="flex items-center gap-2 py-4 text-sm text-neutral-500">
+          <Spinner /> Loading feature costs…
+        </div>
+      ) : !data ? (
+        <div className="py-4">
+          <Note tone="error">
+            <span className="flex flex-wrap items-center gap-3">
+              <span>Couldn&apos;t load feature costs.</span>
+              <Btn variant="ghost" onClick={onRetry}>
+                Retry
+              </Btn>
+            </span>
+          </Note>
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 gap-x-6 gap-y-8 py-2 sm:grid-cols-4">
+            <Stat
+              label={`Attributed · ${days}d`}
+              value={fmtMoney(summary?.totalCostCents)}
+              hint={`${summary?.prs ?? 0} PRs · ${summary?.sessionsAttributed ?? 0} sessions`}
+            />
+            <Stat
+              label="Shipped (merged)"
+              value={fmtMoney(summary?.mergedCostCents)}
+            />
+            <Stat
+              label="Abandoned (closed)"
+              value={fmtMoney(summary?.abandonedCostCents)}
+            />
+            <Stat
+              label="Unattributed"
+              value={fmtMoney(summary?.unattributedCostCents)}
+              hint="spend no PR could claim"
+            />
+          </div>
+
+          {waste > 0 && (
+            <Note tone="warn">
+              {fmtMoney(waste)} of token spend in range went to work that never
+              shipped — closed-unmerged PRs plus sessions no PR could claim.
+            </Note>
+          )}
+
+          <section aria-label={`Cost per pull request, last ${days} days`}>
+            <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-neutral-400">
+              Cost per pull request · {days}d
+            </p>
+            <div className="pt-1">
+              {items.length === 0 ? (
+                <div className="py-4 text-sm text-neutral-400">
+                  {summary?.hiddenByPrivacy
+                    ? "Masked by privacy."
+                    : "No pull requests in range."}
+                </div>
+              ) : (
+                <>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-[13px]">
+                      <caption className="sr-only">
+                        Token cost per pull request, last {days} days
+                      </caption>
+                      <thead>
+                        <tr className="text-[11px] uppercase tracking-wide text-neutral-400">
+                          <th scope="col" className="py-2 pr-3 font-semibold">
+                            PR
+                          </th>
+                          <th scope="col" className="py-2 pr-3 font-semibold">
+                            Status
+                          </th>
+                          <th
+                            scope="col"
+                            className="py-2 pr-3 text-right font-semibold"
+                          >
+                            Sessions
+                          </th>
+                          <th
+                            scope="col"
+                            className="py-2 pr-3 text-right font-semibold"
+                          >
+                            Cost
+                          </th>
+                          <th scope="col" className="py-2 font-semibold">
+                            Author
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {items.map((pr) => (
+                          <tr
+                            key={`${pr.repositoryId}-${pr.number}`}
+                            className="border-t border-black/[0.05]"
+                          >
+                            <td className="py-2 pr-3">
+                              <span className="font-semibold">
+                                #{pr.number} {pr.title}
+                              </span>
+                              <span className="block text-[11px] text-neutral-500">
+                                {pr.repositoryName}
+                                {pr.headBranch ? ` · ${pr.headBranch}` : ""}
+                                {pr.inferredSessions > 0 &&
+                                pr.directSessions === 0
+                                  ? " · inferred"
+                                  : ""}
+                              </span>
+                            </td>
+                            <td className="py-2 pr-3">
+                              <span
+                                className={
+                                  pr.status === "MERGED"
+                                    ? "rounded-full bg-emerald-600/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-700"
+                                    : pr.status === "CLOSED"
+                                      ? "rounded-full bg-rose-600/10 px-2 py-0.5 text-[11px] font-semibold text-rose-700"
+                                      : "rounded-full bg-neutral-900/[0.05] px-2 py-0.5 text-[11px] font-semibold text-neutral-500"
+                                }
+                              >
+                                {pr.status.toLowerCase()}
+                              </span>
+                            </td>
+                            <td className="py-2 pr-3 text-right font-mono">
+                              {pr.sessions}
+                            </td>
+                            <td className="py-2 pr-3 text-right font-mono">
+                              {fmtMoney(pr.totalCostCents)}
+                            </td>
+                            <td className="py-2 text-neutral-500">
+                              {pr.authorName ?? "—"}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="flex items-center justify-between pt-3 text-[12px] text-neutral-500">
+                    <span>
+                      Page {data.page} of{" "}
+                      {Math.max(1, Math.ceil(data.total / data.pageSize))} ·{" "}
+                      {data.total} PRs
+                    </span>
+                    <span className="flex gap-2">
+                      <Btn
+                        variant="ghost"
+                        disabled={page <= 1}
+                        onClick={() => onPage(page - 1)}
+                      >
+                        Prev
+                      </Btn>
+                      <Btn
+                        variant="ghost"
+                        disabled={!data.hasMore}
+                        onClick={() => onPage(page + 1)}
+                      >
+                        Next
+                      </Btn>
+                    </span>
+                  </div>
+                </>
+              )}
+            </div>
+          </section>
+
+          <p className="text-[12px] leading-relaxed text-neutral-500">
+            Direct spend ran on the PR&apos;s branch; inferred spend shares the
+            repo, author, and time window. Each session attaches to at most one
+            PR, so totals never double-count.
+          </p>
         </>
       )}
     </div>

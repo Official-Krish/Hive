@@ -126,6 +126,12 @@ export function PlayerController({
   const groundedRef = useRef(true);
   const rotYRef = useRef(Math.PI + MODEL_YAW_OFFSET); // face the entrance (-Z)
   const jumpSeqRef = useRef(0);
+  // Feel state — visual only, never touches posRef/collision.
+  const bobPhaseRef = useRef(0);
+  const dipRef = useRef(0);
+  const impactRef = useRef(0);
+  const wasGroundedRef = useRef(true);
+  const leanRef = useRef({ roll: 0, pitch: 0 });
 
   // Motion handed to the Avatar for animation blending.
   const motionRef = useRef<PlayerMotion>({
@@ -408,6 +414,8 @@ export function PlayerController({
       nextY += vyRef.current * delta;
       if (vyRef.current <= 0 && nextY <= support) {
         nextY = support;
+        // record impact speed for the landing-dip feel pass below
+        impactRef.current = vyRef.current;
         vyRef.current = 0;
         groundedRef.current = true;
       }
@@ -465,8 +473,66 @@ export function PlayerController({
     const py = posRef.current[1];
     const pz = posRef.current[2];
     if (groupRef.current) {
-      groupRef.current.position.set(px, py, pz);
-      groupRef.current.rotation.y = rotYRef.current;
+      // Feel pass (visual only — posRef/collision untouched):
+      // distance-based head-bob, strafe roll, accel pitch, landing dip.
+      const speedNorm = Math.min(1, speed / RUN_SPEED);
+      const grounded = groundedRef.current;
+      if (grounded && !seated && speed > 0.4) {
+        bobPhaseRef.current += delta * (5.2 + speed * 1.15);
+      }
+      // Kept small on purpose: the follow camera inherits this motion, so
+      // anything bigger stacks into visible camera shake.
+      const bobAmp = seated || !grounded ? 0 : 0.018 * speedNorm;
+      const bobY = Math.sin(bobPhaseRef.current * 2) * bobAmp;
+      const bobX = Math.cos(bobPhaseRef.current) * bobAmp * 0.45;
+      // landing dip: spring on grounded transition with impact velocity
+      if (!wasGroundedRef.current && grounded) {
+        dipRef.current = Math.min(
+          0.14,
+          Math.max(0, -impactRef.current * 0.012),
+        );
+        impactRef.current = 0;
+      }
+      wasGroundedRef.current = grounded;
+      dipRef.current = THREE.MathUtils.damp(dipRef.current, 0, 9, delta);
+      const yawNow = yawRef.current;
+      const rX = Math.cos(yawNow);
+      const rZ = -Math.sin(yawNow);
+      const lateral = vx * rX + vz * rZ;
+      const fwdSpeed = vx * -Math.sin(yawNow) + vz * -Math.cos(yawNow);
+      const targetRoll =
+        seated || !grounded
+          ? 0
+          : THREE.MathUtils.clamp(-lateral * 0.022, -0.09, 0.09);
+      const targetPitch =
+        seated || !grounded
+          ? 0
+          : THREE.MathUtils.clamp(fwdSpeed * 0.012, -0.06, 0.08);
+      leanRef.current.roll = THREE.MathUtils.damp(
+        leanRef.current.roll,
+        targetRoll,
+        8,
+        delta,
+      );
+      leanRef.current.pitch = THREE.MathUtils.damp(
+        leanRef.current.pitch,
+        targetPitch,
+        8,
+        delta,
+      );
+      // world-space lateral bob offset (perpendicular to heading)
+      const hx = Math.cos(rotYRef.current);
+      const hz = -Math.sin(rotYRef.current);
+      groupRef.current.position.set(
+        px + hx * bobX,
+        py + bobY - dipRef.current,
+        pz + hz * bobX,
+      );
+      groupRef.current.rotation.set(
+        leanRef.current.pitch,
+        rotYRef.current,
+        leanRef.current.roll,
+      );
     }
     motionRef.current.speed = seated ? 0 : Math.min(1, speed / RUN_SPEED);
     motionRef.current.grounded = groundedRef.current;
