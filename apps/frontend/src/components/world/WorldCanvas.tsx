@@ -2379,25 +2379,30 @@ export function WorldCanvas({
           )}
         </AnimatePresence>
 
-        {/* 3D world */}
+        {/* 3D world — cinematic grade: lifted exposure, wider lens for a
+            spacious tech-office feel. Shadows stay PCF (not soft) and dpr
+            stays ≤1.5 on desktop: soft shadows + dpr 2.0 cost ~30% frame
+            time on integrated GPUs for almost no visible gain here. */}
         <Canvas
           shadows
           // Desktop: dpr ≤1.5 + MSAA for crisp mullions/screens. Cheap path
           // (coarse/small/reduced-motion) keeps dpr 1.15 + no MSAA.
           dpr={highQuality ? [1, 1.5] : [1, 1.15]}
-          camera={{ position: [0, 3, 46], fov: 50, near: 0.1, far: 900 }}
+          // far stays tight (900): every extra 100m of far plane steals
+          // depth-buffer precision and makes distant decals shimmer/fight.
+          camera={{ position: [0, 3, 46], fov: 55, near: 0.1, far: 900 }}
           gl={{
-            antialias: highQuality,
+            antialias: true,
             stencil: false,
             alpha: false,
             powerPreference: "high-performance",
             toneMapping: THREE.ACESFilmicToneMapping,
-            toneMappingExposure: 1.0,
+            toneMappingExposure: 1.12,
           }}
           events={safePointerEvents}
           className="w-full h-full"
         >
-          <color attach="background" args={["#cdd8e3"]} />
+          <color attach="background" args={["#bcc9de"]} />
           <AssetGate onReady={handleWorldReady} />
           <ThumbnailCapture workspaceId={workspaceId} />
 

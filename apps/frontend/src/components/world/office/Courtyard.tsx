@@ -17,13 +17,21 @@ import {
   type Neighbor,
   type Wall,
 } from "./layout";
-import { M, floorFor, facadeFor } from "./materials";
+import {
+  M,
+  floorFor,
+  facadeFor,
+  slabFor,
+  decoFor,
+  ventFor,
+  storefrontFor,
+} from "./materials";
 import { KitInstances } from "./KitInstances";
-import { monumentTexture, marqueeTexture } from "./signage";
+import { monumentTexture, marqueeTexture, bladeTexture } from "./signage";
 
 // Aligned with the directional SUN in OfficeLighting so the sky disc and the
 // shadow direction agree.
-const SUN: [number, number, number] = [60, 80, -40];
+const SUN: [number, number, number] = [72, 32, -28];
 
 /** Real courtyard point lights only on capable desktops — the emissive lamp
  *  heads carry the look everywhere else. */
@@ -43,27 +51,91 @@ const FAR = 900; // far ground extent
 /** Ground-floor storey height shared by every neighbouring block. */
 const PLINTH_H = 4.6;
 
+/** Skyscraper archetype per block: glass curtain tower, lit crown,
+ *  art-deco spire, residential slab, brick warehouse. Derived from height +
+ *  index so neighbours never match their immediate siblings. */
+type Arch = "brick" | "glass" | "deco" | "slab" | "crown";
+function archFor(n: Neighbor, index: number): Arch {
+  if (n.style === 3) return "brick";
+  if (n.h >= 50)
+    return (["glass", "crown", "deco"] as const)[index % 3] ?? "glass";
+  if (n.h >= 30)
+    return (["slab", "glass", "deco"] as const)[index % 3] ?? "glass";
+  return index % 2 === 0 ? "slab" : "glass";
+}
+
+/** Gold crown glow (Chrysler nod) — shared, unlit-warm at dusk. */
+const crownGold = new THREE.MeshStandardMaterial({
+  color: "#3a2c14",
+  emissive: "#ffc46a",
+  emissiveIntensity: 1.8,
+  roughness: 0.4,
+  metalness: 0.6,
+  toneMapped: false,
+});
+
 /**
- * One facade-only neighbour: precast plinth, curtain-walled mass with an
- * optional upper setback, coping, a canopied entrance with a lit sign and a
- * little rooftop plant. Sealed — there is no interior and no collider, the
- * blocks all sit beyond the courtyard barriers.
+ * One sealed neighbouring tower. Massing (plinth → shaft → setbacks → crown)
+ * is real geometry; near blocks (<120 m) also get entrances, storefronts,
+ * fins/balconies. Far blocks are massing + crown only — same skyline for a
+ * third of the draws. No interior, no collider, ever.
  */
 function Block({ n, index = 0 }: { n: Neighbor; index?: number }) {
+  const arch = archFor(n, index);
+  const detail = Math.hypot(n.x, n.z) < 120;
+  const shops = Math.hypot(n.x, n.z) < 95 && arch !== "brick";
   const upperY = n.setback > 0 ? n.h * n.setbackAt : n.h;
   const bodyH = upperY - PLINTH_H;
-  const facade = facadeFor(n.style, (n.w + n.d) / 2, bodyH);
   const topH = n.h - upperY;
-  const topFacade =
+  const variant = (index % 2) as 0 | 1;
+
+  const shaftMat =
+    arch === "brick"
+      ? facadeFor(3, n.w, bodyH)
+      : arch === "slab"
+        ? slabFor(variant, n.w, bodyH)
+        : arch === "deco"
+          ? decoFor(variant, n.w, bodyH)
+          : facadeFor(arch === "crown" ? 1 : n.style, n.w, bodyH);
+  const topMat =
     n.setback > 0
-      ? facadeFor(n.style, (n.w + n.d) / 2 - n.setback * 2, topH)
-      : facade;
+      ? arch === "slab"
+        ? slabFor(variant, n.w - n.setback * 2, topH)
+        : arch === "deco"
+          ? decoFor(variant, n.w - n.setback * 2, topH)
+          : facadeFor(
+              arch === "brick" ? 3 : arch === "crown" ? 1 : n.style,
+              n.w - n.setback * 2,
+              topH,
+            )
+      : shaftMat;
 
   // Outward direction of the entrance face.
   const ex = n.entrance === "e" ? 1 : n.entrance === "w" ? -1 : 0;
   const ez = n.entrance === "s" ? 1 : n.entrance === "n" ? -1 : 0;
   const faceW = ex !== 0 ? n.d : n.w;
   const half = ex !== 0 ? n.w / 2 : n.d / 2;
+
+  const fins = useMemo(() => {
+    if (!(detail && (arch === "glass" || arch === "deco") && n.h >= 30))
+      return [];
+    const count = Math.max(3, Math.floor(faceW / 3));
+    return Array.from(
+      { length: count },
+      (_, i) => -faceW / 2 + 1.5 + (i * (faceW - 3)) / Math.max(1, count - 1),
+    );
+  }, [detail, arch, n.h, faceW]);
+
+  const balconies = useMemo(() => {
+    if (!(detail && arch === "slab" && bodyH > 10)) return [];
+    const rows = Math.min(9, Math.floor((bodyH - 3) / 3));
+    const cols = Math.min(8, Math.floor((faceW - 3) / 3.2));
+    const out: [number, number][] = [];
+    for (let r = 0; r < rows; r++)
+      for (let c = 0; c < cols; c++)
+        out.push([-((cols - 1) * 3.2) / 2 + c * 3.2, PLINTH_H + 2.6 + r * 3]);
+    return out;
+  }, [detail, arch, bodyH, faceW]);
 
   return (
     <group position={[n.x, 0, n.z]} rotation={[0, n.ry, 0]}>
@@ -77,11 +149,19 @@ function Block({ n, index = 0 }: { n: Neighbor; index?: number }) {
         <primitive object={M.precastDark} attach="material" />
       </mesh>
 
-      {/* Curtain-walled body */}
+      {/* Shaft in the archetype skin */}
       <mesh position={[0, PLINTH_H + bodyH / 2, 0]} castShadow receiveShadow>
         <boxGeometry args={[n.w, bodyH, n.d]} />
-        <primitive object={facade} attach="material" />
+        <primitive object={shaftMat} attach="material" />
       </mesh>
+
+      {/* Mechanical louver band capping the shaft (tall non-brick) */}
+      {bodyH > 14 && arch !== "brick" && (
+        <mesh position={[0, upperY - 0.7, 0]}>
+          <boxGeometry args={[n.w + 0.25, 1.3, n.d + 0.25]} />
+          <primitive object={ventFor()} attach="material" />
+        </mesh>
+      )}
 
       {/* Setback volume + the terrace it leaves behind */}
       {n.setback > 0 && (
@@ -94,81 +174,212 @@ function Block({ n, index = 0 }: { n: Neighbor; index?: number }) {
             <boxGeometry
               args={[n.w - n.setback * 2, topH, n.d - n.setback * 2]}
             />
-            <primitive object={topFacade} attach="material" />
+            <primitive object={topMat} attach="material" />
           </mesh>
         </>
       )}
 
-      {/* Coping around the top (height varies so roofs don't match) */}
-      <mesh position={[0, n.h + 0.22 + (index % 3) * 0.12, 0]} castShadow>
-        <boxGeometry
-          args={[
-            (n.setback > 0 ? n.w - n.setback * 2 : n.w) + 0.6,
-            0.44 + (index % 3) * 0.24,
-            (n.setback > 0 ? n.d - n.setback * 2 : n.d) + 0.6,
-          ]}
-        />
-        <primitive object={M.precastDark} attach="material" />
-      </mesh>
-
-      {/* Rooftop plant + vents; tall blocks get an antenna + beacon */}
-      <mesh position={[((index % 5) - 2) * 1.6, n.h + 1.2, 0]} castShadow>
-        <boxGeometry args={[6, 1.6, 4]} />
-        <primitive object={M.metalBrushed} attach="material" />
-      </mesh>
-      {index % 2 === 0 && (
-        <mesh position={[n.w / 4, n.h + 0.7, -n.d / 4]}>
-          <boxGeometry args={[1.6, 1.4, 1.6]} />
+      {/* --- Crowns per archetype -------------------------------------- */}
+      {(arch === "brick" || arch === "slab") && (
+        <mesh position={[0, n.h + 0.22 + (index % 3) * 0.12, 0]} castShadow>
+          <boxGeometry
+            args={[
+              (n.setback > 0 ? n.w - n.setback * 2 : n.w) + 0.6,
+              0.44 + (index % 3) * 0.24,
+              (n.setback > 0 ? n.d - n.setback * 2 : n.d) + 0.6,
+            ]}
+          />
           <primitive object={M.precastDark} attach="material" />
         </mesh>
       )}
-      {index % 3 === 0 && (
-        <mesh position={[-n.w / 4, n.h + 0.5, n.d / 4]}>
-          <boxGeometry args={[2.4, 1.0, 1.2]} />
-          <primitive object={M.hedge} attach="material" />
-        </mesh>
-      )}
-      {n.h >= 40 && (
-        <group position={[n.w / 4, n.h + 0.4, 0]}>
-          <mesh position={[0, 3, 0]}>
-            <cylinderGeometry args={[0.12, 0.18, 6, 6]} />
+      {arch === "glass" && n.h >= 45 && (
+        <group>
+          {/* set-back glass crown + needle spire + beacon */}
+          <mesh position={[0, n.h + 2, 0]} castShadow>
+            <boxGeometry args={[n.w - 7, 4, n.d - 7]} />
+            <primitive object={topMat} attach="material" />
+          </mesh>
+          <mesh position={[0, n.h + 8, 0]}>
+            <cylinderGeometry args={[0.1, 0.2, 9, 6]} />
             <primitive object={M.metalDark} attach="material" />
           </mesh>
-          <mesh position={[0, 6.2, 0]}>
+          <mesh position={[0, n.h + 12.6, 0]}>
             <sphereGeometry args={[0.45, 10, 8]} />
-            <meshBasicMaterial color="#f43f5e" toneMapped={false} />
+            <meshBasicMaterial color="#f43f5e" toneMapped={false} fog={false} />
+          </mesh>
+        </group>
+      )}
+      {arch === "deco" && (
+        <group>
+          {/* stepped limestone crown + mooring mast + white beacon */}
+          <mesh position={[0, n.h + 1, 0]} castShadow>
+            <boxGeometry args={[n.w - 5, 2, n.d - 5]} />
+            <primitive object={M.precast} attach="material" />
+          </mesh>
+          <mesh position={[0, n.h + 2.8, 0]} castShadow>
+            <boxGeometry args={[n.w - 9, 1.8, n.d - 9]} />
+            <primitive object={M.precastDark} attach="material" />
+          </mesh>
+          <mesh position={[0, n.h + 6.4, 0]}>
+            <cylinderGeometry args={[0.35, 0.6, 6, 8]} />
+            <primitive object={M.precast} attach="material" />
+          </mesh>
+          <mesh position={[0, n.h + 10, 0]}>
+            <sphereGeometry args={[0.4, 10, 8]} />
+            <meshBasicMaterial color="#ffe9b8" toneMapped={false} fog={false} />
+          </mesh>
+        </group>
+      )}
+      {arch === "crown" && (
+        <group>
+          {/* golden lit crown band + shrinking dark cap + needle */}
+          <mesh position={[0, n.h - 1.4, 0]}>
+            <boxGeometry args={[n.w - 5, 3.4, n.d - 5]} />
+            <primitive object={crownGold} attach="material" />
+          </mesh>
+          <mesh position={[0, n.h + 1.4, 0]} castShadow>
+            <boxGeometry args={[n.w - 9, 2.4, n.d - 9]} />
+            <primitive object={M.metalDark} attach="material" />
+          </mesh>
+          <mesh position={[0, n.h + 6.4, 0]}>
+            <cylinderGeometry args={[0.09, 0.16, 8, 6]} />
+            <primitive object={M.metalDark} attach="material" />
+          </mesh>
+          <mesh position={[0, n.h + 10.6, 0]}>
+            <sphereGeometry args={[0.4, 10, 8]} />
+            <meshBasicMaterial color="#f43f5e" toneMapped={false} fog={false} />
           </mesh>
         </group>
       )}
 
-      {/* Entrance: recessed glazing, canopy, lit sign band */}
-      <group
-        position={[ex * (half + 0.28), 0, ez * (half + 0.28)]}
-        rotation={[0, ex !== 0 ? Math.PI / 2 : 0, 0]}
-      >
-        <mesh position={[0, 1.9, 0]} renderOrder={10}>
-          <boxGeometry args={[Math.min(faceW * 0.5, 11), 3.6, 0.12]} />
-          <primitive object={M.glassCheap} attach="material" />
+      {/* Rooftop plant box (slab + brick only — towers wear crowns) */}
+      {(arch === "slab" || arch === "brick") && (
+        <mesh position={[((index % 5) - 2) * 1.6, n.h + 1.2, 0]} castShadow>
+          <boxGeometry args={[6, 1.6, 4]} />
+          <primitive object={M.metalBrushed} attach="material" />
         </mesh>
-        {/* mullions */}
-        {[-3, -1, 1, 3].map((d) => (
-          <mesh key={d} position={[d * 1.3, 1.9, 0.02]}>
-            <boxGeometry args={[0.12, 3.6, 0.16]} />
-            <primitive object={M.mullion} attach="material" />
+      )}
+
+      {/* Vertical fins catching the dusk sun (near glass/deco towers) */}
+      {fins.length > 0 && (
+        <Instances range={fins.length} limit={fins.length} castShadow>
+          <boxGeometry args={[0.16, bodyH * 0.92, 0.5]} />
+          <primitive object={M.mullion} attach="material" />
+          {fins.map((fx, i) => {
+            const px = ex !== 0 ? ex * (half + 0.28) : fx;
+            const pz = ez !== 0 ? ez * (half + 0.28) : fx;
+            return (
+              <Instance
+                key={i}
+                position={[px, PLINTH_H + bodyH / 2, pz]}
+                rotation={[0, ex !== 0 ? Math.PI / 2 : 0, 0]}
+              />
+            );
+          })}
+        </Instances>
+      )}
+
+      {/* Balcony slabs (near residential slabs) */}
+      {balconies.length > 0 && (
+        <Instances range={balconies.length} limit={balconies.length} castShadow>
+          <boxGeometry args={[2.0, 0.14, 1.0]} />
+          <primitive object={M.precast} attach="material" />
+          {balconies.map(([bx, by], i) => {
+            const px = ex !== 0 ? ex * (half + 0.55) : bx;
+            const pz = ez !== 0 ? ez * (half + 0.55) : bx;
+            return (
+              <Instance
+                key={i}
+                position={[px, by, pz]}
+                rotation={[0, ex !== 0 ? Math.PI / 2 : 0, 0]}
+              />
+            );
+          })}
+        </Instances>
+      )}
+
+      {/* Entrance: recessed glazing, canopy, lit sign (near blocks only) */}
+      {detail && (
+        <group
+          position={[ex * (half + 0.28), 0, ez * (half + 0.28)]}
+          rotation={[0, ex !== 0 ? Math.PI / 2 : 0, 0]}
+        >
+          <mesh position={[0, 1.9, 0]} renderOrder={10}>
+            <boxGeometry args={[Math.min(faceW * 0.5, 11), 3.6, 0.12]} />
+            <primitive object={M.glassCheap} attach="material" />
           </mesh>
-        ))}
-        {/* canopy */}
-        <mesh position={[0, 3.95, 1.1]} castShadow>
-          <boxGeometry args={[Math.min(faceW * 0.62, 14), 0.3, 2.4]} />
-          <primitive object={M.precastDark} attach="material" />
-        </mesh>
-        {/* lit sign band with tenant name above the canopy */}
-        <BlockSign
-          width={Math.min(faceW * 0.4, 8)}
-          index={index}
-          warm={n.style === 1}
-        />
-      </group>
+          {/* warm lobby glow behind the glass so the entrance reads occupied */}
+          <mesh position={[0, 1.7, -0.9]}>
+            <planeGeometry args={[Math.min(faceW * 0.5, 11) - 0.6, 2.8]} />
+            <meshBasicMaterial color="#ffd9a3" toneMapped={false} fog={false} />
+          </mesh>
+          {/* mullions */}
+          {[-1.5, 1.5].map((d) => (
+            <mesh key={d} position={[d * 1.3, 1.9, 0.02]}>
+              <boxGeometry args={[0.12, 3.6, 0.16]} />
+              <primitive object={M.mullion} attach="material" />
+            </mesh>
+          ))}
+          {/* canopy */}
+          <mesh position={[0, 3.95, 1.1]} castShadow>
+            <boxGeometry args={[Math.min(faceW * 0.62, 14), 0.3, 2.4]} />
+            <primitive object={M.precastDark} attach="material" />
+          </mesh>
+          {/* canopy soffit downlight strip */}
+          <mesh position={[0, 3.78, 1.1]}>
+            <boxGeometry args={[Math.min(faceW * 0.55, 12), 0.04, 0.18]} />
+            <primitive object={M.lampGlow} attach="material" />
+          </mesh>
+          {/* entrance landing */}
+          <mesh position={[0, 0.09, 1.9]} receiveShadow>
+            <boxGeometry args={[Math.min(faceW * 0.5, 11), 0.18, 1.6]} />
+            <primitive object={M.curb} attach="material" />
+          </mesh>
+          {/* lit sign band with tenant name above the canopy */}
+          <BlockSign
+            width={Math.min(faceW * 0.4, 8)}
+            index={index}
+            warm={n.style === 1}
+          />
+        </group>
+      )}
+      {/* Painted storefront planes flanking the entrance — one draw each,
+          mullions and interiors baked into the texture. */}
+      {shops &&
+        [-1, 1].map((s) => {
+          const w = Math.min(faceW * 0.24, 7.5);
+          const along = (Math.min(faceW * 0.5, 11) / 2 + w / 2 + 1.2) * s;
+          return (
+            <group key={`shop${s}`}>
+              <mesh
+                position={[
+                  ex !== 0 ? ex * (half + 0.06) : along,
+                  1.55,
+                  ez !== 0 ? ez * (half + 0.06) : along,
+                ]}
+                rotation={[0, ex !== 0 ? Math.PI / 2 : 0, 0]}
+                renderOrder={10}
+              >
+                <planeGeometry args={[w, 2.9]} />
+                <primitive
+                  object={storefrontFor((index + (s + 1) / 2) % 2 === 0)}
+                  attach="material"
+                />
+              </mesh>
+              <mesh
+                position={[
+                  ex !== 0 ? ex * (half + 0.12) : along,
+                  3.15,
+                  ez !== 0 ? ez * (half + 0.12) : along,
+                ]}
+                rotation={[0, ex !== 0 ? Math.PI / 2 : 0, 0]}
+              >
+                <boxGeometry args={[w + 0.2, 0.3, 0.16]} />
+                <primitive object={M.precastDark} attach="material" />
+              </mesh>
+            </group>
+          );
+        })}
     </group>
   );
 }
@@ -489,14 +700,15 @@ function StreetProps() {
           <meshStandardMaterial color="#b3402e" roughness={0.6} />
         </mesh>
       </group>
-      {/* parked cars + delivery van for scale (stylised, shadowless) */}
+      {/* parked cars + delivery van for scale (stylised, shadowless) —
+          the middle one is a yellow cab: checker band + roof light. */}
       {(
         [
-          [-60, "#5b7a99", false],
-          [-20, "#6b7280", false],
-          [55, "#e5e0d5", true],
-        ] as [number, string, boolean][]
-      ).map(([x, color, van]) => (
+          [-60, "#5b7a99", false, false],
+          [-20, "#f7b500", false, true],
+          [55, "#e5e0d5", true, false],
+        ] as [number, string, boolean, boolean][]
+      ).map(([x, color, van, taxi]) => (
         <group key={`car${x}`} position={[x, 0, 60]}>
           <mesh position={[0, van ? 0.95 : 0.65, 0]}>
             <boxGeometry args={[van ? 5.2 : 4.2, van ? 1.5 : 0.7, 1.85]} />
@@ -525,6 +737,29 @@ function StreetProps() {
                   metalness={0.4}
                 />
               </mesh>
+              {taxi && getCheckerTex() && (
+                <>
+                  {/* checker bands on both flanks (far flank mirrored) */}
+                  {[0, 1].map((s) => (
+                    <mesh
+                      key={s}
+                      position={[-0.2, 0.72, s === 0 ? 0.94 : -0.94]}
+                      rotation={[0, s === 0 ? 0 : Math.PI, 0]}
+                    >
+                      <planeGeometry args={[3.4, 0.22]} />
+                      <meshBasicMaterial
+                        map={getCheckerTex() ?? undefined}
+                        toneMapped={false}
+                      />
+                    </mesh>
+                  ))}
+                  {/* roof light */}
+                  <mesh position={[-0.2, 1.55, 0]}>
+                    <boxGeometry args={[0.5, 0.14, 0.24]} />
+                    <primitive object={M.lampGlow} attach="material" />
+                  </mesh>
+                </>
+              )}
             </>
           )}
           {van && (
@@ -575,6 +810,634 @@ function StreetProps() {
       ))}
     </group>
   );
+}
+
+/** Slim street poplars along the side streets + front walkway — one trunk
+ *  draw + one crown draw for all 21 trees. Conical crowns read as pruned
+ *  street planting next to the plaza's broad crowns. */
+function StreetTrees() {
+  const spots = useMemo(() => {
+    const out: [number, number][] = [];
+    for (const sx of [-40, 40]) {
+      for (let z = -64; z <= 48; z += 16) out.push([sx, z]);
+    }
+    for (let x = -30; x <= 30; x += 15) out.push([x, 49]);
+    return out;
+  }, []);
+  return (
+    <group name="street-trees">
+      <Instances range={spots.length} limit={spots.length} castShadow>
+        <cylinderGeometry args={[0.1, 0.17, 2.1, 7]} />
+        <primitive object={M.trunk} attach="material" />
+        {spots.map(([x, z], i) => (
+          <Instance key={i} position={[x, 1.05, z]} />
+        ))}
+      </Instances>
+      <Instances range={spots.length} limit={spots.length} castShadow>
+        <coneGeometry args={[0.95, 4.6, 7]} />
+        <primitive object={M.leaf} attach="material" />
+        {spots.map(([x, z], i) => (
+          <Instance
+            key={i}
+            position={[x, 4.2 + ((i * 37) % 5) * 0.12, z]}
+            scale={[1, 1 + ((i * 53) % 4) * 0.06, 1]}
+          />
+        ))}
+      </Instances>
+      <Instances range={spots.length} limit={spots.length}>
+        <cylinderGeometry args={[0.5, 0.5, 0.05, 10]} />
+        <primitive object={M.mulch} attach="material" />
+        {spots.map(([x, z], i) => (
+          <Instance key={i} position={[x, 0.025, z]} />
+        ))}
+      </Instances>
+    </group>
+  );
+}
+
+/** Bus-stop shelter on the front walkway: posts, roof, glass back, bench,
+ *  timetable sign. One realistic transit object for the streetscape. */
+function BusStop() {
+  const face = useMemo(() => bladeTexture("BUS · Hive Shuttle", "#38bdf8"), []);
+  return (
+    <group name="bus-stop" position={[18, 0, WALKWAY_Z - 0.6]}>
+      {[-2, 2].map((dx) =>
+        [-0.8, 0.8].map((dz) => (
+          <mesh key={`${dx}${dz}`} position={[dx, 1.25, dz]} castShadow>
+            <boxGeometry args={[0.09, 2.5, 0.09]} />
+            <primitive object={M.lampPost} attach="material" />
+          </mesh>
+        )),
+      )}
+      <mesh position={[0, 2.56, 0]} castShadow>
+        <boxGeometry args={[4.5, 0.09, 2.0]} />
+        <primitive object={M.metalBrushed} attach="material" />
+      </mesh>
+      <mesh position={[0, 2.5, -0.95]} castShadow>
+        <boxGeometry args={[4.5, 0.35, 0.08]} />
+        <primitive object={M.precastDark} attach="material" />
+      </mesh>
+      {/* glass back */}
+      <mesh position={[0, 1.25, -0.85]} renderOrder={10}>
+        <boxGeometry args={[4.2, 1.7, 0.04]} />
+        <primitive object={M.glassCheap} attach="material" />
+      </mesh>
+      {/* bench */}
+      <mesh position={[0, 0.46, -0.4]} castShadow receiveShadow>
+        <boxGeometry args={[3.6, 0.07, 0.45]} />
+        <primitive object={M.woodLight} attach="material" />
+      </mesh>
+      {[-1.6, 1.6].map((dx) => (
+        <mesh key={dx} position={[dx, 0.22, -0.4]} castShadow>
+          <boxGeometry args={[0.07, 0.44, 0.4]} />
+          <primitive object={M.metalDark} attach="material" />
+        </mesh>
+      ))}
+      {/* timetable totem */}
+      <mesh position={[2.7, 1.1, 0.6]} castShadow>
+        <boxGeometry args={[0.08, 2.2, 0.08]} />
+        <primitive object={M.lampPost} attach="material" />
+      </mesh>
+      <mesh position={[2.7, 2.0, 0.6]}>
+        <boxGeometry args={[0.7, 0.5, 0.06]} />
+        <primitive object={M.blackAnodized} attach="material" />
+      </mesh>
+      {face && (
+        <mesh position={[2.7, 2.0, 0.64]}>
+          <planeGeometry args={[0.62, 0.4]} />
+          <meshBasicMaterial map={face} transparent toneMapped={false} />
+        </mesh>
+      )}
+    </group>
+  );
+}
+
+/** Red obstruction beacons on the tallest skyline crowns — one instanced
+ *  draw, unlit red so they read at any distance. */
+function SkylineBeacons({
+  towers,
+}: {
+  towers: { x: number; h: number; z: number }[];
+}) {
+  if (towers.length === 0) return null;
+  return (
+    <Instances range={towers.length} limit={towers.length}>
+      <sphereGeometry args={[0.55, 8, 6]} />
+      <meshBasicMaterial color="#ff3b30" toneMapped={false} fog={false} />
+      {towers.map((b, i) => (
+        <Instance key={i} position={[b.x, b.h + 8.4, b.z]} />
+      ))}
+    </Instances>
+  );
+}
+
+/* ── NYC streetscape helpers ────────────────────────────────────────────
+   Small canvas painters for signage. Same technique as signage.ts. */
+function streetBlade(text: string): THREE.Texture | null {
+  if (typeof document === "undefined") return null;
+  const el = document.createElement("canvas");
+  el.width = 512;
+  el.height = 96;
+  const ctx = el.getContext("2d");
+  if (!ctx) return null;
+  ctx.fillStyle = "#0d6e3f";
+  ctx.fillRect(0, 0, 512, 96);
+  ctx.strokeStyle = "#e8eaf0";
+  ctx.lineWidth = 5;
+  ctx.strokeRect(6, 6, 500, 84);
+  ctx.fillStyle = "#f4f6f4";
+  ctx.font = "700 52px system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(text, 256, 52);
+  const t = new THREE.CanvasTexture(el);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 8;
+  return t;
+}
+
+function checkerStripe(): THREE.Texture | null {
+  if (typeof document === "undefined") return null;
+  const el = document.createElement("canvas");
+  el.width = 128;
+  el.height = 16;
+  const ctx = el.getContext("2d");
+  if (!ctx) return null;
+  for (let i = 0; i < 16; i++) {
+    ctx.fillStyle = i % 2 === 0 ? "#111418" : "#f4f2ec";
+    ctx.fillRect(i * 8, 0, 8, 16);
+  }
+  const t = new THREE.CanvasTexture(el);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = THREE.RepeatWrapping;
+  t.repeat.set(6, 1);
+  return t;
+}
+
+/** Module-cached checker band for the taxi (built once, reused). */
+let checkerTex: THREE.Texture | null | undefined;
+function getCheckerTex(): THREE.Texture | null {
+  if (checkerTex === undefined) checkerTex = checkerStripe();
+  return checkerTex;
+}
+
+function plaqueTexture(
+  text: string,
+  fg: string,
+  bg: string,
+): THREE.Texture | null {
+  if (typeof document === "undefined") return null;
+  const el = document.createElement("canvas");
+  el.width = 256;
+  el.height = 96;
+  const ctx = el.getContext("2d");
+  if (!ctx) return null;
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, 256, 96);
+  ctx.fillStyle = fg;
+  ctx.font = "700 56px system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(text, 128, 52);
+  const t = new THREE.CanvasTexture(el);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 8;
+  return t;
+}
+
+/** Cedar rooftop water towers — the single most "this is New York" object
+ *  on any skyline. Three towers on mid-rise roofs: 4 instanced draws total. */
+function WaterTowers() {
+  const spots = useMemo(() => {
+    const picks = [NEIGHBORS[1], NEIGHBORS[4], NEIGHBORS[8]].filter(
+      Boolean,
+    ) as {
+      x: number;
+      z: number;
+      h: number;
+      w: number;
+      d: number;
+    }[];
+    return picks.map((n, i) => ({
+      x: n.x + (i % 2 === 0 ? n.w / 5 : -n.w / 5),
+      z: n.z + (i % 2 === 0 ? -n.d / 6 : n.d / 6),
+      roof: n.h + 0.44,
+    }));
+  }, []);
+  const legs = useMemo(
+    () =>
+      spots.flatMap((s) =>
+        (
+          [
+            [-1.1, -1.1],
+            [1.1, -1.1],
+            [-1.1, 1.1],
+            [1.1, 1.1],
+          ] as [number, number][]
+        ).map(
+          ([dx, dz]) =>
+            [s.x + dx, s.roof + 1.1, s.z + dz] as [number, number, number],
+        ),
+      ),
+    [spots],
+  );
+  if (spots.length === 0) return null;
+  return (
+    <group name="water-towers">
+      <Instances range={legs.length} limit={legs.length} castShadow>
+        <boxGeometry args={[0.16, 2.2, 0.16]} />
+        <primitive object={M.trunk} attach="material" />
+        {legs.map((p, i) => (
+          <Instance key={i} position={p} />
+        ))}
+      </Instances>
+      <Instances range={spots.length} limit={spots.length} castShadow>
+        <cylinderGeometry args={[1.55, 1.7, 2.9, 12]} />
+        <meshStandardMaterial color="#8a6849" roughness={0.9} />
+        {spots.map((s, i) => (
+          <Instance key={i} position={[s.x, s.roof + 3.6, s.z]} />
+        ))}
+      </Instances>
+      <Instances range={spots.length} limit={spots.length} castShadow>
+        <coneGeometry args={[1.95, 1.2, 12]} />
+        <meshStandardMaterial color="#5d4a36" roughness={0.9} />
+        {spots.map((s, i) => (
+          <Instance key={i} position={[s.x, s.roof + 5.65, s.z]} />
+        ))}
+      </Instances>
+      <Instances range={spots.length * 2} limit={spots.length * 2}>
+        <cylinderGeometry args={[1.68, 1.68, 0.07, 12]} />
+        <primitive object={M.metalDark} attach="material" />
+        {spots.flatMap((s, i) =>
+          [2.9, 4.3].map((dy, k) => (
+            <Instance key={`${i}-${k}`} position={[s.x, s.roof + dy, s.z]} />
+          )),
+        )}
+      </Instances>
+    </group>
+  );
+}
+
+/** Two traffic signals guarding the side-street crossing + green street
+ *  blades (W 42 ST / 7 AVE) so the corner reads as Manhattan. */
+function TrafficSignals() {
+  const lamp = (color: string, lit: boolean) => (
+    <meshBasicMaterial color={lit ? color : "#2a2226"} toneMapped={lit} />
+  );
+  const Signal = ({
+    x,
+    z,
+    ry,
+    go,
+  }: {
+    x: number;
+    z: number;
+    ry: number;
+    go: boolean;
+  }) => (
+    <group position={[x, 0, z]} rotation={[0, ry, 0]}>
+      <mesh position={[0, 2.3, 0]} castShadow>
+        <cylinderGeometry args={[0.09, 0.12, 4.6, 8]} />
+        <primitive object={M.lampPost} attach="material" />
+      </mesh>
+      <mesh position={[1.3, 4.4, 0]} castShadow>
+        <boxGeometry args={[2.8, 0.12, 0.12]} />
+        <primitive object={M.lampPost} attach="material" />
+      </mesh>
+      <mesh position={[2.4, 3.85, 0]} castShadow>
+        <boxGeometry args={[0.36, 1.05, 0.36]} />
+        <primitive object={M.blackAnodized} attach="material" />
+      </mesh>
+      {(["#ff3b30", "#ffb340", "#34d399"] as const).map((c, i) => {
+        const lit = go ? i === 2 : i === 0;
+        return (
+          <mesh key={c} position={[2.4, 4.15 - i * 0.32, 0.19]}>
+            <circleGeometry args={[0.1, 12]} />
+            {lamp(c, lit)}
+          </mesh>
+        );
+      })}
+    </group>
+  );
+  const blade42 = useMemo(() => streetBlade("W 42 ST"), []);
+  const blade7 = useMemo(() => streetBlade("7 AVE"), []);
+  return (
+    <group name="traffic-signals">
+      <Signal
+        x={SIDE_X + 5.5}
+        z={ROAD_Z0 - ROAD_W / 2 - 1.2}
+        ry={Math.PI}
+        go={false}
+      />
+      <Signal x={-(SIDE_X + 5.5)} z={ROAD_Z0 + ROAD_W / 2 + 1.2} ry={0} go />
+      {/* street-name totem on the near corner */}
+      <group position={[SIDE_X - 6.5, 0, WALKWAY_Z - 1.2]}>
+        <mesh position={[0, 1.9, 0]} castShadow>
+          <cylinderGeometry args={[0.07, 0.09, 3.8, 8]} />
+          <primitive object={M.lampPost} attach="material" />
+        </mesh>
+        {blade42 && (
+          <mesh position={[0, 3.4, 0]}>
+            <boxGeometry args={[1.7, 0.34, 0.04]} />
+            <meshBasicMaterial map={blade42} toneMapped={false} />
+          </mesh>
+        )}
+        {blade7 && (
+          <mesh position={[0, 3.0, 0]} rotation={[0, Math.PI / 2, 0]}>
+            <boxGeometry args={[1.4, 0.34, 0.04]} />
+            <meshBasicMaterial map={blade7} toneMapped={false} />
+          </mesh>
+        )}
+      </group>
+    </group>
+  );
+}
+
+/** Con Edison moment: steam breathing out of the avenue manhole. */
+function ManholeSteam() {
+  const group = useRef<THREE.Group>(null);
+  const reduced = useMemo(
+    () =>
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+    [],
+  );
+  useFrame(({ clock }) => {
+    const g = group.current;
+    if (!g || reduced) return;
+    const t = clock.elapsedTime;
+    g.children.forEach((c, i) => {
+      const k = (((t * 0.22 + i / 4) % 1) + 1) % 1;
+      c.position.y = 0.3 + k * 3.2;
+      c.position.x = -8 + Math.sin((k + i) * 4) * 0.5 * k;
+      const m = (c as THREE.Mesh).material as THREE.MeshBasicMaterial;
+      m.opacity = 0.3 * (1 - k);
+      const s = 0.5 + k * 1.6;
+      c.scale.set(s, s, s);
+    });
+  });
+  return (
+    <group ref={group} name="manhole-steam" position={[0, 0, ROAD_Z0 + 2.2]}>
+      {[0, 1, 2, 3].map((i) => (
+        <mesh key={i} position={[-8, 0.3, 0]}>
+          <sphereGeometry args={[1, 10, 8]} />
+          <meshBasicMaterial
+            color="#e8ecef"
+            transparent
+            opacity={0.3}
+            depthWrite={false}
+          />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+/** Halal-cart style food cart on the walkway: stainless body, yellow
+ *  umbrella, menu board. The sidewalk's main character. */
+function FoodCart() {
+  const menu = useMemo(
+    () => plaqueTexture("HALAL · $8", "#f4f2ec", "#1c3a2a"),
+    [],
+  );
+  return (
+    <group
+      name="food-cart"
+      position={[-8, 0, WALKWAY_Z - 0.4]}
+      rotation={[0, 0.08, 0]}
+    >
+      {/* body */}
+      <mesh position={[0, 0.85, 0]} castShadow receiveShadow>
+        <boxGeometry args={[2.1, 1.0, 1.15]} />
+        <primitive object={M.metalBrushed} attach="material" />
+      </mesh>
+      <mesh position={[0, 1.38, 0]}>
+        <boxGeometry args={[2.0, 0.06, 1.05]} />
+        <primitive object={M.metalDark} attach="material" />
+      </mesh>
+      {/* grill + pans */}
+      <mesh position={[-0.5, 1.44, 0]}>
+        <boxGeometry args={[0.7, 0.05, 0.6]} />
+        <primitive object={M.blackAnodized} attach="material" />
+      </mesh>
+      <mesh position={[0.5, 1.46, 0.1]}>
+        <cylinderGeometry args={[0.16, 0.16, 0.08, 12]} />
+        <primitive object={M.metalBrushed} attach="material" />
+      </mesh>
+      {/* wheels */}
+      {[-0.8, 0.8].map((dx) => (
+        <mesh key={dx} position={[dx, 0.25, 0]} rotation={[0, 0, Math.PI / 2]}>
+          <cylinderGeometry args={[0.25, 0.25, 0.1, 12]} />
+          <primitive object={M.blackAnodized} attach="material" />
+        </mesh>
+      ))}
+      {/* umbrella pole + yellow canopy */}
+      <mesh position={[0, 2.2, 0]}>
+        <cylinderGeometry args={[0.03, 0.03, 2.6, 6]} />
+        <primitive object={M.metalBrushed} attach="material" />
+      </mesh>
+      <mesh position={[0, 3.35, 0]} castShadow>
+        <coneGeometry args={[1.5, 0.55, 8]} />
+        <meshStandardMaterial
+          color="#f2b705"
+          roughness={0.7}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
+      {/* menu board */}
+      {menu && (
+        <mesh position={[1.12, 1.7, 0]} rotation={[0, Math.PI / 2, 0]}>
+          <planeGeometry args={[0.7, 0.26]} />
+          <meshBasicMaterial map={menu} toneMapped={false} />
+        </mesh>
+      )}
+      {/* propane tank */}
+      <mesh position={[-1.25, 0.35, 0.3]}>
+        <cylinderGeometry args={[0.16, 0.16, 0.6, 10]} />
+        <meshStandardMaterial color="#b8bec6" roughness={0.4} metalness={0.6} />
+      </mesh>
+    </group>
+  );
+}
+
+/** Green painted bike lane along the avenue + dashed divider. */
+function BikeLane() {
+  const dashes = useMemo(() => {
+    const out: number[] = [];
+    for (let x = -195; x <= 195; x += 8) out.push(x);
+    return out;
+  }, []);
+  return (
+    <group name="bike-lane">
+      <mesh
+        position={[0, -0.037, ROAD_Z0 + 3.4]}
+        rotation={[-Math.PI / 2, 0, 0]}
+        receiveShadow
+      >
+        <planeGeometry args={[400, 1.3]} />
+        <meshStandardMaterial color="#2e7d4f" roughness={0.9} />
+      </mesh>
+      <Instances range={dashes.length} limit={dashes.length}>
+        <planeGeometry args={[2.2, 0.14]} />
+        <primitive object={M.roadPaint} attach="material" />
+        {dashes.map((x) => (
+          <Instance
+            key={x}
+            position={[x, -0.033, ROAD_Z0 + 2.6]}
+            rotation={[-Math.PI / 2, 0, 0]}
+          />
+        ))}
+      </Instances>
+    </group>
+  );
+}
+
+/** Subway stair totem on the walkway: railings, glowing globe, sign. */
+function SubwayTotem() {
+  const face = useMemo(
+    () => plaqueTexture("SUBWAY · HIVE ST", "#f4f2ec", "#111418"),
+    [],
+  );
+  return (
+    <group name="subway" position={[-30, 0, WALKWAY_Z - 0.4]}>
+      {/* stairwell: dark pit with railing */}
+      <mesh position={[0, -0.75, 0]}>
+        <boxGeometry args={[3.0, 0.1, 2.0]} />
+        <meshBasicMaterial color="#0a0d11" />
+      </mesh>
+      {[-1.5, 1.5].map((dx) => (
+        <group key={dx}>
+          {[0.9, -0.9].map((dz) => (
+            <mesh key={dz} position={[dx, 0.55, dz]}>
+              <cylinderGeometry args={[0.035, 0.035, 1.1, 6]} />
+              <primitive object={M.lampPost} attach="material" />
+            </mesh>
+          ))}
+          <mesh position={[dx, 1.1, 0]} rotation={[Math.PI / 2, 0, 0]}>
+            <cylinderGeometry args={[0.04, 0.04, 1.9, 6]} />
+            <primitive object={M.metalBrushed} attach="material" />
+          </mesh>
+        </group>
+      ))}
+      {/* globe pole + sign */}
+      <mesh position={[2.2, 1.4, 0]}>
+        <cylinderGeometry args={[0.05, 0.06, 2.8, 8]} />
+        <primitive object={M.lampPost} attach="material" />
+      </mesh>
+      <mesh position={[2.2, 2.95, 0]}>
+        <sphereGeometry args={[0.22, 12, 10]} />
+        <primitive object={M.lampGlow} attach="material" />
+      </mesh>
+      {face && (
+        <mesh position={[2.2, 2.3, 0.04]}>
+          <planeGeometry args={[1.15, 0.42]} />
+          <meshBasicMaterial map={face} toneMapped={false} />
+        </mesh>
+      )}
+      <mesh position={[2.2, 2.3, 0]}>
+        <boxGeometry args={[1.25, 0.5, 0.05]} />
+        <primitive object={M.blackAnodized} attach="material" />
+      </mesh>
+    </group>
+  );
+}
+
+/** High Line nod: a timber boardwalk strip along the plaza's east edge —
+ *  wood deck, steel rail, grass drifts, benches. The reference foreground,
+ *  shrunk to our block. Flush with the plaza (no trip, no collider edits). */
+function Boardwalk() {
+  const X0 = 25.5;
+  const X1 = 31;
+  const Z0 = 22.5;
+  const Z1 = 45.5;
+  const cx = (X0 + X1) / 2;
+  const cz = (Z0 + Z1) / 2;
+  const grasses = useMemo(() => {
+    const out: { p: [number, number, number]; h: number; lean: number }[] = [];
+    for (let i = 0; i < 44; i++) {
+      const west = i % 2 === 0;
+      out.push({
+        p: [
+          west ? X0 + 0.5 + hash01(i, 3) * 1.2 : X1 - 0.5 - hash01(i, 4) * 1.2,
+          0.02,
+          Z0 + hash01(i, 5) * (Z1 - Z0),
+        ],
+        h: 0.5 + hash01(i, 6) * 0.6,
+        lean: (hash01(i, 7) - 0.5) * 0.3,
+      });
+    }
+    return out;
+  }, []);
+  const posts = useMemo(() => {
+    const out: number[] = [];
+    for (let z = Z0 + 0.5; z <= Z1; z += 2.3) out.push(z);
+    return out;
+  }, []);
+  return (
+    <group name="boardwalk">
+      {/* deck + skirt */}
+      <mesh
+        position={[cx, 0.012, cz]}
+        rotation={[-Math.PI / 2, 0, 0]}
+        receiveShadow
+      >
+        <planeGeometry args={[X1 - X0, Z1 - Z0]} />
+        <primitive
+          object={floorFor("wood", X1 - X0, Z1 - Z0)}
+          attach="material"
+        />
+      </mesh>
+      <mesh position={[cx, 0.006, cz]}>
+        <boxGeometry args={[X1 - X0, 0.012, Z1 - Z0]} />
+        <primitive object={M.precastDark} attach="material" />
+      </mesh>
+      {/* west rail: posts + double rail + kick light */}
+      <Instances range={posts.length} limit={posts.length} castShadow>
+        <boxGeometry args={[0.07, 1.05, 0.07]} />
+        <primitive object={M.metalDark} attach="material" />
+        {posts.map((z) => (
+          <Instance key={z} position={[X0 + 0.15, 0.53, z]} />
+        ))}
+      </Instances>
+      {[1.06, 0.62].map((y) => (
+        <mesh key={y} position={[X0 + 0.15, y, cz]} castShadow>
+          <boxGeometry args={[0.09, 0.06, Z1 - Z0]} />
+          <primitive object={M.metalBrushed} attach="material" />
+        </mesh>
+      ))}
+      <mesh position={[X0 + 0.21, 0.1, cz]}>
+        <boxGeometry args={[0.04, 0.04, Z1 - Z0 - 0.5]} />
+        <primitive object={M.stripWarm} attach="material" />
+      </mesh>
+      {/* grass drifts */}
+      <Instances range={grasses.length} limit={grasses.length} castShadow>
+        <coneGeometry args={[0.11, 1, 6]} />
+        <primitive object={M.leaf} attach="material" />
+        {grasses.map((g, i) => (
+          <Instance
+            key={i}
+            position={[g.p[0], g.p[1] + g.h / 2, g.p[2]]}
+            rotation={[g.lean, 0, -g.lean]}
+            scale={[1, g.h, 1]}
+          />
+        ))}
+      </Instances>
+      <KitInstances
+        model="bench"
+        items={[
+          { position: [28.2, 0.012, 29], rotation: [0, -Math.PI / 2, 0] },
+          { position: [28.2, 0.012, 39], rotation: [0, -Math.PI / 2, 0] },
+        ]}
+        name="kit-boardwalk-benches"
+      />
+    </group>
+  );
+}
+
+/** Deterministic 0..1 hash for decor scatter. */
+function hash01(i: number, salt: number): number {
+  const x = Math.sin(i * 127.1 + salt * 311.7) * 43758.5453;
+  return x - Math.floor(x);
 }
 
 /** Sky life: drifting clouds, circling birds, distant traffic dots.
@@ -656,12 +1519,15 @@ function SkyLife() {
         ).map(([x, y, z, w], i) => (
           <mesh key={i} position={[x, y, z]}>
             <planeGeometry args={[w, w / 2]} />
+            {/* DoubleSide: single-sided planes pop out of existence when the
+                camera walks around them — reads as texture glitching. */}
             <meshBasicMaterial
               map={cloudTex}
               transparent
               opacity={0.8}
               depthWrite={false}
               fog={false}
+              side={THREE.DoubleSide}
             />
           </mesh>
         ))}
@@ -769,12 +1635,12 @@ export function Courtyard({ simple = false }: { simple?: boolean }) {
 
   return (
     <group name="courtyard">
-      {/* Procedural sky (pure shader — no HDRI fetch) */}
+      {/* Procedural sky, blue-hour grade (pure shader — no HDRI fetch) */}
       <Sky
         sunPosition={SUN}
-        turbidity={6}
-        rayleigh={1.6}
-        mieCoefficient={0.004}
+        turbidity={8}
+        rayleigh={2.6}
+        mieCoefficient={0.005}
         mieDirectionalG={0.86}
       />
       <SkyLife />
@@ -813,8 +1679,10 @@ export function Courtyard({ simple = false }: { simple?: boolean }) {
         <boxGeometry args={[420, 0.24, 0.34]} />
         <primitive object={M.curb} attach="material" />
       </mesh>
+      {/* Lowered 15mm below the side streets: the two asphalt planes cross
+          at the intersections, and coplanar overlaps flicker constantly. */}
       <mesh
-        position={[0, -0.03, ROAD_Z0]}
+        position={[0, -0.045, ROAD_Z0]}
         rotation={[-Math.PI / 2, 0, 0]}
         receiveShadow
       >
@@ -941,9 +1809,11 @@ export function Courtyard({ simple = false }: { simple?: boolean }) {
         <meshStandardMaterial color="#6e7276" roughness={0.95} />
       </mesh>
 
-      {/* Plaza paving */}
+      {/* Plaza paving — 5mm above the foundation slab (whose top is exactly
+          y=0): the slab sticks 0.7m past the facade into the plaza strip and
+          a coplanar overlap there shimmered along the whole entrance line. */}
       <mesh
-        position={[ccx, 0, ccz]}
+        position={[ccx, 0.005, ccz]}
         rotation={[-Math.PI / 2, 0, 0]}
         receiveShadow
       >
@@ -1209,6 +2079,19 @@ export function Courtyard({ simple = false }: { simple?: boolean }) {
 
       {/* Sidewalk props + parked traffic for scale */}
       {!simple && <StreetProps />}
+      {/* High Line boardwalk along the east edge */}
+      <Boardwalk />
+      {/* Street planting, transit shelter — the block's public realm */}
+      <StreetTrees />
+      {!simple && <BusStop />}
+      {!simple && <SkylineBeacons towers={tallTowers} />}
+      {/* Pure New York: water towers, signals, steam, food cart, subway */}
+      <WaterTowers />
+      {!simple && <TrafficSignals />}
+      {!simple && <ManholeSteam />}
+      {!simple && <FoodCart />}
+      <BikeLane />
+      {!simple && <SubwayTotem />}
 
       {/* Distant skyline — three facade densities, two depth bands.
           Jittered footprints + antenna toppers so towers don't read as clones. */}

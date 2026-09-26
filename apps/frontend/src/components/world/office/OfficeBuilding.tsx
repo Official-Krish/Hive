@@ -6,6 +6,8 @@ import { Courtyard } from "./Courtyard";
 import { Stairs } from "./Stairs";
 import { Level2 } from "./Level2";
 import { ChillSpace } from "./ChillSpace";
+import { UltraRealism } from "./UltraRealism";
+import { FacadeDressing } from "./FacadeDressing";
 
 /**
  * Full explorable environment, layered:
@@ -15,6 +17,9 @@ import { ChillSpace } from "./ChillSpace";
  *   Stairs     — the lobby feature stair up to the arrival balcony
  *   Level2     — leadership floor: pods, boardroom, mezzanine, open plan
  *   Courtyard  — plaza, planting, streets, neighbouring city block
+ *   UltraRealism — additive dressing only (shafts, dust, desk clutter,
+ *     exit signs, rugs, trays, plants, steam). No layout / collider /
+ *     interactable change — safe to unmount without affecting play.
  * The lobby's reflective floor lives in Shell so there is exactly one plane
  * there (no z-fighting) and reflection stays capped to a single room.
  */
@@ -28,6 +33,8 @@ export function OfficeBuilding({ simple = false }: { simple?: boolean }) {
       <ChillSpace />
       <Stairs />
       <Level2 />
+      <FacadeDressing />
+      <UltraRealism simple={simple} />
       <Courtyard simple={simple} />
     </group>
   );
