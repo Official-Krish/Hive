@@ -50,6 +50,7 @@ import { useFocusRoom } from "@/hooks/useFocusRoom";
 import { usePairSession } from "@/hooks/usePairSession";
 import { usePodium } from "@/hooks/usePodium";
 import { usePodiumScreen } from "@/hooks/usePodiumScreen";
+import { useShipStreaks } from "@/hooks/useShipStreaks";
 import { useGameSession } from "@/hooks/useGameSession";
 import { REVIEWER_BOT_ID, useReviewerBot } from "@/hooks/useReviewerBot";
 import { http } from "@/lib/http";
@@ -75,6 +76,8 @@ import { STATUS_DOT, WorldTip, statusLabel, useDismiss } from "./chrome";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useChillMedia } from "@/hooks/useChillMedia";
 import { ChillScreenProjection } from "./ChillScreenProjection";
+import { CelebrationFX } from "./CelebrationFX";
+import { StormCloud } from "./StormCloud";
 import { PodiumScreenProjection } from "./PodiumScreenProjection";
 import { PodiumScreenModal } from "./PodiumScreenModal";
 import { ChillScreenModal } from "./ChillScreenModal";
@@ -590,6 +593,27 @@ export function WorldCanvas({
   const podiumRef = useRef(podium);
   podiumRef.current = podium;
   const podiumScreen = usePodiumScreen(client);
+
+  // Ship-it Storm: merge streaks (gold rings + positioned bursts) and
+  // build weather (storm cloud + light mood). All ephemeral client state.
+  const streaks = useShipStreaks();
+  const streaksRef = useRef(streaks);
+  streaksRef.current = streaks;
+  const [stormOn, setStormOn] = useState(false);
+  const [golden, setGolden] = useState(false);
+  const goldenTimer = useRef(0);
+  const triggerGolden = useCallback(() => {
+    setGolden(true);
+    window.clearTimeout(goldenTimer.current);
+    goldenTimer.current = window.setTimeout(
+      () => setGolden(false),
+      10 * 60 * 1000,
+    );
+  }, []);
+  const burstHeight = useCallback(
+    (x: number, z: number) => supportAt(x, z, 10) + 1.8,
+    [],
+  );
   // Own month spend vs caps for the top-bar budget chip (privacy-gated;
   // the chip hides when masked or when no cap is set).
   const myOverlay = useMapOverlay(workspaceId, myUserId, client, true);
@@ -737,23 +761,32 @@ export function WorldCanvas({
   const workingOnSeenRef = useRef<Map<string, string>>(new Map());
   const confettiRef = useRef<ConfettiRef>(null);
 
+  const SHIP_COLORS = ["#f472b6", "#a78bfa", "#34d399", "#fbbf24", "#38bdf8"];
+  const reduceMotion =
+    typeof window !== "undefined" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  /** Positioned burst for ship-it moments; level scales the blast. */
+  const fireConfettiAt = useCallback(
+    (x: number, y: number, level: 1 | 2 | 3) => {
+      if (reduceMotion) return;
+      void confettiRef.current?.fire({
+        particleCount: level >= 3 ? 280 : level === 2 ? 170 : 90,
+        spread: level >= 3 ? 100 : 75,
+        startVelocity: 42,
+        scalar: 1.05,
+        ticks: 220,
+        zIndex: 9999,
+        origin: { x, y },
+        colors: SHIP_COLORS,
+      });
+    },
+    [reduceMotion],
+  );
+
   const fireConfetti = useCallback(() => {
-    if (
-      typeof window !== "undefined" &&
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    )
-      return;
-    void confettiRef.current?.fire({
-      particleCount: 140,
-      spread: 75,
-      startVelocity: 42,
-      scalar: 1.05,
-      ticks: 220,
-      zIndex: 9999,
-      origin: { y: 0.7 },
-      colors: ["#f472b6", "#a78bfa", "#34d399", "#fbbf24", "#38bdf8"],
-    });
-  }, []);
+    fireConfettiAt(0.5, 0.7, 1);
+  }, [fireConfettiAt]);
 
   // Match end celebration — wins get confetti + a title card, losses get a
   // title card. One-shot per match, both games, any decisive reason.
@@ -1212,8 +1245,24 @@ export function WorldCanvas({
               e.authorName
             : e.authorId && avatarsRef.current.get(e.authorId)?.name;
           if (e.authorId && e.authorId === myUserId) {
-            push("You merged PR #" + e.prNumber, "merge");
+            // Celebrations are self-only: the burst, ring, and streaks
+            // appear on the merger's screen, never on bystanders'.
+            const celebration = streaksRef.current.recordMerge(
+              e.authorId,
+              e.prNumber,
+            );
+            if (celebration.level >= 3) {
+              push("You are on fire — ship streak!", "merge");
+              triggerGolden();
+            } else if (celebration.level === 2) {
+              push("You merged again — streak ×2", "merge");
+            } else {
+              push("You merged PR #" + e.prNumber, "merge");
+            }
             fireConfetti();
+          } else if (e.authorId) {
+            const prefix = who ? `${who} — ` : "";
+            push(`${prefix}PR #${e.prNumber} merged`, "merge");
           } else {
             const label = who ? `${who} — ` : "";
             push(`${label}PR #${e.prNumber} merged`, "merge");
@@ -1222,14 +1271,16 @@ export function WorldCanvas({
           push(`PR #${e.prNumber} ${e.status} · ${e.title}`, "pr");
         }
       }),
-      client.on("test.finished", (e) =>
+      client.on("test.finished", (e) => {
         push(
           `${nameOf(e.developerId)} — tests ${e.passed ? "passed" : "failed"}${
             e.durationMs ? ` (${(e.durationMs / 1000).toFixed(1)}s)` : ""
           }`,
           "test",
-        ),
-      ),
+        );
+        // Build weather: any red run gathers the storm, any green clears it.
+        setStormOn(!e.passed);
+      }),
       client.on("review.started", (e) =>
         push(`Reviewer started PR #${e.prNumber} · ${e.title}`, "review"),
       ),
@@ -1380,7 +1431,16 @@ export function WorldCanvas({
       offs.forEach((off) => off());
       clearInterval(prune);
     };
-  }, [client, myUserId, pushFeed, addBubble, fireConfetti, showToast]);
+  }, [
+    client,
+    myUserId,
+    pushFeed,
+    addBubble,
+    fireConfetti,
+    fireConfettiAt,
+    showToast,
+    triggerGolden,
+  ]);
 
   // Reactions fade after 4s — emoji floaters are moments, not state.
   useEffect(() => {
@@ -2410,7 +2470,19 @@ export function WorldCanvas({
             <OfficeLighting
               level={playerPos[1] > 3.1 ? 2 : 1}
               highQuality={highQuality}
+              mood={{ storm: stormOn ? 1 : 0, golden: golden ? 1 : 0 }}
             />
+            {/* Ship-it bursts (positioned over the author's avatar) + build
+              weather over the AI lab. */}
+            <CelebrationFX
+              celebrations={streaks.celebrations}
+              avatars={avatarsWithBot}
+              selfPos={playerPos}
+              myUserId={myUserId}
+              heightAt={burstHeight}
+              onBurst={fireConfettiAt}
+            />
+            <StormCloud active={stormOn} />
             <OfficeBuilding simple={simple} />
           </Suspense>
           {/* The YouTube player is a DOM surface, so it cannot participate in
@@ -2463,6 +2535,7 @@ export function WorldCanvas({
             bubbles={bubblesWithBot}
             reactions={reactions}
             raisedHands={hands}
+            celebrating={streaks.celebratingIds}
             groundAt={supportAt}
             onAvatarClick={(id) => {
               if (id !== REVIEWER_BOT_ID) setOpenMemberId(id);

@@ -34,6 +34,8 @@ interface RemoteAvatarsProps {
   reactions?: Readonly<Record<string, { reaction: string; at: number }>>;
   /** Raised hands (ephemeral presence, not a presence status). */
   raisedHands?: ReadonlySet<string>;
+  /** Ship-it celebrations: merged-PR gold ring (parent expires it). */
+  celebrating?: ReadonlySet<string>;
   onAvatarClick?: (developerId: string) => void;
   /** Walkable-surface height, same sampler the local player uses. Without
    *  it remotes hover at Y=0 on stairs and the upper deck. */
@@ -62,6 +64,7 @@ export function RemoteAvatars({
   bubbles,
   reactions,
   raisedHands,
+  celebrating,
   onAvatarClick,
   groundAt,
 }: RemoteAvatarsProps) {
@@ -369,6 +372,18 @@ export function RemoteAvatars({
                 handRaised={raisedHands?.has(id) ?? false}
               />
             </AvatarErrorBoundary>
+            {celebrating?.has(id) && (
+              <mesh position={[0, 0.12, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+                <ringGeometry args={[0.85, 1.12, 48]} />
+                <meshBasicMaterial
+                  color="#fbbf24"
+                  transparent
+                  opacity={0.85}
+                  side={THREE.DoubleSide}
+                  toneMapped={false}
+                />
+              </mesh>
+            )}
           </group>
         );
       })}
