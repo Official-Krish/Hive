@@ -1,4 +1,5 @@
 import type { Request, Response } from "express";
+import { ARCADE_BOT_SENTINEL } from "@hive/games";
 import { prisma } from "@hive/db";
 import type { GameSessionCreate } from "@hive/types";
 import { getAuth } from "../../middleware/authenticate";
@@ -20,7 +21,36 @@ export class GamesController {
   create = async (req: Request, res: Response): Promise<void> => {
     const { userId } = getAuth(res);
     const workspaceId = GamesController.workspaceId(req);
-    const input = req.body as GameSessionCreate;
+    let input = req.body as GameSessionCreate;
+    // Challenging the Arcade Bot: swap the sentinel for its real user id
+    // (created + joined to the workspace on demand), then run the exact
+    // same validation as a human opponent. Bot plays Connect 4, Ludo, Uno.
+    // (Two sentinels map to one bot id, which the duplicate-seat check
+    // rejects — one bot per table.)
+    const wantsBot = input.opponentIds
+      ? input.opponentIds.includes(ARCADE_BOT_SENTINEL)
+      : input.opponentId === ARCADE_BOT_SENTINEL;
+    let botId: string | null = null;
+    if (wantsBot) {
+      if (
+        input.kind !== "connect4" &&
+        input.kind !== "ludo" &&
+        input.kind !== "uno"
+      ) {
+        throw new BadRequestError(
+          "Arcade Bot only plays Connect 4, Ludo and Uno",
+        );
+      }
+      botId = (await this.service.ensureArcadeBot(workspaceId)).id;
+      input = input.opponentIds
+        ? {
+            ...input,
+            opponentIds: input.opponentIds.map((id) =>
+              id === ARCADE_BOT_SENTINEL ? (botId as string) : id,
+            ),
+          }
+        : { ...input, opponentId: botId };
+    }
     const party = input.kind === "ludo" || input.kind === "uno";
     const opponents = party ? (input.opponentIds ?? []) : [input.opponentId!];
     if (opponents.includes(userId)) {
@@ -44,12 +74,18 @@ export class GamesController {
     if (await this.service.hasOpenMatch(workspaceId, userId)) {
       throw new ConflictError("Finish your open match first");
     }
-    const session = await this.service.create(
+    const created = await this.service.create(
       workspaceId,
       input,
       userId,
       new Map(users.map((u) => [u.id, u.name])),
     );
+    // The bot accepts instantly — challenger opens an already-live board.
+    const session =
+      botId != null
+        ? ((await this.service.accept(workspaceId, created.id, botId)) ??
+          created)
+        : created;
     res.status(201).json({ data: { session } });
   };
 

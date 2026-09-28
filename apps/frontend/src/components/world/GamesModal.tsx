@@ -14,6 +14,8 @@ import {
 import { type UseGameSessionResult } from "@/hooks/useGameSession";
 import type { GameKind, GameMove, GameSession } from "@hive/types";
 import {
+  ARCADE_BOT_NAME,
+  ARCADE_BOT_SENTINEL,
   LUDO_YARD_COLORS,
   ludoStateFromString,
   ludoYard,
@@ -252,10 +254,17 @@ export function GamesModal({
     requestState,
   ]);
 
-  const opponents = useMemo(
-    () => members.filter((m) => m.userId !== myUserId),
-    [members, myUserId],
-  );
+  const opponents = useMemo(() => {
+    const humans = members.filter((m) => m.userId !== myUserId);
+    // The house bot sits at the top of the picker for the games it plays,
+    // always ready. The backend swaps the sentinel for its real user.
+    // Party tables can mix the bot with humans (one bot per table).
+    if (kind !== "connect4" && kind !== "ludo" && kind !== "uno") {
+      return humans;
+    }
+    if (humans.some((m) => m.userId === ARCADE_BOT_SENTINEL)) return humans;
+    return [{ userId: ARCADE_BOT_SENTINEL, name: ARCADE_BOT_NAME }, ...humans];
+  }, [members, myUserId, kind]);
 
   const party = isPartyKind(kind);
   const toggleOpponent = (id: string): void => {
