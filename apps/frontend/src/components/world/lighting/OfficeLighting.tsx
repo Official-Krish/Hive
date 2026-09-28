@@ -24,13 +24,33 @@ const SUN: [number, number, number] = [72, 32, -28];
  * frame. Desktop gate (see WorldCanvas): 2k shadows + streak Lightformer;
  * coarse/reduced-motion keeps the cheap 1k path.
  */
+export interface WeatherMood {
+  /** 0 = clear, 1 = full build storm. Dims + cools the sun, thickens fog. */
+  storm?: number;
+  /** 0 = normal, 1 = golden hour after a ship streak. Warms the sun. */
+  golden?: number;
+}
+
 export function OfficeLighting({
   level = 1,
   highQuality = false,
+  mood,
 }: {
   level?: 1 | 2;
   highQuality?: boolean;
+  mood?: WeatherMood;
 }) {
+  const storm = Math.max(0, Math.min(1, mood?.storm ?? 0));
+  const golden = Math.max(0, Math.min(1, mood?.golden ?? 0));
+  const sunIntensity = 2.9 * (1 - 0.72 * storm) + 0.5 * golden;
+  const sunColor =
+    storm > 0.5 ? "#9fb3cc" : golden > 0.5 ? "#ffd9a0" : "#ffedD6";
+  const fog: [string, number] =
+    storm > 0.5
+      ? ["#8e99ae", 0.006]
+      : level === 2
+        ? ["#c3ccdf", 0.0011]
+        : ["#bfc9dd", 0.0015];
   const { minX, maxX, minZ, maxZ } = INTERIOR;
   const cx = (minX + maxX) / 2;
   const cz = (minZ + maxZ) / 2;
@@ -43,10 +63,7 @@ export function OfficeLighting({
       {/* Per-level fog: thin indoors so the far wall stays saturated, thicker
           outside for courtyard/skyline depth. Blue-hour grade to match the
           dusk sky — the horizon melts instead of glowing white. */}
-      <fogExp2
-        attach="fog"
-        args={level === 2 ? ["#c3ccdf", 0.0011] : ["#bfc9dd", 0.0015]}
-      />
+      <fogExp2 attach="fog" args={fog} />
 
       {/* Baked-once environment (IBL fill + reflections), no network fetch */}
       <Environment resolution={highQuality ? 256 : 192} frames={1}>
@@ -124,8 +141,8 @@ export function OfficeLighting({
           Golden-hour warmth with a touch more punch for long lobby shadows. */}
       <directionalLight
         position={SUN}
-        intensity={2.9}
-        color="#ffedD6"
+        intensity={sunIntensity}
+        color={sunColor}
         castShadow
         shadow-mapSize={highQuality ? [2048, 2048] : [1024, 1024]}
         shadow-bias={-0.00022}

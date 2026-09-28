@@ -1,4 +1,6 @@
 import {
+  ARCADE_BOT_EMAIL,
+  ARCADE_BOT_NAME,
   applyBsMove,
   applyC4Move,
   applyCheckerMove,
@@ -15,6 +17,9 @@ import {
   checkersToString,
   chessFromFen,
   chessToFen,
+  chooseC4Column,
+  chooseLudoMove,
+  chooseUnoMove,
   initialBsState,
   initialC4State,
   initialCheckerState,
@@ -43,6 +48,7 @@ import {
   prisma,
   GameKind,
   GameStatus,
+  UserRole,
   type GameSession as PrismaGameSession,
 } from "@hive/db";
 import type {
@@ -314,6 +320,42 @@ export class GamesService {
     const ids = [...new Set(rows.flatMap((r) => seatsOf(r)))];
     const names = await this.namesFor(ids);
     return rows.map((r) => this.toWire(r, names));
+  }
+
+  /**
+   * The Arcade Bot: a real User row (no login, no devices) plus a membership
+   * in every workspace where someone challenges it. Seating it works through
+   * the exact same validation as humans — the controller only needs its id.
+   */
+  async ensureArcadeBot(
+    workspaceId: string,
+  ): Promise<{ id: string; name: string }> {
+    let bot = await prisma.user.findUnique({
+      where: { email: ARCADE_BOT_EMAIL },
+    });
+    if (!bot) {
+      bot = await prisma.user.create({
+        data: {
+          email: ARCADE_BOT_EMAIL,
+          name: ARCADE_BOT_NAME,
+          emailVerifiedAt: new Date(),
+        },
+      });
+    }
+    await prisma.workspaceMember.upsert({
+      where: { workspaceId_userId: { workspaceId, userId: bot.id } },
+      create: { workspaceId, userId: bot.id, role: UserRole.MEMBER },
+      update: {},
+    });
+    return { id: bot.id, name: bot.name };
+  }
+
+  private async isArcadeBot(userId: string): Promise<boolean> {
+    const row = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { email: true },
+    });
+    return row?.email === ARCADE_BOT_EMAIL;
   }
 
   async create(
@@ -694,9 +736,101 @@ export class GamesService {
     userId: string,
     move: EngineMove,
   ): Promise<{ session: GameSession } | { error: string }> {
-    return this.withGameLock(gameId, () =>
+    const result = await this.withGameLock(gameId, () =>
       this.applyMoveLocked(workspaceId, gameId, userId, move),
     );
+    if ("session" in result) this.maybeBotMove(workspaceId, result.session);
+    return result;
+  }
+
+  /**
+   * Arcade Bot replies, fire-and-forget. Scheduled outside the game lock
+   * (the mutex is not reentrant) with a human beat of delay; failures only
+   * log — the bot must never break a human's move. Extra turns (ludo
+   * sixes) and the UNO declaration re-enter through the same hook.
+   */
+  private maybeBotMove(workspaceId: string, session: GameSession): void {
+    if (session.status !== "active") return;
+    if (
+      session.kind !== "connect4" &&
+      session.kind !== "ludo" &&
+      session.kind !== "uno"
+    ) {
+      return;
+    }
+    const turn = session.turnUserId;
+    if (!turn) return;
+    void (async () => {
+      try {
+        if (!(await this.isArcadeBot(turn))) return;
+        await Bun.sleep(600 + Math.random() * 900);
+        const row = await prisma.gameSession.findFirst({
+          where: { id: session.id, workspaceId, status: GameStatus.ACTIVE },
+        });
+        if (!row || row.turnUserId !== turn) return;
+        const seats = seatsOf(row);
+        const seatIdx = seats.indexOf(turn);
+        if (seatIdx < 0) return;
+        if (row.kind === GameKind.CONNECT4) {
+          const disc = seatIdx === 0 ? ("R" as const) : ("Y" as const);
+          const col = chooseC4Column(c4StateFromString(row.board, disc));
+          if (col == null) return;
+          await this.applyMoveByUser(workspaceId, session.id, turn, {
+            kind: "connect4",
+            col,
+          });
+        } else if (row.kind === GameKind.LUDO) {
+          const state = { ...ludoStateFromString(row.board), turn: seatIdx };
+          const mv = chooseLudoMove(state, seatIdx);
+          if (!mv) return;
+          await this.applyMoveByUser(
+            workspaceId,
+            session.id,
+            turn,
+            "roll" in mv
+              ? { kind: "ludo", roll: true }
+              : { kind: "ludo", token: mv.token },
+          );
+        } else if (row.kind === GameKind.UNO) {
+          const state = { ...unoStateFromString(row.board), turn: seatIdx };
+          const mv = chooseUnoMove(state, seatIdx);
+          if (!mv) return;
+          const played = await this.applyMoveByUser(
+            workspaceId,
+            session.id,
+            turn,
+            "draw" in mv
+              ? { kind: "uno", draw: true }
+              : {
+                  kind: "uno",
+                  play: mv.play,
+                  ...(mv.wildColor ? { wildColor: mv.wildColor } : {}),
+                },
+          );
+          // Down to one card with the catch window open → declare UNO.
+          if ("session" in played) {
+            const after = await prisma.gameSession.findFirst({
+              where: { id: session.id, workspaceId },
+            });
+            if (
+              after &&
+              after.status === GameStatus.ACTIVE &&
+              unoStateFromString(after.board).pendingUno === seatIdx
+            ) {
+              await this.applyMoveByUser(workspaceId, session.id, turn, {
+                kind: "uno",
+                callUno: true,
+              });
+            }
+          }
+        }
+      } catch (err) {
+        console.error(
+          `[games] arcade bot move failed in match ${session.id}:`,
+          err instanceof Error ? err.message : err,
+        );
+      }
+    })();
   }
 
   private async applyMoveLocked(

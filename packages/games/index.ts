@@ -1,3 +1,4 @@
+export * from "./src/bot";
 export * from "./src/chess";
 export * from "./src/connect4";
 export * from "./src/checkers";

@@ -1,7 +1,14 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import type { Server } from "node:http";
 import type { GameSession, RealtimeEvent } from "@hive/types";
-import { unoPublicFromString, ludoStateFromString } from "@hive/games";
+import { prisma } from "@hive/db";
+import {
+  ludoMovable,
+  ludoStateFromString,
+  unoCardFromString,
+  unoPlayable,
+  unoPublicFromString,
+} from "@hive/games";
 import { RealtimeHub } from "../src/modules/realtime/realtime.hub";
 import { startServer, stopServer } from "./helpers";
 
@@ -1083,6 +1090,230 @@ describe("battleship over websocket", () => {
       );
       expect(mine.session.hand![0]).toHaveLength(100);
       expect(mine.session.hand![0]).toContain("S");
+    } finally {
+      a.close();
+    }
+  });
+});
+
+describe("arcade bot party games", () => {
+  test("ludo vs the bot goes live and rallies", async () => {
+    const { alice, workspaceId: wid } = await twoPlayers();
+    const createRes = await authed(
+      `/api/v1/workspaces/${wid}/games`,
+      alice.cookie,
+      {
+        method: "POST",
+        body: JSON.stringify({ kind: "ludo", opponentIds: ["arcade-bot"] }),
+      },
+    );
+    expect(createRes.status).toBe(201);
+    const { session } = (
+      (await createRes.json()) as { data: { session: GameSession } }
+    ).data;
+    expect(session.status).toBe("active");
+    expect(session.turnUserId).toBe(alice.userId);
+    expect(session.members.some((m) => m.name === "Arcade Bot")).toBe(true);
+
+    const getGame = async (): Promise<GameSession> => {
+      const res = await authed(
+        `/api/v1/workspaces/${wid}/games/${session.id}`,
+        alice.cookie,
+      );
+      return ((await res.json()) as { data: { session: GameSession } }).data
+        .session;
+    };
+
+    const a = await connectSocket(alice.cookie, wid);
+    try {
+      // Drive the human side from the authoritative board until the rally
+      // covers several plies (the bot answers on its own beat in between).
+      for (let i = 0; i < 40; i++) {
+        const st = await getGame();
+        if (st.moveCount >= 4 || st.status === "finished") break;
+        if (st.turnUserId !== alice.userId) {
+          await Bun.sleep(250);
+          continue;
+        }
+        const ls = ludoStateFromString(st.board);
+        if (ls.pendingRoll == null) {
+          a.send({
+            type: "game.move",
+            gameId: session.id,
+            move: { kind: "ludo", roll: true },
+          });
+        } else {
+          const movables = ludoMovable({ ...ls, turn: 0 }, 0);
+          a.send({
+            type: "game.move",
+            gameId: session.id,
+            move: { kind: "ludo", token: movables[0] ?? 0 },
+          });
+        }
+        await Bun.sleep(250);
+      }
+      const fin = await getGame();
+      expect(fin.moveCount).toBeGreaterThanOrEqual(4);
+    } finally {
+      a.close();
+    }
+  });
+
+  test("uno vs the bot: human plays, bot answers", async () => {
+    const { alice, workspaceId: wid } = await twoPlayers();
+    const createRes = await authed(
+      `/api/v1/workspaces/${wid}/games`,
+      alice.cookie,
+      {
+        method: "POST",
+        body: JSON.stringify({ kind: "uno", opponentIds: ["arcade-bot"] }),
+      },
+    );
+    expect(createRes.status).toBe(201);
+    const { session } = (
+      (await createRes.json()) as { data: { session: GameSession } }
+    ).data;
+    expect(session.status).toBe("active");
+
+    const a = await connectSocket(alice.cookie, wid);
+    try {
+      // Drive the human side until the bot has verifiably moved (checked
+      // in the move log). Action cards can hand the turn back to whoever
+      // just played, so the driver keeps playing human turns whenever the
+      // turn comes back instead of assuming one move each.
+      // Private hands travel unicast (never on the broadcast topic).
+      const botId = session.members.find(
+        (m) => m.name === "Arcade Bot",
+      )?.userId;
+      expect(botId).toBeDefined();
+      const getHand = async (): Promise<{
+        hand: string[];
+        board: string;
+      }> => {
+        a.send({ type: "game.state.request", gameId: session.id });
+        const snapState = await a.waitFor(
+          "game.state",
+          (e) => e.session.id === session.id && e.session.hand !== undefined,
+          5000,
+        );
+        return {
+          hand: (snapState.session.hand ?? []) as string[],
+          board: snapState.session.board,
+        };
+      };
+      const strength = (rank: string): number =>
+        rank === "W" || rank === "F" ? 0 : rank === "S" || rank === "T" ? 2 : 1;
+      for (let i = 0; i < 30; i++) {
+        const botMoves = await prisma.gameMove.count({
+          where: { gameSessionId: session.id, byUserId: botId! },
+        });
+        if (botMoves > 0) break;
+        const st = await authed(
+          `/api/v1/workspaces/${wid}/games/${session.id}`,
+          alice.cookie,
+        ).then((r) =>
+          (r.json() as Promise<{ data: { session: GameSession } }>).then(
+            (b) => b.data.session,
+          ),
+        );
+        if (st.status === "finished" || st.turnUserId !== alice.userId) {
+          await Bun.sleep(300);
+          continue;
+        }
+        const { hand: liveHand, board } = await getHand();
+        const pub = unoPublicFromString(board);
+        const top = pub.discard[pub.discard.length - 1]!;
+        const cards = liveHand.map((h, idx) => ({
+          i: idx,
+          c: unoCardFromString(h),
+        }));
+        const playable = cards.filter(({ c }) =>
+          unoPlayable(c, top, pub.activeColor),
+        );
+        if (playable.length > 0) {
+          const counts = new Map<string, number>();
+          for (const { c } of cards) {
+            if (c.color) counts.set(c.color, (counts.get(c.color) ?? 0) + 1);
+          }
+          const fav =
+            [...counts.entries()].sort((x, y) => y[1] - x[1])[0]?.[0] ?? "R";
+          const pick = [...playable].sort(
+            (x, y) => strength(y.c.rank) - strength(x.c.rank),
+          )[0]!;
+          const card = pick.c;
+          a.send({
+            type: "game.move",
+            gameId: session.id,
+            move:
+              card.rank === "W" || card.rank === "F"
+                ? { kind: "uno", play: pick.i, wildColor: fav }
+                : { kind: "uno", play: pick.i },
+          });
+        } else {
+          a.send({
+            type: "game.move",
+            gameId: session.id,
+            move: { kind: "uno", draw: true },
+          });
+        }
+        await Bun.sleep(300);
+      }
+      const botMoves = await prisma.gameMove.count({
+        where: { gameSessionId: session.id, byUserId: botId! },
+      });
+      expect(botMoves).toBeGreaterThan(0);
+    } finally {
+      a.close();
+    }
+  });
+});
+
+describe("arcade bot", () => {
+  test("rejects the bot sentinel for games it does not play", async () => {
+    const { alice, workspaceId: wid } = await twoPlayers();
+    const res = await authed(`/api/v1/workspaces/${wid}/games`, alice.cookie, {
+      method: "POST",
+      body: JSON.stringify({ kind: "chess", opponentId: "arcade-bot" }),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  test("challenge goes live instantly and the bot replies", async () => {
+    const { alice, workspaceId: wid } = await twoPlayers();
+    const createRes = await authed(
+      `/api/v1/workspaces/${wid}/games`,
+      alice.cookie,
+      {
+        method: "POST",
+        body: JSON.stringify({ kind: "connect4", opponentId: "arcade-bot" }),
+      },
+    );
+    expect(createRes.status).toBe(201);
+    const { session } = (
+      (await createRes.json()) as { data: { session: GameSession } }
+    ).data;
+    // No accept dance — the bot sits down immediately.
+    expect(session.status).toBe("active");
+    expect(session.turnUserId).toBe(alice.userId);
+    const bot = session.members.find((m) => m.userId !== alice.userId);
+    expect(bot?.name).toBe("Arcade Bot");
+
+    const a = await connectSocket(alice.cookie, wid);
+    try {
+      a.send({
+        type: "game.move",
+        gameId: session.id,
+        move: { kind: "connect4", col: 0 },
+      });
+      await a.waitFor("game.state", (e) => e.session.moveCount === 1);
+      // The bot answers on its own beat — back to the challenger.
+      const s2 = await a.waitFor(
+        "game.state",
+        (e) => e.session.moveCount === 2,
+        10000,
+      );
+      expect(s2.session.turnUserId).toBe(alice.userId);
+      expect(s2.session.status).toBe("active");
     } finally {
       a.close();
     }
